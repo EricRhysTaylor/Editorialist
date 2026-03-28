@@ -1,4 +1,4 @@
-import type { ReviewContributorKind } from "./ReviewSuggestion";
+import type { ReviewContributorKind, ReviewOperationType } from "./ReviewSuggestion";
 
 export type ReviewerResolutionStatus = "exact" | "alias" | "suggested" | "unresolved" | "new";
 
@@ -43,7 +43,7 @@ export interface ReviewerSignalRecord {
 	key: string;
 	reviewerId: string;
 	status: "accepted" | "rejected" | "unresolved";
-	operation: "replace" | "move" | "insert" | "delete";
+	operation: ReviewOperationType;
 }
 
 export interface EditorialistPluginData {

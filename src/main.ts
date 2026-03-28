@@ -1,9 +1,23 @@
 import type { EditorView } from "@codemirror/view";
-import { MarkdownView, Notice, Plugin } from "obsidian";
+import { MarkdownView, Notice, Plugin, TFile } from "obsidian";
 import { registerCommands } from "./commands/Commands";
+import { ImportEngine } from "./core/ImportEngine";
 import { MatchEngine } from "./core/MatchEngine";
+import {
+	canApplySuggestionDirectly,
+	createSuggestionApplyPlan,
+	getSuggestionAnchorTarget,
+	getSuggestionPrimaryTarget,
+	getSuggestionSignatureParts,
+} from "./core/OperationSupport";
+import {
+	getReviewBlockFenceLabel,
+	normalizeImportedReviewText,
+	noteContainsReviewBlock,
+} from "./core/ReviewBlockFormat";
 import { ReviewEngine } from "./core/ReviewEngine";
 import { SuggestionParser } from "./core/SuggestionParser";
+import type { ReviewImportBatch } from "./models/ReviewImport";
 import type { ReviewSession, ReviewSuggestion, ReviewTargetRef } from "./models/ReviewSuggestion";
 import type {
 	EditorialistPluginData,
@@ -15,6 +29,8 @@ import type {
 } from "./models/ReviewerProfile";
 import { ReviewStore } from "./state/ReviewStore";
 import { ReviewerDirectory } from "./state/ReviewerDirectory";
+import { EditorialistModal, type ClipboardReviewBatch } from "./ui/EditorialistModal";
+import { buildReviewTemplate } from "./ui/PrepareReviewFormatModal";
 import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
 import { createReviewDecorationsExtension, syncReviewDecorations } from "./ui/Decorations";
 import type { ToolbarState } from "./ui/Toolbar";
@@ -37,6 +53,7 @@ export default class EditorialistPlugin extends Plugin {
 	private readonly parser = new SuggestionParser(this.reviewerDirectory);
 	private readonly matchEngine = new MatchEngine();
 	private readonly reviewEngine = new ReviewEngine(this.parser, this.matchEngine);
+	private importEngine!: ImportEngine;
 
 	private activeHighlightRange: OffsetRange | null = null;
 	private pluginData: EditorialistPluginData = {
@@ -46,6 +63,7 @@ export default class EditorialistPlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		await this.loadPluginData();
+		this.importEngine = new ImportEngine(this.app, this.parser, this.matchEngine);
 		this.registerEditorExtension(createReviewDecorationsExtension(this));
 		this.registerView(REVIEW_PANEL_VIEW_TYPE, (leaf) => new ReviewPanel(leaf, this));
 		registerCommands(this);
@@ -102,7 +120,7 @@ export default class EditorialistPlugin extends Plugin {
 		if (!session.hasReviewBlock) {
 			this.activeHighlightRange = null;
 			this.store.clearSession();
-			new Notice("No rt-review fenced block found in the current note.");
+			new Notice(`No ${getReviewBlockFenceLabel()} found in this note.`);
 			return;
 		}
 
@@ -117,8 +135,51 @@ export default class EditorialistPlugin extends Plugin {
 		);
 	}
 
+	async openPrepareReviewFormatModal(): Promise<void> {
+		await this.openEditorialistModal();
+	}
+
+	async openImportReviewBatchModal(): Promise<void> {
+		await this.openEditorialistModal();
+	}
+
+	async openEditorialistModal(): Promise<void> {
+		const context = this.getActiveNoteContext();
+		const selectedText = this.getActiveEditorSelection();
+		new EditorialistModal(this.app, {
+			activeNoteLabel: context?.view.file?.basename,
+			currentNoteHasReviewBlock: Boolean(context && noteContainsReviewBlock(context.text)),
+			onCopyTemplate: async () => {
+				await this.copyReviewTemplateToClipboard(selectedText);
+			},
+			onImportBatch: async (batch, startReview) => {
+				await this.importReviewBatch(batch, startReview);
+			},
+			onImportRawToActiveNote: async (rawText, startReview) => {
+				await this.importReviewBatchToActiveNote(rawText, startReview);
+			},
+			onInspectBatch: async (rawText) => this.importEngine.inspectBatch(rawText),
+			onLoadClipboardBatch: async () => this.loadClipboardReviewBatch(),
+			onOpenReviewPanel: async () => {
+				await this.openReviewPanel();
+			},
+			onResetReviewSession: () => {
+				this.resetReviewSession();
+			},
+			onStartReviewInCurrentNote: async () => {
+				await this.parseCurrentNote();
+			},
+		}).open();
+	}
+
 	async openReviewPanel(): Promise<void> {
-		const leaf = this.app.workspace.getRightLeaf(false);
+		const existingLeaves = this.app.workspace.getLeavesOfType(REVIEW_PANEL_VIEW_TYPE);
+		const [primaryLeaf, ...duplicateLeaves] = existingLeaves;
+		for (const duplicateLeaf of duplicateLeaves) {
+			duplicateLeaf.detach();
+		}
+
+		const leaf = primaryLeaf ?? this.app.workspace.getRightLeaf(false);
 		if (!leaf) {
 			return;
 		}
@@ -132,7 +193,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async selectSuggestion(id: string): Promise<void> {
-		if (!this.isActiveSessionForCurrentNote()) {
+		if (!this.hasReviewSessionContext()) {
 			return;
 		}
 
@@ -224,7 +285,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async acceptSuggestion(id: string): Promise<void> {
-		const context = this.getActiveNoteContext();
+		const context = this.getReviewNoteContext();
 		const session = this.store.getSession();
 		const suggestion = this.getSuggestionById(id);
 
@@ -238,28 +299,15 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		if (suggestion.operation === "move") {
-			const updatedText = this.applyMoveSuggestion(context.text, suggestion);
-			if (!updatedText) {
-				new Notice("The move suggestion could not be applied safely.");
-				return;
-			}
-
-			context.view.editor.setValue(updatedText);
-		} else {
-			if (
-				!suggestion.revised ||
-				suggestion.manuscriptMatch?.startOffset === undefined ||
-				suggestion.manuscriptMatch.endOffset === undefined
-			) {
-				new Notice("The replace suggestion could not be applied safely.");
-				return;
-			}
-
-			const from = context.view.editor.offsetToPos(suggestion.manuscriptMatch.startOffset);
-			const to = context.view.editor.offsetToPos(suggestion.manuscriptMatch.endOffset);
-			context.view.editor.replaceRange(suggestion.revised, from, to);
+		const applyPlan = createSuggestionApplyPlan(context.text, suggestion);
+		if (!applyPlan) {
+			new Notice(`The ${suggestion.operation} suggestion could not be applied safely.`);
+			return;
 		}
+
+		const from = context.view.editor.offsetToPos(applyPlan.from);
+		const to = context.view.editor.offsetToPos(applyPlan.to);
+		context.view.editor.replaceRange(applyPlan.text, from, to);
 
 		this.refreshSessionAfterAcceptedEdit(session, suggestion.id);
 		await this.syncReviewerSignalsForSession(this.store.getSession());
@@ -290,7 +338,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async jumpToSuggestionTarget(id: string): Promise<void> {
-		if (!this.isActiveSessionForCurrentNote()) {
+		if (!this.hasReviewSessionContext()) {
 			return;
 		}
 
@@ -300,26 +348,26 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		this.store.selectSuggestion(id);
-		const target = suggestion.operation === "move" ? suggestion.target : suggestion.manuscriptMatch;
-		this.focusResolvedTarget(target);
+		this.focusResolvedTarget(getSuggestionPrimaryTarget(suggestion));
 	}
 
 	async jumpToSuggestionAnchor(id: string): Promise<void> {
-		if (!this.isActiveSessionForCurrentNote()) {
+		if (!this.hasReviewSessionContext()) {
 			return;
 		}
 
 		const suggestion = this.getSuggestionById(id);
-		if (!suggestion?.anchor) {
+		const anchor = suggestion ? getSuggestionAnchorTarget(suggestion) : undefined;
+		if (!suggestion || !anchor) {
 			return;
 		}
 
 		this.store.selectSuggestion(id);
-		this.focusResolvedTarget(suggestion.anchor);
+		this.focusResolvedTarget(anchor);
 	}
 
 	async jumpToSuggestionSource(id: string): Promise<void> {
-		if (!this.isActiveSessionForCurrentNote()) {
+		if (!this.hasReviewSessionContext()) {
 			return;
 		}
 
@@ -447,7 +495,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	canAcceptSuggestion(id: string): boolean {
-		if (!this.isActiveSessionForCurrentNote()) {
+		if (!this.hasReviewSessionContext()) {
 			return false;
 		}
 
@@ -456,17 +504,7 @@ export default class EditorialistPlugin extends Plugin {
 			return false;
 		}
 
-		if (suggestion.operation === "move") {
-			return Boolean(suggestion.relocation?.canApply);
-		}
-
-		return Boolean(
-			suggestion.manuscriptMatch &&
-				suggestion.manuscriptMatch.matchType === "exact" &&
-				suggestion.manuscriptMatch.startOffset !== undefined &&
-				suggestion.manuscriptMatch.endOffset !== undefined &&
-				suggestion.revised,
-		);
+		return canApplySuggestionDirectly(suggestion);
 	}
 
 	canAcceptSelectedSuggestion(): boolean {
@@ -475,7 +513,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	canRejectSuggestion(id: string): boolean {
-		if (!this.isActiveSessionForCurrentNote()) {
+		if (!this.hasReviewSessionContext()) {
 			return false;
 		}
 
@@ -489,7 +527,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	canJumpToSuggestionTarget(id: string): boolean {
-		if (!this.isActiveSessionForCurrentNote()) {
+		if (!this.hasReviewSessionContext()) {
 			return false;
 		}
 
@@ -498,20 +536,20 @@ export default class EditorialistPlugin extends Plugin {
 			return false;
 		}
 
-		const target = suggestion.operation === "move" ? suggestion.target : suggestion.manuscriptMatch;
-		return this.hasResolvedRange(target);
+		return this.hasResolvedRange(getSuggestionPrimaryTarget(suggestion));
 	}
 
 	canJumpToSuggestionAnchor(id: string): boolean {
-		if (!this.isActiveSessionForCurrentNote()) {
+		if (!this.hasReviewSessionContext()) {
 			return false;
 		}
 
-		return this.hasResolvedRange(this.getSuggestionById(id)?.anchor);
+		const suggestion = this.getSuggestionById(id);
+		return this.hasResolvedRange(suggestion ? getSuggestionAnchorTarget(suggestion) : undefined);
 	}
 
 	canJumpToSuggestionSource(id: string): boolean {
-		if (!this.isActiveSessionForCurrentNote()) {
+		if (!this.hasReviewSessionContext()) {
 			return false;
 		}
 
@@ -542,6 +580,43 @@ export default class EditorialistPlugin extends Plugin {
 		};
 	}
 
+	private getNoteContextByPath(filePath: string): ActiveNoteContext | null {
+		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+			const view = leaf.view;
+			if (!(view instanceof MarkdownView) || view.file?.path !== filePath) {
+				continue;
+			}
+
+			return {
+				filePath: view.file.path,
+				text: view.editor.getValue(),
+				view,
+			};
+		}
+
+		return null;
+	}
+
+	private getReviewNoteContext(): ActiveNoteContext | null {
+		const session = this.store.getSession();
+		if (!session) {
+			return null;
+		}
+
+		const activeContext = this.getActiveNoteContext();
+		if (activeContext?.filePath === session.notePath) {
+			return activeContext;
+		}
+
+		return this.getNoteContextByPath(session.notePath);
+	}
+
+	private getActiveEditorSelection(): string | undefined {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		const selectedText = view?.editor.getSelection();
+		return selectedText?.trim() ? selectedText : undefined;
+	}
+
 	private getActiveEditorView(): EditorView | null {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (!view) {
@@ -557,7 +632,7 @@ export default class EditorialistPlugin extends Plugin {
 			return null;
 		}
 
-		const session = this.getActiveSessionForCurrentNote();
+		const session = this.getReviewSession();
 		const suggestions = session?.suggestions ?? [];
 
 		return {
@@ -576,8 +651,8 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		const hasReviewBlock = /```rt-review\b/i.test(context.text);
-		const highlight = this.isActiveSessionForCurrentNote() ? this.activeHighlightRange : null;
+		const hasReviewBlock = noteContainsReviewBlock(context.text);
+		const highlight = this.hasReviewSessionContext() ? this.activeHighlightRange : null;
 
 		syncReviewDecorations(editorView, {
 			highlight,
@@ -586,7 +661,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private resyncSessionForActiveNote(): void {
-		const context = this.getActiveNoteContext();
+		const context = this.getReviewNoteContext() ?? this.getActiveNoteContext();
 		const session = this.store.getSession();
 		if (!context || !session || session.notePath !== context.filePath) {
 			this.activeHighlightRange = null;
@@ -606,59 +681,24 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private refreshSessionAfterAcceptedEdit(session: ReviewSession, acceptedSuggestionId: string): void {
-		const context = this.getActiveNoteContext();
+		const context = this.getReviewNoteContext();
 		if (!context) {
 			return;
 		}
 
 		const refreshedSuggestions = this.reviewEngine.refreshSuggestions(
 			context.view.editor.getValue(),
-				session.suggestions.map((item) =>
-					item.id === acceptedSuggestionId
-						? {
-								...item,
-								status: "accepted",
-							}
-						: item,
-				),
-			);
+			session.suggestions.map((item) =>
+				item.id === acceptedSuggestionId
+					? {
+							...item,
+							status: "accepted",
+						}
+					: item,
+			),
+		);
 
 		this.store.replaceSuggestions(refreshedSuggestions);
-	}
-
-	private applyMoveSuggestion(noteText: string, suggestion: ReviewSuggestion): string | null {
-		if (!suggestion.target?.text || !suggestion.relocation?.canApply) {
-			return null;
-		}
-
-		const { targetStart, targetEnd, anchorStart, anchorEnd } = suggestion.relocation;
-		if (
-			targetStart === undefined ||
-			targetEnd === undefined ||
-			anchorStart === undefined ||
-			anchorEnd === undefined ||
-			!suggestion.placement
-		) {
-			return null;
-		}
-
-		const targetText = noteText.slice(targetStart, targetEnd);
-		if (targetText !== suggestion.target.text) {
-			return null;
-		}
-
-		const removedLength = targetEnd - targetStart;
-		const withoutTarget = noteText.slice(0, targetStart) + noteText.slice(targetEnd);
-		let adjustedAnchorStart = anchorStart;
-		let adjustedAnchorEnd = anchorEnd;
-
-		if (targetStart < anchorStart) {
-			adjustedAnchorStart -= removedLength;
-			adjustedAnchorEnd -= removedLength;
-		}
-
-		const insertOffset = suggestion.placement === "before" ? adjustedAnchorStart : adjustedAnchorEnd;
-		return withoutTarget.slice(0, insertOffset) + targetText + withoutTarget.slice(insertOffset);
 	}
 
 	private getSuggestionById(id: string): ReviewSuggestion | null {
@@ -788,11 +828,8 @@ export default class EditorialistPlugin extends Plugin {
 			suggestion.source.blockIndex,
 			suggestion.source.entryIndex,
 			suggestion.operation,
-			suggestion.original ?? "",
-			suggestion.revised ?? "",
-			suggestion.target?.text ?? "",
-			suggestion.anchor?.text ?? "",
-			suggestion.placement ?? "",
+			suggestion.executionMode,
+			...getSuggestionSignatureParts(suggestion),
 		].join("::");
 	}
 
@@ -850,7 +887,7 @@ export default class EditorialistPlugin extends Plugin {
 			stats.accepted = Math.max(0, stats.accepted + direction);
 			if (record.operation === "move") {
 				stats.acceptedMoves = Math.max(0, (stats.acceptedMoves ?? 0) + direction);
-			} else if (record.operation === "replace") {
+			} else if (record.operation === "edit" || record.operation === "cut" || record.operation === "condense") {
 				stats.acceptedEdits = Math.max(0, (stats.acceptedEdits ?? 0) + direction);
 			}
 		} else if (record.status === "rejected") {
@@ -884,8 +921,8 @@ export default class EditorialistPlugin extends Plugin {
 		return "author";
 	}
 
-	private getActiveSessionForCurrentNote(): ReviewSession | null {
-		const context = this.getActiveNoteContext();
+	private getReviewSession(): ReviewSession | null {
+		const context = this.getReviewNoteContext();
 		const session = this.store.getSession();
 		if (!context || !session || session.notePath !== context.filePath) {
 			return null;
@@ -894,12 +931,12 @@ export default class EditorialistPlugin extends Plugin {
 		return session;
 	}
 
-	private isActiveSessionForCurrentNote(): boolean {
-		return Boolean(this.getActiveSessionForCurrentNote());
+	private hasReviewSessionContext(): boolean {
+		return Boolean(this.getReviewSession());
 	}
 
 	private hasActiveReviewSession(): boolean {
-		return Boolean(this.getActiveSessionForCurrentNote()?.suggestions.length);
+		return Boolean(this.getReviewSession()?.suggestions.length);
 	}
 
 	private revealSelectedSuggestion(): void {
@@ -920,14 +957,14 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		if (suggestion.operation === "move") {
-			if (this.focusResolvedTarget(suggestion.target)) {
+			if (this.focusResolvedTarget(getSuggestionPrimaryTarget(suggestion))) {
 				return;
 			}
 
-			if (this.focusResolvedTarget(suggestion.anchor)) {
+			if (this.focusResolvedTarget(getSuggestionAnchorTarget(suggestion))) {
 				return;
 			}
-		} else if (this.focusResolvedTarget(suggestion.manuscriptMatch)) {
+		} else if (this.focusResolvedTarget(getSuggestionPrimaryTarget(suggestion))) {
 			return;
 		}
 
@@ -967,10 +1004,7 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		const target =
-			selectedSuggestion.operation === "move"
-				? selectedSuggestion.target ?? selectedSuggestion.anchor
-				: selectedSuggestion.manuscriptMatch;
+		const target = getSuggestionPrimaryTarget(selectedSuggestion);
 
 		this.activeHighlightRange = this.hasResolvedRange(target)
 			? {
@@ -981,7 +1015,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private focusEditorRange(start: number, end: number): void {
-		const context = this.getActiveNoteContext();
+		const context = this.getReviewNoteContext();
 		if (!context) {
 			return;
 		}
@@ -1012,5 +1046,111 @@ export default class EditorialistPlugin extends Plugin {
 			reviewerSignalIndex: this.pluginData.reviewerSignalIndex,
 		};
 		await this.saveData(this.pluginData);
+	}
+
+	private async copyReviewTemplateToClipboard(selectedText?: string): Promise<void> {
+		const template = buildReviewTemplate(selectedText);
+		if (!navigator.clipboard?.writeText) {
+			new Notice("Clipboard access is not available in this environment.");
+			return;
+		}
+
+		try {
+			await navigator.clipboard.writeText(template);
+			new Notice("Review template copied");
+		} catch {
+			new Notice("Could not copy the review template.");
+		}
+	}
+
+	private async loadClipboardReviewBatch(): Promise<ClipboardReviewBatch | null> {
+		if (!navigator.clipboard?.readText) {
+			return null;
+		}
+
+		try {
+			const rawText = await navigator.clipboard.readText();
+			const normalizedText = normalizeImportedReviewText(rawText);
+			if (!normalizedText) {
+				return null;
+			}
+
+			const batch = await this.importEngine.inspectBatch(normalizedText);
+			if (batch.summary.totalSuggestions === 0) {
+				return null;
+			}
+
+			return {
+				rawText: normalizedText,
+				batch,
+			};
+		} catch {
+			return null;
+		}
+	}
+
+	private async importReviewBatch(batch: ReviewImportBatch, startReview: boolean): Promise<void> {
+		const importedGroups = await this.importEngine.importBatch(batch);
+		if (importedGroups.length === 0) {
+			new Notice("No review blocks were imported.");
+			return;
+		}
+
+		new Notice(
+			`Imported ${importedGroups.reduce((count, group) => count + group.suggestions.length, 0)} suggestions into ${importedGroups.length} note${importedGroups.length === 1 ? "" : "s"}.`,
+		);
+
+		if (!startReview) {
+			return;
+		}
+
+		const firstGroup = importedGroups[0];
+		if (!firstGroup) {
+			return;
+		}
+
+		const file = this.app.vault.getAbstractFileByPath(firstGroup.filePath);
+		if (!(file instanceof TFile)) {
+			return;
+		}
+
+		const leaf = this.app.workspace.getMostRecentLeaf() ?? this.app.workspace.getLeaf(true);
+		await leaf.openFile(file);
+		await this.parseCurrentNote();
+	}
+
+	private async importReviewBatchToActiveNote(rawText: string, startReview: boolean): Promise<void> {
+		const context = this.getActiveNoteContext();
+		if (!context) {
+			new Notice("No active markdown note to import into.");
+			return;
+		}
+
+		const normalizedText = normalizeImportedReviewText(rawText);
+		if (!normalizedText) {
+			new Notice(`No ${getReviewBlockFenceLabel()} found in the imported text.`);
+			return;
+		}
+
+		const currentText = context.view.editor.getValue();
+		const trimmedCurrentText = currentText.trimEnd();
+		const trimmedBatch = normalizedText.trim();
+		const separator = trimmedCurrentText.length > 0 ? "\n\n" : "";
+		const nextText = `${trimmedCurrentText}${separator}${trimmedBatch}\n`;
+		context.view.editor.setValue(nextText);
+
+		new Notice("Imported review block into the active note.");
+
+		if (startReview) {
+			await this.parseCurrentNote();
+		}
+	}
+
+	private resetReviewSession(): void {
+		this.activeHighlightRange = null;
+		this.store.clearSession();
+		this.syncActiveEditorDecorations();
+		this.refreshReviewPanel();
+		new Notice("Review session reset.");
 	}
 }

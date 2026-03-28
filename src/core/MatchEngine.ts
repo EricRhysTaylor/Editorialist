@@ -1,5 +1,10 @@
 import type {
+	CondenseSuggestion,
+	CutSuggestion,
+	EditSuggestion,
+	MoveSuggestion,
 	RelocationResolution,
+	ReviewStatus,
 	ReviewSuggestion,
 	ReviewTargetRef,
 } from "../models/ReviewSuggestion";
@@ -9,68 +14,85 @@ interface TextResolution {
 	target: ReviewTargetRef;
 }
 
+type OperationMatcher = (noteText: string, suggestion: ReviewSuggestion) => ReviewSuggestion;
+
 export class MatchEngine {
+	private readonly operationMatchers: Record<ReviewSuggestion["operation"], OperationMatcher> = {
+		edit: (noteText, suggestion) => this.resolveEditSuggestion(noteText, suggestion as EditSuggestion),
+		move: (noteText, suggestion) => this.resolveMoveSuggestion(noteText, suggestion as MoveSuggestion),
+		cut: (noteText, suggestion) => this.resolveCutSuggestion(noteText, suggestion as CutSuggestion),
+		condense: (noteText, suggestion) => this.resolveCondenseSuggestion(noteText, suggestion as CondenseSuggestion),
+	};
+
 	matchSuggestions(noteText: string, suggestions: ReviewSuggestion[]): ReviewSuggestion[] {
 		return suggestions.map((suggestion) => this.matchSuggestion(noteText, suggestion));
 	}
 
 	matchSuggestion(noteText: string, suggestion: ReviewSuggestion): ReviewSuggestion {
-		if (suggestion.operation === "move") {
-			return this.resolveMoveSuggestion(noteText, suggestion);
-		}
-
-		return this.resolveReplaceSuggestion(noteText, suggestion);
+		return this.operationMatchers[suggestion.operation](noteText, suggestion);
 	}
 
-	private resolveReplaceSuggestion(noteText: string, suggestion: ReviewSuggestion): ReviewSuggestion {
-		const original = suggestion.original;
-		if (!original) {
-			return {
-				...suggestion,
-				status: this.preserveTerminalStatus(suggestion.status, "unresolved"),
-				manuscriptMatch: {
-					text: "",
-					matchType: "none",
-					reason: "Replace suggestion is missing original text.",
-				},
-			};
-		}
+	private resolveEditSuggestion(noteText: string, suggestion: EditSuggestion): EditSuggestion {
+		const resolution = this.resolveTextTarget(
+			noteText,
+			suggestion.payload.original,
+			suggestion.payload.revised,
+		);
 
-		const resolution = this.resolveTextTarget(noteText, original, suggestion.revised);
 		return {
 			...suggestion,
 			status: this.preserveTerminalStatus(suggestion.status, resolution.matchCount === 1 ? "pending" : "unresolved"),
-			manuscriptMatch: resolution.target,
-			target: undefined,
-			anchor: undefined,
-			relocation: undefined,
+			location: {
+				primary: resolution.target,
+			},
 		};
 	}
 
-	private resolveMoveSuggestion(noteText: string, suggestion: ReviewSuggestion): ReviewSuggestion {
-		const targetText = suggestion.target?.text;
-		const anchorText = suggestion.anchor?.text;
-
-		const targetResolution = targetText
-			? this.resolveTextTarget(noteText, targetText)
-			: this.createMissingResolution("Target text is missing.");
-		const anchorResolution = anchorText
-			? this.resolveTextTarget(noteText, anchorText)
-			: this.createMissingResolution("Anchor text is missing.");
-
+	private resolveMoveSuggestion(noteText: string, suggestion: MoveSuggestion): MoveSuggestion {
+		const targetResolution = this.resolveTextTarget(noteText, suggestion.payload.target);
+		const anchorResolution = this.resolveTextTarget(noteText, suggestion.payload.anchor);
 		const relocation = this.resolveRelocation(
 			targetResolution.target,
 			anchorResolution.target,
-			suggestion.placement,
+			suggestion.payload.placement,
 		);
 
 		return {
 			...suggestion,
 			status: this.preserveTerminalStatus(suggestion.status, relocation.canApply ? "pending" : "unresolved"),
-			target: targetResolution.target,
-			anchor: anchorResolution.target,
-			manuscriptMatch: undefined,
-			relocation,
+			location: {
+				target: targetResolution.target,
+				anchor: anchorResolution.target,
+				relocation,
+			},
+		};
+	}
+
+	private resolveCutSuggestion(noteText: string, suggestion: CutSuggestion): CutSuggestion {
+		const resolution = this.resolveTextTarget(noteText, suggestion.payload.target);
+
+		return {
+			...suggestion,
+			status: this.preserveTerminalStatus(suggestion.status, resolution.matchCount === 1 ? "pending" : "unresolved"),
+			location: {
+				target: resolution.target,
+			},
+		};
+	}
+
+	private resolveCondenseSuggestion(noteText: string, suggestion: CondenseSuggestion): CondenseSuggestion {
+		const resolution = this.resolveTextTarget(
+			noteText,
+			suggestion.payload.target,
+			suggestion.payload.suggestion,
+		);
+
+		return {
+			...suggestion,
+			status: this.preserveTerminalStatus(suggestion.status, resolution.matchCount === 1 ? "pending" : "unresolved"),
+			location: {
+				target: resolution.target,
+			},
 		};
 	}
 
@@ -79,8 +101,10 @@ export class MatchEngine {
 		anchor: ReviewTargetRef,
 		placement?: "before" | "after",
 	): RelocationResolution {
-		const targetResolved = target.matchType === "exact" && target.startOffset !== undefined && target.endOffset !== undefined;
-		const anchorResolved = anchor.matchType === "exact" && anchor.startOffset !== undefined && anchor.endOffset !== undefined;
+		const targetResolved =
+			target.matchType === "exact" && target.startOffset !== undefined && target.endOffset !== undefined;
+		const anchorResolved =
+			anchor.matchType === "exact" && anchor.startOffset !== undefined && anchor.endOffset !== undefined;
 
 		if (!targetResolved) {
 			return {
@@ -200,18 +224,7 @@ export class MatchEngine {
 		};
 	}
 
-	private createMissingResolution(reason: string): TextResolution {
-		return {
-			matchCount: 0,
-			target: {
-				text: "",
-				matchType: "none",
-				reason,
-			},
-		};
-	}
-
-	private preserveTerminalStatus(currentStatus: ReviewSuggestion["status"], nextStatus: ReviewSuggestion["status"]): ReviewSuggestion["status"] {
+	private preserveTerminalStatus(currentStatus: ReviewStatus, nextStatus: ReviewStatus): ReviewStatus {
 		return currentStatus === "accepted" || currentStatus === "rejected" ? currentStatus : nextStatus;
 	}
 

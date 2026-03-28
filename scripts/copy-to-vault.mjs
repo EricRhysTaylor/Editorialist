@@ -4,6 +4,7 @@ import path from "node:path";
 const ROOT = process.cwd();
 const TARGET_DIR =
 	"/Users/ericrhystaylor/Documents/Author Eric Rhys Taylor/Obsidian Vault Author .nosync/.obsidian/plugins/editorialist";
+const TARGET_LABEL = "/Author/";
 const FILES_TO_COPY = ["manifest.json", "main.js", "styles.css"];
 
 async function main() {
@@ -13,8 +14,9 @@ async function main() {
 		const sourcePath = path.join(ROOT, fileName);
 		const targetPath = path.join(TARGET_DIR, fileName);
 		await copyFile(sourcePath, targetPath);
-		console.log(`[copy:dev] Copied ${fileName} -> ${targetPath}`);
 	}
+
+	console.log(`[copy:dev] Copied plugin to "${TARGET_LABEL}"`);
 }
 
 await main();

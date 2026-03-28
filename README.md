@@ -18,14 +18,14 @@ Editorialist is in early development. The current focus is a safe review workflo
 
 ```bash
 npm install
-npm run build:dev
+npm run build
 ```
 
 Then open Obsidian, enable the Editorialist plugin in the dev vault, and iterate.
 
 ## Development commands
 
-- `npm run build` - build the plugin bundle
-- `npm run build:dev` - build and copy into the local Obsidian dev vault
+- `npm run build` - build the plugin bundle and copy it into the local Obsidian dev vault
+- `npm run build:dev` - alias for `npm run build`
 - `npm run check` - run TypeScript, ESLint, Stylelint, and CSS audit checks
 - `npm run backup` - run checks, commit, and push changes

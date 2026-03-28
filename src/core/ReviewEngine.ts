@@ -1,4 +1,5 @@
 import type { ReviewSession, ReviewSuggestion } from "../models/ReviewSuggestion";
+import { getSuggestionSignatureParts } from "./OperationSupport";
 import type { MatchEngine } from "./MatchEngine";
 import type { SuggestionParser } from "./SuggestionParser";
 
@@ -11,7 +12,10 @@ export class ReviewEngine {
 	buildSession(notePath: string, noteText: string, previousSession?: ReviewSession | null): ReviewSession {
 		const parsedDocument = this.parser.parse(noteText);
 		const reconciledSuggestions = this.reconcileSuggestions(parsedDocument.suggestions, previousSession);
-		const resolvedSuggestions = this.matchEngine.matchSuggestions(noteText, reconciledSuggestions);
+		const resolvedSuggestions = this.matchEngine.matchSuggestions(
+			this.maskReviewBlocks(noteText, parsedDocument.blocks),
+			reconciledSuggestions,
+		);
 
 		return {
 			notePath,
@@ -22,7 +26,10 @@ export class ReviewEngine {
 	}
 
 	refreshSuggestions(noteText: string, suggestions: ReviewSuggestion[]): ReviewSuggestion[] {
-		return this.finalizeStatuses(this.matchEngine.matchSuggestions(noteText, suggestions));
+		const parsedDocument = this.parser.parse(noteText);
+		return this.finalizeStatuses(
+			this.matchEngine.matchSuggestions(this.maskReviewBlocks(noteText, parsedDocument.blocks), suggestions),
+		);
 	}
 
 	private reconcileSuggestions(parsedSuggestions: ReviewSuggestion[], previousSession?: ReviewSession | null): ReviewSuggestion[] {
@@ -71,54 +78,71 @@ export class ReviewEngine {
 	private markTerminalSuggestion(suggestion: ReviewSuggestion, reason: string): ReviewSuggestion {
 		return {
 			...suggestion,
-			manuscriptMatch: suggestion.manuscriptMatch
-				? {
-						...suggestion.manuscriptMatch,
-						startOffset: undefined,
-						endOffset: undefined,
-						reason,
-					}
-				: undefined,
-			target: suggestion.target
-				? {
-						...suggestion.target,
-						startOffset: undefined,
-						endOffset: undefined,
-						reason,
-					}
-				: undefined,
-			anchor: suggestion.anchor
-				? {
-						...suggestion.anchor,
-						startOffset: undefined,
-						endOffset: undefined,
-						reason,
-					}
-				: undefined,
-			relocation: suggestion.relocation
-				? {
-						...suggestion.relocation,
-						targetStart: undefined,
-						targetEnd: undefined,
-						anchorStart: undefined,
-						anchorEnd: undefined,
-						reason,
-					}
-				: undefined,
+			location: {
+				primary: suggestion.location.primary
+					? {
+							...suggestion.location.primary,
+							startOffset: undefined,
+							endOffset: undefined,
+							reason,
+						}
+					: undefined,
+				target: suggestion.location.target
+					? {
+							...suggestion.location.target,
+							startOffset: undefined,
+							endOffset: undefined,
+							reason,
+						}
+					: undefined,
+				anchor: suggestion.location.anchor
+					? {
+							...suggestion.location.anchor,
+							startOffset: undefined,
+							endOffset: undefined,
+							reason,
+						}
+					: undefined,
+				relocation: suggestion.location.relocation
+					? {
+							...suggestion.location.relocation,
+							targetStart: undefined,
+							targetEnd: undefined,
+							anchorStart: undefined,
+							anchorEnd: undefined,
+							reason,
+						}
+					: undefined,
+			},
 		};
 	}
 
 	private getSuggestionSignature(suggestion: ReviewSuggestion): string {
 		return [
 			suggestion.operation,
+			suggestion.executionMode,
 			suggestion.contributor.displayName,
 			suggestion.contributor.kind,
-			suggestion.original ?? "",
-			suggestion.revised ?? "",
-			suggestion.target?.text ?? "",
-			suggestion.anchor?.text ?? "",
-			suggestion.placement ?? "",
+			...getSuggestionSignatureParts(suggestion),
 			suggestion.why ?? "",
 		].join("\u0000");
+	}
+
+	private maskReviewBlocks(noteText: string, blocks: Array<{ startOffset: number; endOffset: number }>): string {
+		if (blocks.length === 0) {
+			return noteText;
+		}
+
+		let maskedText = noteText;
+		for (const block of [...blocks].sort((left, right) => right.startOffset - left.startOffset)) {
+			const segment = maskedText.slice(block.startOffset, block.endOffset);
+			const maskedSegment = segment.replace(/[^\r\n]/g, " ");
+			maskedText =
+				maskedText.slice(0, block.startOffset) +
+				maskedSegment +
+				maskedText.slice(block.endOffset);
+		}
+
+		return maskedText;
 	}
 }

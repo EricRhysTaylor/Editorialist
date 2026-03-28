@@ -1,6 +1,8 @@
 import type { ParsedReviewerReference, ReviewerResolutionStatus } from "./ReviewerProfile";
 
-export type ReviewOperationType = "replace" | "move" | "insert" | "delete";
+export type ReviewOperationType = "edit" | "move" | "cut" | "condense" | "insert" | "split" | "merge" | "advisory";
+
+export type SupportedReviewOperationType = "edit" | "move" | "cut" | "condense";
 
 export type ReviewStatus = "pending" | "accepted" | "rejected" | "unresolved";
 
@@ -9,6 +11,8 @@ export type MatchType = "exact" | "multiple" | "none" | "text_changed" | "alread
 export type ReviewContributorKind = "author" | "editor" | "beta-reader" | "ai";
 
 export type ReviewPlacement = "before" | "after";
+
+export type ReviewExecutionMode = "direct" | "advisory";
 
 export interface ReviewContributor {
 	id: string;
@@ -49,21 +53,59 @@ export interface RelocationResolution {
 	reason?: string;
 }
 
-export interface ReviewSuggestion {
-	id: string;
-	operation: ReviewOperationType;
-	contributor: ReviewContributor;
-	source: ReviewSourceRef;
-	why?: string;
-	status: ReviewStatus;
-	original?: string;
-	revised?: string;
+export interface ReviewSuggestionLocation {
+	primary?: ReviewTargetRef;
 	target?: ReviewTargetRef;
 	anchor?: ReviewTargetRef;
-	placement?: ReviewPlacement;
-	manuscriptMatch?: ReviewTargetRef;
 	relocation?: RelocationResolution;
 }
+
+export interface ReviewSuggestionRouting {
+	sceneId?: string;
+	note?: string;
+	path?: string;
+	scene?: string;
+}
+
+export interface ReviewSuggestionBase<T extends SupportedReviewOperationType, P> {
+	id: string;
+	operation: T;
+	status: ReviewStatus;
+	contributor: ReviewContributor;
+	source: ReviewSourceRef;
+	location: ReviewSuggestionLocation;
+	routing?: ReviewSuggestionRouting;
+	why?: string;
+	executionMode: ReviewExecutionMode;
+	payload: P;
+}
+
+export interface EditSuggestionPayload {
+	original: string;
+	revised: string;
+}
+
+export interface MoveSuggestionPayload {
+	target: string;
+	anchor: string;
+	placement: ReviewPlacement;
+}
+
+export interface CutSuggestionPayload {
+	target: string;
+}
+
+export interface CondenseSuggestionPayload {
+	target: string;
+	suggestion?: string;
+}
+
+export type EditSuggestion = ReviewSuggestionBase<"edit", EditSuggestionPayload>;
+export type MoveSuggestion = ReviewSuggestionBase<"move", MoveSuggestionPayload>;
+export type CutSuggestion = ReviewSuggestionBase<"cut", CutSuggestionPayload>;
+export type CondenseSuggestion = ReviewSuggestionBase<"condense", CondenseSuggestionPayload>;
+
+export type ReviewSuggestion = EditSuggestion | MoveSuggestion | CutSuggestion | CondenseSuggestion;
 
 export interface ReviewSession {
 	notePath: string;
@@ -72,10 +114,35 @@ export interface ReviewSession {
 	suggestions: ReviewSuggestion[];
 }
 
+export interface ParsedReviewBlock {
+	startOffset: number;
+	endOffset: number;
+	source: "fenced" | "raw";
+}
+
 export interface ParsedReviewDocument {
 	blockCount: number;
+	blocks: ParsedReviewBlock[];
 	suggestions: ReviewSuggestion[];
 }
 
-// TODO Phase 2: add first-class insert and delete parsing/apply support.
-// TODO Phase 2: add reviewer filtering and grouped review passes/batches.
+export function isEditSuggestion(suggestion: ReviewSuggestion): suggestion is EditSuggestion {
+	return suggestion.operation === "edit";
+}
+
+export function isMoveSuggestion(suggestion: ReviewSuggestion): suggestion is MoveSuggestion {
+	return suggestion.operation === "move";
+}
+
+export function isCutSuggestion(suggestion: ReviewSuggestion): suggestion is CutSuggestion {
+	return suggestion.operation === "cut";
+}
+
+export function isCondenseSuggestion(suggestion: ReviewSuggestion): suggestion is CondenseSuggestion {
+	return suggestion.operation === "condense";
+}
+
+// TODO Phase 2: add first-class insert parsing, matching, and apply support.
+// TODO Phase 2: add split and merge operations with dedicated validation rules.
+// TODO Phase 2: add advisory-only suggestion variants with richer non-apply workflows.
+// TODO Phase 2: add reviewer filtering and grouped review passes or batches.

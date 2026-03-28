@@ -2,6 +2,30 @@ import type EditorialistPlugin from "../main";
 
 export function registerCommands(plugin: EditorialistPlugin): void {
 	plugin.addCommand({
+		id: "editorialist",
+		name: "Begin",
+		callback: () => {
+			void plugin.openEditorialistModal();
+		},
+	});
+
+	plugin.addCommand({
+		id: "import-editorial-review-batch",
+		name: "Import editorial review batch",
+		callback: () => {
+			void plugin.openEditorialistModal();
+		},
+	});
+
+	plugin.addCommand({
+		id: "prepare-review-format",
+		name: "Prepare review format",
+		callback: () => {
+			void plugin.openEditorialistModal();
+		},
+	});
+
+	plugin.addCommand({
 		id: "parse-review-block",
 		name: "Parse review blocks",
 		hotkeys: [withModShift("R")],

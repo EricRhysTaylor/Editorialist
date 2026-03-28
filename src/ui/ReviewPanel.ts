@@ -1,4 +1,10 @@
 import { ButtonComponent, DropdownComponent, ItemView, setIcon, type WorkspaceLeaf } from "obsidian";
+import { REVIEW_BLOCK_FENCE } from "../core/ReviewBlockFormat";
+import {
+	getSuggestionCopyBlocks,
+	getSuggestionReason as getOperationSuggestionReason,
+	isMoveSuggestion,
+} from "../core/OperationSupport";
 import type { ReviewerProfile } from "../models/ReviewerProfile";
 import type { ReviewSuggestion } from "../models/ReviewSuggestion";
 import type EditorialistPlugin from "../main";
@@ -49,7 +55,7 @@ export class ReviewPanel extends ItemView {
 		if (!session) {
 			header.createDiv({
 				cls: "editorialist-panel__empty",
-				text: "Run “Parse review blocks” on a note that contains an rt-review fenced block.",
+				text: `Run “Parse review blocks” on a note that contains an ${REVIEW_BLOCK_FENCE} fenced block.`,
 			});
 			return;
 		}
@@ -175,11 +181,7 @@ export class ReviewPanel extends ItemView {
 			});
 		}
 
-		if (suggestion.operation === "move") {
-			this.renderMoveCopy(card, suggestion);
-		} else {
-			this.renderReplaceCopy(card, suggestion);
-		}
+		this.renderSuggestionCopy(card, suggestion);
 
 		if (suggestion.why) {
 			const why = card.createDiv({ cls: "editorialist-suggestion__why" });
@@ -207,7 +209,7 @@ export class ReviewPanel extends ItemView {
 			},
 			!this.plugin.canJumpToSuggestionTarget(suggestion.id),
 		);
-		if (suggestion.operation === "move") {
+		if (isMoveSuggestion(suggestion)) {
 			this.renderButton(
 				actions,
 				"Jump to anchor",
@@ -246,24 +248,11 @@ export class ReviewPanel extends ItemView {
 		});
 	}
 
-	private renderReplaceCopy(parent: HTMLElement, suggestion: ReviewSuggestion): void {
+	private renderSuggestionCopy(parent: HTMLElement, suggestion: ReviewSuggestion): void {
 		const copy = parent.createDiv({ cls: "editorialist-suggestion__copy" });
-		if (suggestion.original) {
-			this.renderCopyBlock(copy, "Original", suggestion.original);
-		}
-		if (suggestion.revised) {
-			this.renderCopyBlock(copy, "Revised", suggestion.revised);
-		}
-	}
-
-	private renderMoveCopy(parent: HTMLElement, suggestion: ReviewSuggestion): void {
-		const copy = parent.createDiv({ cls: "editorialist-suggestion__copy" });
-		if (suggestion.target?.text) {
-			this.renderCopyBlock(copy, "Target", suggestion.target.text);
-		}
-		if (suggestion.anchor?.text) {
-			this.renderCopyBlock(copy, suggestion.placement === "after" ? "After anchor" : "Before anchor", suggestion.anchor.text);
-		}
+		getSuggestionCopyBlocks(suggestion).forEach((block) => {
+			this.renderCopyBlock(copy, block.label, block.body);
+		});
 	}
 
 	private renderReviewerResolutionActions(parent: HTMLElement, suggestion: ReviewSuggestion): void {
@@ -344,19 +333,7 @@ export class ReviewPanel extends ItemView {
 	}
 
 	private getSuggestionReason(suggestion: ReviewSuggestion): string {
-		if (suggestion.status === "accepted") {
-			return "Accepted into the manuscript.";
-		}
-
-		if (suggestion.status === "rejected") {
-			return "Rejected for this review session.";
-		}
-
-		if (suggestion.operation === "move") {
-			return suggestion.relocation?.reason ?? suggestion.target?.reason ?? suggestion.anchor?.reason ?? "Awaiting move resolution.";
-		}
-
-		return suggestion.manuscriptMatch?.reason ?? "Awaiting replace resolution.";
+		return getOperationSuggestionReason(suggestion);
 	}
 
 	private renderCopyBlock(parent: HTMLElement, title: string, body: string): void {

@@ -1,15 +1,21 @@
 import type {
+	CondenseSuggestion,
+	CutSuggestion,
+	EditSuggestion,
+	MoveSuggestion,
 	ParsedReviewDocument,
-	ReviewOperationType,
+	SupportedReviewOperationType,
 	ReviewPlacement,
+	ParsedReviewBlock,
 	ReviewSuggestion,
 	ReviewSourceRef,
+	ReviewSuggestionRouting,
 } from "../models/ReviewSuggestion";
 import type { ParsedReviewerReference } from "../models/ReviewerProfile";
 import type { ReviewerDirectory } from "../state/ReviewerDirectory";
+import { extractReviewBlocks } from "./ReviewBlockFormat";
 
-const REVIEW_BLOCK_PATTERN = /```rt-review\s*([\s\S]*?)```/g;
-const SECTION_HEADER_PATTERN = /^===\s*(EDIT|MOVE)\s*===\s*$/i;
+const SECTION_HEADER_PATTERN = /^===\s*(EDIT|MOVE|CUT|CONDENSE)\s*===\s*$/i;
 const FIELD_PATTERN = /^([A-Za-z][A-Za-z ]+):\s*(.*)$/;
 
 type LineWithOffsets = { endOffset: number; startOffset: number; text: string };
@@ -18,7 +24,7 @@ interface SectionBuffer {
 	entryIndex: number;
 	endOffset: number;
 	lines: LineWithOffsets[];
-	operation: ReviewOperationType;
+	operation: SupportedReviewOperationType;
 	startOffset: number;
 }
 
@@ -26,28 +32,39 @@ interface BlockMetadata {
 	rawReviewer: ParsedReviewerReference;
 }
 
+type SectionParser = (
+	fields: Map<string, string[]>,
+	suggestionId: string,
+	source: ReviewSourceRef,
+	metadata: BlockMetadata,
+) => ReviewSuggestion | null;
+
+const OPERATION_HEADERS: Record<string, SupportedReviewOperationType> = {
+	EDIT: "edit",
+	MOVE: "move",
+	CUT: "cut",
+	CONDENSE: "condense",
+};
+
 export class SuggestionParser {
+	private readonly sectionParsers: Record<SupportedReviewOperationType, SectionParser> = {
+		edit: (fields, suggestionId, source, metadata) => this.parseEditSuggestion(fields, suggestionId, source, metadata),
+		move: (fields, suggestionId, source, metadata) => this.parseMoveSuggestion(fields, suggestionId, source, metadata),
+		cut: (fields, suggestionId, source, metadata) => this.parseCutSuggestion(fields, suggestionId, source, metadata),
+		condense: (fields, suggestionId, source, metadata) =>
+			this.parseCondenseSuggestion(fields, suggestionId, source, metadata),
+	};
+
 	constructor(private readonly reviewerDirectory: ReviewerDirectory) {}
 
 	parse(noteText: string): ParsedReviewDocument {
 		const suggestions: ReviewSuggestion[] = [];
-		const blocks = [...noteText.matchAll(REVIEW_BLOCK_PATTERN)];
+		const blocks = extractReviewBlocks(noteText);
 
-		blocks.forEach((blockMatch, blockIndex) => {
-			const rawBody = blockMatch[1];
-			const fullMatch = blockMatch[0];
-			const blockStart = blockMatch.index;
-			if (rawBody === undefined || !fullMatch || blockStart === undefined) {
-				return;
-			}
-
-			const bodyStartOffset = fullMatch.indexOf(rawBody);
-			if (bodyStartOffset === -1) {
-				return;
-			}
-
-			const bodyStart = blockStart + bodyStartOffset;
-			const blockEnd = blockStart + fullMatch.length;
+		blocks.forEach((block, blockIndex) => {
+			const rawBody = block.bodyText;
+			const bodyStart = block.startOffset;
+			const blockEnd = block.endOffset;
 			const lines = this.getLinesWithOffsets(rawBody, bodyStart);
 			const metadata = this.parseBlockMetadata(lines, blockIndex);
 			const sections = this.extractSections(lines, blockEnd);
@@ -62,6 +79,11 @@ export class SuggestionParser {
 
 		return {
 			blockCount: blocks.length,
+			blocks: blocks.map((block): ParsedReviewBlock => ({
+				startOffset: block.startOffset,
+				endOffset: block.endOffset,
+				source: block.source,
+			})),
 			suggestions,
 		};
 	}
@@ -128,11 +150,18 @@ export class SuggestionParser {
 				}
 
 				entryIndex += 1;
+				const headerKey = headerMatch[1]?.toUpperCase();
+				const operation = headerKey ? OPERATION_HEADERS[headerKey] : undefined;
+				if (!operation) {
+					currentSection = null;
+					continue;
+				}
+
 				currentSection = {
 					entryIndex,
 					endOffset: blockEnd,
 					lines: [],
-					operation: headerMatch[1]?.toLowerCase() === "move" ? "move" : "replace",
+					operation,
 					startOffset: line.startOffset,
 				};
 				continue;
@@ -156,58 +185,130 @@ export class SuggestionParser {
 			startOffset: section.startOffset,
 			endOffset: section.endOffset,
 		};
+		const suggestionId = `review-${blockIndex + 1}-${section.entryIndex}`;
+		return this.sectionParsers[section.operation](fields, suggestionId, source, metadata);
+	}
 
-		if (section.operation === "replace") {
-			const original = this.cleanField(fields.get("original"));
-			const revised = this.cleanField(fields.get("revised"));
-			if (!original || !revised) {
-				return null;
-			}
+	private parseEditSuggestion(
+		fields: Map<string, string[]>,
+		suggestionId: string,
+		source: ReviewSourceRef,
+		metadata: BlockMetadata,
+	): EditSuggestion | null {
+		const original = this.cleanField(fields.get("original"));
+		const revised = this.cleanField(fields.get("revised"));
+		if (!original || !revised) {
+			return null;
+		}
 
-			return {
-				id: `review-${blockIndex + 1}-${section.entryIndex}`,
-				operation: "replace",
-				contributor: this.reviewerDirectory.resolveContributor(metadata.rawReviewer),
-				source,
+		return {
+			id: suggestionId,
+			operation: "edit",
+			status: "pending",
+			contributor: this.reviewerDirectory.resolveContributor(metadata.rawReviewer),
+			source,
+			location: {},
+			routing: this.parseRouting(fields),
+			why: this.cleanField(fields.get("why")),
+			executionMode: "direct",
+			payload: {
 				original,
 				revised,
-				why: this.cleanField(fields.get("why")),
-				status: "pending",
-			};
+			},
+		};
+	}
+
+	private parseMoveSuggestion(
+		fields: Map<string, string[]>,
+		suggestionId: string,
+		source: ReviewSourceRef,
+		metadata: BlockMetadata,
+	): MoveSuggestion | null {
+		const target = this.cleanField(fields.get("target"));
+		const before = this.cleanField(fields.get("before"));
+		const after = this.cleanField(fields.get("after"));
+		if (!target || (!before && !after) || (before && after)) {
+			return null;
 		}
 
-		if (section.operation === "move") {
-			const target = this.cleanField(fields.get("target"));
-			const before = this.cleanField(fields.get("before"));
-			const after = this.cleanField(fields.get("after"));
-			if (!target || (!before && !after) || (before && after)) {
-				return null;
-			}
+		const placement: ReviewPlacement = before ? "before" : "after";
+		const anchor = before ?? after;
+		if (!anchor) {
+			return null;
+		}
 
-			const placement: ReviewPlacement = before ? "before" : "after";
-			const anchorText = before ?? after;
-			if (!anchorText) {
-				return null;
-			}
-
-			return {
-				id: `review-${blockIndex + 1}-${section.entryIndex}`,
-				operation: "move",
-				contributor: this.reviewerDirectory.resolveContributor(metadata.rawReviewer),
-				source,
-				target: {
-					text: target,
-				},
-				anchor: {
-					text: anchorText,
-				},
+		return {
+			id: suggestionId,
+			operation: "move",
+			status: "pending",
+			contributor: this.reviewerDirectory.resolveContributor(metadata.rawReviewer),
+			source,
+			location: {},
+			routing: this.parseRouting(fields),
+			why: this.cleanField(fields.get("why")),
+			executionMode: "direct",
+			payload: {
+				target,
+				anchor,
 				placement,
-				why: this.cleanField(fields.get("why")),
-				status: "pending",
-			};
+			},
+		};
+	}
+
+	private parseCutSuggestion(
+		fields: Map<string, string[]>,
+		suggestionId: string,
+		source: ReviewSourceRef,
+		metadata: BlockMetadata,
+	): CutSuggestion | null {
+		const target = this.cleanField(fields.get("target")) ?? this.cleanField(fields.get("original"));
+		if (!target) {
+			return null;
 		}
 
-		return null;
+		return {
+			id: suggestionId,
+			operation: "cut",
+			status: "pending",
+			contributor: this.reviewerDirectory.resolveContributor(metadata.rawReviewer),
+			source,
+			location: {},
+			routing: this.parseRouting(fields),
+			why: this.cleanField(fields.get("why")),
+			executionMode: "direct",
+			payload: {
+				target,
+			},
+		};
+	}
+
+	private parseCondenseSuggestion(
+		fields: Map<string, string[]>,
+		suggestionId: string,
+		source: ReviewSourceRef,
+		metadata: BlockMetadata,
+	): CondenseSuggestion | null {
+		const target = this.cleanField(fields.get("target")) ?? this.cleanField(fields.get("original"));
+		const suggestion = this.cleanField(fields.get("suggestion")) ?? this.cleanField(fields.get("revised"));
+		if (!target) {
+			return null;
+		}
+
+		return {
+			id: suggestionId,
+			operation: "condense",
+			status: "pending",
+			contributor: this.reviewerDirectory.resolveContributor(metadata.rawReviewer),
+			source,
+			location: {},
+			routing: this.parseRouting(fields),
+			why: this.cleanField(fields.get("why")),
+			executionMode: suggestion ? "direct" : "advisory",
+			payload: {
+				target,
+				suggestion,
+			},
+		};
 	}
 
 	private collectFields(lines: LineWithOffsets[]): Map<string, string[]> {
@@ -246,6 +347,17 @@ export class SuggestionParser {
 
 	private normalizeFieldName(value: string): string {
 		return value.toLowerCase().replace(/\s+/g, "");
+	}
+
+	private parseRouting(fields: Map<string, string[]>): ReviewSuggestionRouting | undefined {
+		const routing: ReviewSuggestionRouting = {
+			sceneId: this.cleanField(fields.get("sceneid")),
+			note: this.cleanField(fields.get("note")),
+			path: this.cleanField(fields.get("path")),
+			scene: this.cleanField(fields.get("scene")),
+		};
+
+		return routing.sceneId || routing.note || routing.path || routing.scene ? routing : undefined;
 	}
 
 	private getLinesWithOffsets(text: string, baseOffset: number): LineWithOffsets[] {
