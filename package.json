@@ -1,0 +1,42 @@
+{
+	"name": "editorialist",
+	"version": "0.1.0",
+	"description": "A structured editorial review system for manuscripts in Obsidian.",
+	"main": "main.js",
+	"type": "module",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "node esbuild.config.mjs production",
+		"copy:dev": "node scripts/copy-to-vault.mjs",
+		"build:dev": "npm run build && npm run copy:dev",
+		"typecheck": "tsc --noEmit",
+		"lint": "eslint \"src/**/*.ts\"",
+		"css-check": "stylelint \"**/*.css\" --allow-empty-input",
+		"css-audit": "node scripts/css-audit.mjs",
+		"check": "npm run typecheck && npm run lint && npm run css-check && npm run css-audit",
+		"backup": "npm run check && node scripts/backup.mjs",
+		"backup:msg": "npm run check && node scripts/backup.mjs"
+	},
+	"keywords": [
+		"obsidian",
+		"plugin",
+		"editorial"
+	],
+	"license": "MIT",
+	"devDependencies": {
+		"@codemirror/state": "6.5.0",
+		"@codemirror/view": "6.38.6",
+		"@types/node": "^16.11.6",
+		"@typescript-eslint/eslint-plugin": "^8.57.2",
+		"@typescript-eslint/parser": "^8.57.2",
+		"esbuild": "0.25.5",
+		"eslint": "^8.57.1",
+		"stylelint": "^16.26.1",
+		"stylelint-config-standard": "^36.0.1",
+		"tslib": "2.4.0",
+		"typescript": "^5.8.3"
+	},
+	"dependencies": {
+		"obsidian": "latest"
+	}
+}
