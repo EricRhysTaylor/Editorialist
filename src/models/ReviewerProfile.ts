@@ -47,9 +47,16 @@ export interface ReviewerSignalRecord {
 	operation: ReviewOperationType;
 }
 
+export interface PersistedReviewDecisionRecord {
+	key: string;
+	status: "accepted" | "rejected";
+	updatedAt: number;
+}
+
 export interface EditorialistPluginData {
 	reviewerProfiles: ReviewerProfile[];
 	reviewerSignalIndex: Record<string, ReviewerSignalRecord>;
+	reviewDecisionIndex: Record<string, PersistedReviewDecisionRecord>;
 	sweepRegistry: Record<string, ReviewSweepRegistryEntry>;
 }
 

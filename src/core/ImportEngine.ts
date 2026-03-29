@@ -57,7 +57,7 @@ export class ImportEngine {
 		const parsedDocument = this.parseBatch(rawText);
 		const results: ReviewImportSuggestionResult[] = [];
 		const markdownFiles = this.app.vault.getMarkdownFiles();
-		const scopeFiles = this.getActiveBookScopeFiles(options?.activeNotePath, markdownFiles);
+		const scopeFiles = await this.getActiveBookScopeFiles(options?.activeNotePath, markdownFiles);
 		const noteTextCache = new Map<string, string>();
 
 		for (const suggestion of parsedDocument.suggestions) {
@@ -234,22 +234,81 @@ export class ImportEngine {
 		};
 	}
 
-	private getActiveBookScopeFiles(activeNotePath: string | undefined, markdownFiles: TFile[]): TFile[] {
-		if (!activeNotePath) {
+	private async getActiveBookScopeFiles(activeNotePath: string | undefined, markdownFiles: TFile[]): Promise<TFile[]> {
+		const scopeRoot = (await this.getRadialTimelineActiveBookSourceFolder()) ?? this.getActiveNoteScopeRoot(activeNotePath);
+		if (!scopeRoot) {
 			return [];
+		}
+
+		return markdownFiles.filter(
+			(file) => this.isPathInFolderScope(file.path, scopeRoot) && this.isSceneClassFile(file),
+		);
+	}
+
+	private getActiveNoteScopeRoot(activeNotePath: string | undefined): string | null {
+		if (!activeNotePath) {
+			return null;
 		}
 
 		const normalizedActivePath = normalizePath(activeNotePath);
 		const lastSlashIndex = normalizedActivePath.lastIndexOf("/");
 		if (lastSlashIndex === -1) {
-			return markdownFiles.filter((file) => !file.path.includes("/"));
+			return "";
 		}
 
-		const scopeRoot = normalizedActivePath.slice(0, lastSlashIndex);
-		const scopePrefix = `${scopeRoot}/`;
-		return markdownFiles.filter(
-			(file) => normalizePath(file.path) === normalizedActivePath || normalizePath(file.path).startsWith(scopePrefix),
-		);
+		return normalizedActivePath.slice(0, lastSlashIndex);
+	}
+
+	private isPathInFolderScope(filePath: string, scopeRoot: string): boolean {
+		const normalizedScopeRoot = normalizePath(scopeRoot);
+		const normalizedFilePath = normalizePath(filePath);
+		if (!normalizedScopeRoot) {
+			return !normalizedFilePath.includes("/");
+		}
+
+		return normalizedFilePath === normalizedScopeRoot || normalizedFilePath.startsWith(`${normalizedScopeRoot}/`);
+	}
+
+	private isSceneClassFile(file: TFile): boolean {
+		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+		const classValues = [
+			frontmatter?.class,
+			frontmatter?.classes,
+		].flatMap((value) => {
+			if (Array.isArray(value)) {
+				return value;
+			}
+			return typeof value === "string" ? [value] : [];
+		});
+
+		return classValues.some((value) => this.normalizeMetadataValue(value) === "scene");
+	}
+
+	private normalizeMetadataValue(value: unknown): string {
+		return typeof value === "string" ? value.trim().toLowerCase() : "";
+	}
+
+	private async getRadialTimelineActiveBookSourceFolder(): Promise<string | null> {
+		try {
+			const radialDataPath = normalizePath(`${this.app.vault.configDir}/plugins/radial-timeline/data.json`);
+			const adapter = this.app.vault.adapter;
+			if (!(await adapter.exists(radialDataPath))) {
+				return null;
+			}
+
+			const raw = await adapter.read(radialDataPath);
+			const parsed = JSON.parse(raw) as {
+				activeBookId?: string;
+				books?: Array<{ id?: string; sourceFolder?: string }>;
+			};
+			const books = Array.isArray(parsed.books) ? parsed.books : [];
+			const activeBookId = typeof parsed.activeBookId === "string" ? parsed.activeBookId : "";
+			const activeBook = books.find((book) => book.id === activeBookId) ?? books[0];
+			const sourceFolder = activeBook?.sourceFolder?.trim();
+			return sourceFolder ? normalizePath(sourceFolder) : null;
+		} catch {
+			return null;
+		}
 	}
 
 	private matchesSceneId(file: TFile, sceneId: string): boolean {
@@ -356,7 +415,7 @@ export class ImportEngine {
 			return {
 				status: "unresolved",
 				strategy: "inferred_exact",
-				reason: `Multiple scene notes in the active book contain the exact ${this.getInferredTargetLabel(suggestion.operation)} text.`,
+				reason: `${exactMatches.length} scene notes in the active book contain the exact ${this.getInferredTargetLabel(suggestion.operation)} text.`,
 			};
 		}
 
@@ -377,7 +436,7 @@ export class ImportEngine {
 			return {
 				status: "unresolved",
 				strategy: "inferred_normalized",
-				reason: `Normalized text matches multiple scene notes in the active book.`,
+				reason: `Normalized text matches ${normalizedMatches.length} scene notes in the active book.`,
 			};
 		}
 

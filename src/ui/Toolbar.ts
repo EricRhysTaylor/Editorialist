@@ -7,6 +7,7 @@ export interface ToolbarState {
 	canNext: boolean;
 	canPrevious: boolean;
 	canReject: boolean;
+	completionLabel?: string;
 	hasReviewBlock: boolean;
 	operationLabel: string;
 	pendingCount: number;
@@ -42,6 +43,10 @@ export function createReviewToolbarElement(
 	renderMetaSegment(meta, `${state.pendingCount} pending`);
 	renderMetaSeparator(meta);
 	renderMetaSegment(meta, `${state.unresolvedCount} unresolved`);
+	if (state.completionLabel) {
+		renderMetaSeparator(meta);
+		renderMetaSegment(meta, state.completionLabel, "editorialist-toolbar__meta-segment--resolved");
+	}
 	if (state.resolvedCount > 0) {
 		renderMetaSeparator(meta);
 		renderMetaSegment(meta, `${state.resolvedCount} resolved`, "editorialist-toolbar__meta-segment--resolved");

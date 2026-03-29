@@ -1,5 +1,5 @@
 import type { EditorView } from "@codemirror/view";
-import { MarkdownView, Notice, Plugin, TFile } from "obsidian";
+import { MarkdownView, normalizePath, Notice, Plugin, TFile } from "obsidian";
 import { registerCommands } from "./commands/Commands";
 import { ImportEngine } from "./core/ImportEngine";
 import { MatchEngine } from "./core/MatchEngine";
@@ -31,6 +31,7 @@ import type { ReviewSession, ReviewSuggestion, ReviewTargetRef } from "./models/
 import type {
 	EditorialistPluginData,
 	ParsedReviewerReference,
+	PersistedReviewDecisionRecord,
 	ReviewerProfile,
 	ReviewerResolutionStatus,
 	ReviewerSignalRecord,
@@ -73,6 +74,7 @@ export default class EditorialistPlugin extends Plugin {
 	private readonly reviewEngine = new ReviewEngine(this.parser, this.matchEngine);
 	private importEngine!: ImportEngine;
 	private isGuidedSweepTransitioning = false;
+	private radialTimelineActiveBookSourceFolder: string | null = null;
 
 	private activeHighlightRange: OffsetRange | null = null;
 	private activeHighlightTone: "active" | "applied" = "active";
@@ -81,6 +83,7 @@ export default class EditorialistPlugin extends Plugin {
 	private pluginData: EditorialistPluginData = {
 		reviewerProfiles: [],
 		reviewerSignalIndex: {},
+		reviewDecisionIndex: {},
 		sweepRegistry: {},
 	};
 	private toolbarOverlayEl: HTMLElement | null = null;
@@ -91,6 +94,7 @@ export default class EditorialistPlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		await this.loadPluginData();
+		await this.refreshRadialTimelineBookScope();
 		this.importEngine = new ImportEngine(this.app, this.parser, this.matchEngine);
 		this.registerEditorExtension(createReviewDecorationsExtension());
 		this.registerView(REVIEW_PANEL_VIEW_TYPE, (leaf) => new ReviewPanel(leaf, this));
@@ -158,8 +162,9 @@ export default class EditorialistPlugin extends Plugin {
 			context.text,
 			previousSession?.notePath === context.filePath ? previousSession : null,
 		);
+		const hydratedSession = this.applyPersistedReviewDecisionsToSession(session);
 
-		if (!session.hasReviewBlock) {
+		if (!hydratedSession.hasReviewBlock) {
 			this.activeHighlightRange = null;
 			this.activeHighlightTone = "active";
 			this.deferredSuggestionIds.clear();
@@ -171,16 +176,17 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		this.store.setSession(session, preferredSelectionId);
+		this.store.setSession(hydratedSession, preferredSelectionId);
+		this.selectPreferredSuggestionForSession(preferredSelectionId);
 		this.store.updateGuidedSweepCurrentNote(context.filePath);
 		this.pruneDeferredSuggestions();
-		await this.syncReviewerSignalsForSession(session);
+		await this.syncReviewerSignalsForSession(hydratedSession);
 		await this.openReviewPanel();
 		this.revealSelectedSuggestion();
 		if (!suppressNotice) {
 			new Notice(
-				session.suggestions.length > 0
-					? `Parsed ${session.suggestions.length} review suggestion${session.suggestions.length === 1 ? "" : "s"}.`
+				hydratedSession.suggestions.length > 0
+					? `Parsed ${hydratedSession.suggestions.length} review suggestion${hydratedSession.suggestions.length === 1 ? "" : "s"}.`
 					: "Review block found, but no valid review entries were parsed.",
 			);
 		}
@@ -389,6 +395,7 @@ export default class EditorialistPlugin extends Plugin {
 		context.view.editor.focus();
 
 		this.deferredSuggestionIds.delete(suggestion.id);
+		await this.clearPersistedReviewDecision(context.filePath, suggestion);
 		this.refreshSessionAfterAcceptedEdit(session, suggestion.id);
 		await this.syncReviewerSignalsForSession(this.store.getSession());
 		this.store.selectSuggestion(id);
@@ -409,6 +416,12 @@ export default class EditorialistPlugin extends Plugin {
 	async rejectSuggestion(id: string): Promise<void> {
 		if (!this.canRejectSuggestion(id)) {
 			return;
+		}
+
+		const session = this.getReviewSession();
+		const suggestion = this.getSuggestionById(id);
+		if (session && suggestion) {
+			await this.persistReviewDecision(session.notePath, suggestion, "rejected");
 		}
 
 		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next", id);
@@ -443,6 +456,7 @@ export default class EditorialistPlugin extends Plugin {
 	async undoLastAppliedSuggestion(): Promise<void> {
 		const change = this.lastAppliedChange;
 		const context = this.getReviewNoteContext();
+		const appliedSuggestion = change ? this.getSuggestionById(change.suggestionId) : null;
 		if (!change || !context || context.filePath !== change.notePath) {
 			new Notice("No applied change is ready to undo.");
 			return;
@@ -462,6 +476,9 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
+		if (appliedSuggestion) {
+			await this.clearPersistedReviewDecision(change.notePath, appliedSuggestion);
+		}
 		this.lastAppliedChange = null;
 		this.resyncSessionForActiveNote();
 		this.store.selectSuggestion(change.suggestionId);
@@ -567,6 +584,55 @@ export default class EditorialistPlugin extends Plugin {
 			inProgressSweeps: entries.filter((entry) => entry.status === "in_progress").length,
 			completedSweeps: entries.filter((entry) => entry.status === "completed").length,
 			cleanedUpSweeps: entries.filter((entry) => entry.status === "cleaned_up").length,
+		};
+	}
+
+	getReviewPanelHeaderDetails(): {
+		summary: string;
+		warnings: string[];
+	} {
+		const session = this.store.getSession();
+		if (!session) {
+			return {
+				summary: "",
+				warnings: [],
+			};
+		}
+
+		const processedCount = session.suggestions.filter((suggestion) => {
+			const state = this.getSuggestionPresentationState(suggestion);
+			return state === "accepted" || state === "rejected" || state === "resolved";
+		}).length;
+		const unprocessedCount = session.suggestions.filter((suggestion) => {
+			const state = this.getSuggestionPresentationState(suggestion);
+			return state === "pending" || state === "unresolved" || state === "later";
+		}).length;
+		const rejectedCount = session.suggestions.filter((suggestion) => suggestion.status === "rejected").length;
+		const parts = [
+			`${session.suggestions.length} suggestions`,
+			`${processedCount} processed`,
+			`${unprocessedCount} unprocessed`,
+		];
+		if (rejectedCount > 0) {
+			parts.push(`${rejectedCount} rejected`);
+		}
+		const guidedSweep = this.getGuidedSweep();
+		if (guidedSweep?.notePaths.length) {
+			parts.push(`${guidedSweep.notePaths.length} scenes`);
+			if (guidedSweep.notePaths.length > 1) {
+				parts.push(`scene ${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`);
+			}
+		} else {
+			const batchId = this.getCurrentBatchId();
+			const entry = this.getSweepRegistryEntry(batchId ?? undefined);
+			if (entry?.importedNotePaths.length) {
+				parts.push(`${entry.importedNotePaths.length} scenes`);
+			}
+		}
+
+		return {
+			summary: parts.join(" • "),
+			warnings: this.getReviewPanelWarnings(session.notePath),
 		};
 	}
 
@@ -912,6 +978,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		return {
 			hasReviewBlock,
+			completionLabel: this.isSweepComplete(suggestions) ? "sweep complete" : undefined,
 			pendingCount,
 			resolvedCount,
 			sceneProgressLabel,
@@ -959,7 +1026,8 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		const refreshedSession = this.reviewEngine.buildSession(context.filePath, context.text, session);
-		if (!refreshedSession.hasReviewBlock) {
+		const hydratedSession = this.applyPersistedReviewDecisionsToSession(refreshedSession);
+		if (!hydratedSession.hasReviewBlock) {
 			this.activeHighlightRange = null;
 			this.activeHighlightTone = "active";
 			this.deferredSuggestionIds.clear();
@@ -968,10 +1036,12 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		this.store.setSession(refreshedSession, this.store.getState().selectedSuggestionId);
+		const preferredSelectionId = this.store.getState().selectedSuggestionId;
+		this.store.setSession(hydratedSession, preferredSelectionId);
+		this.selectPreferredSuggestionForSession(preferredSelectionId);
 		this.store.updateGuidedSweepCurrentNote(context.filePath);
 		this.pruneDeferredSuggestions();
-		void this.syncReviewerSignalsForSession(refreshedSession);
+		void this.syncReviewerSignalsForSession(hydratedSession);
 		this.setDefaultHighlightForSelection();
 	}
 
@@ -1394,6 +1464,41 @@ export default class EditorialistPlugin extends Plugin {
 		return 0;
 	}
 
+	private selectPreferredSuggestionForSession(preferredSelectionId?: string | null): void {
+		const session = this.store.getSession();
+		if (!session) {
+			return;
+		}
+
+		if (
+			preferredSelectionId &&
+			session.suggestions.some((suggestion) => suggestion.id === preferredSelectionId)
+		) {
+			this.store.selectSuggestion(preferredSelectionId);
+			return;
+		}
+
+		this.store.selectSuggestion(this.findPreferredSuggestionId(session.suggestions));
+	}
+
+	private findPreferredSuggestionId(suggestions: ReviewSuggestion[]): string | null {
+		for (const tier of [0, 1, 2]) {
+			const match = suggestions.find((suggestion) => this.getSuggestionTraversalTier(suggestion) === tier);
+			if (match) {
+				return match.id;
+			}
+		}
+
+		return suggestions[0]?.id ?? null;
+	}
+
+	private isSweepComplete(suggestions: ReviewSuggestion[]): boolean {
+		return !suggestions.some((suggestion) => {
+			const tier = this.getSuggestionTraversalTier(suggestion);
+			return tier === 0 || tier === 1;
+		});
+	}
+
 	private pruneDeferredSuggestions(): void {
 		const session = this.store.getSession();
 		if (!session) {
@@ -1550,6 +1655,59 @@ export default class EditorialistPlugin extends Plugin {
 		}
 	}
 
+	private applyPersistedReviewDecisionsToSession(session: ReviewSession): ReviewSession {
+		return {
+			...session,
+			suggestions: session.suggestions.map((suggestion) => {
+				const record = this.pluginData.reviewDecisionIndex[this.createPersistedReviewDecisionKey(session.notePath, suggestion)];
+				if (!record) {
+					return suggestion;
+				}
+
+				return {
+					...suggestion,
+					status: record.status,
+				};
+			}),
+		};
+	}
+
+	private async persistReviewDecision(
+		notePath: string,
+		suggestion: ReviewSuggestion,
+		status: PersistedReviewDecisionRecord["status"],
+	): Promise<void> {
+		const key = this.createPersistedReviewDecisionKey(notePath, suggestion);
+		this.pluginData.reviewDecisionIndex[key] = {
+			key,
+			status,
+			updatedAt: Date.now(),
+		};
+		await this.savePluginData();
+	}
+
+	private async clearPersistedReviewDecision(notePath: string, suggestion: ReviewSuggestion): Promise<void> {
+		const key = this.createPersistedReviewDecisionKey(notePath, suggestion);
+		if (!this.pluginData.reviewDecisionIndex[key]) {
+			return;
+		}
+
+		delete this.pluginData.reviewDecisionIndex[key];
+		await this.savePluginData();
+	}
+
+	private createPersistedReviewDecisionKey(notePath: string, suggestion: ReviewSuggestion): string {
+		return [
+			notePath,
+			suggestion.operation,
+			suggestion.executionMode,
+			suggestion.contributor.displayName,
+			suggestion.contributor.kind,
+			...getSuggestionSignatureParts(suggestion),
+			suggestion.why ?? "",
+		].join("::");
+	}
+
 	private async loadPluginData(): Promise<void> {
 		const savedData = (await this.loadData()) as Partial<EditorialistPluginData> | null;
 		this.pluginData = {
@@ -1557,6 +1715,10 @@ export default class EditorialistPlugin extends Plugin {
 			reviewerSignalIndex:
 				savedData?.reviewerSignalIndex && typeof savedData.reviewerSignalIndex === "object"
 					? savedData.reviewerSignalIndex
+					: {},
+			reviewDecisionIndex:
+				savedData?.reviewDecisionIndex && typeof savedData.reviewDecisionIndex === "object"
+					? savedData.reviewDecisionIndex
 					: {},
 			sweepRegistry:
 				savedData?.sweepRegistry && typeof savedData.sweepRegistry === "object"
@@ -1566,13 +1728,86 @@ export default class EditorialistPlugin extends Plugin {
 		this.reviewerDirectory.setProfiles(this.pluginData.reviewerProfiles);
 	}
 
+	private async refreshRadialTimelineBookScope(): Promise<void> {
+		try {
+			const radialDataPath = normalizePath(`${this.app.vault.configDir}/plugins/radial-timeline/data.json`);
+			if (!(await this.app.vault.adapter.exists(radialDataPath))) {
+				this.radialTimelineActiveBookSourceFolder = null;
+				return;
+			}
+
+			const raw = await this.app.vault.adapter.read(radialDataPath);
+			const parsed = JSON.parse(raw) as {
+				activeBookId?: string;
+				books?: Array<{ id?: string; sourceFolder?: string }>;
+			};
+			const books = Array.isArray(parsed.books) ? parsed.books : [];
+			const activeBook = books.find((book) => book.id === parsed.activeBookId) ?? books[0];
+			const sourceFolder = activeBook?.sourceFolder?.trim();
+			this.radialTimelineActiveBookSourceFolder = sourceFolder ? normalizePath(sourceFolder) : null;
+		} catch {
+			this.radialTimelineActiveBookSourceFolder = null;
+		}
+	}
+
 	private async savePluginData(): Promise<void> {
 		this.pluginData = {
 			reviewerProfiles: this.reviewerDirectory.getProfiles(),
 			reviewerSignalIndex: this.pluginData.reviewerSignalIndex,
+			reviewDecisionIndex: this.pluginData.reviewDecisionIndex,
 			sweepRegistry: this.pluginData.sweepRegistry,
 		};
 		await this.saveData(this.pluginData);
+	}
+
+	private getReviewPanelWarnings(notePath: string): string[] {
+		const warnings: string[] = [];
+		if (!this.isSceneClassNote(notePath)) {
+			warnings.push("Warning: current note is not class: scene.");
+		}
+
+		if (
+			this.radialTimelineActiveBookSourceFolder &&
+			!this.isPathInFolderScope(notePath, this.radialTimelineActiveBookSourceFolder)
+		) {
+			warnings.push("Warning: current note is outside the active book.");
+		}
+
+		if (/(^|\/)(exports?|archives?|drafts?|revisions?)(\/|$)/i.test(notePath)) {
+			warnings.push("Warning: current note appears to be an export, archive, draft, or revision note.");
+		}
+
+		return warnings;
+	}
+
+	private isSceneClassNote(notePath: string): boolean {
+		const file = this.app.vault.getAbstractFileByPath(notePath);
+		if (!(file instanceof TFile)) {
+			return false;
+		}
+
+		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+		const classValues = [
+			frontmatter?.class,
+			frontmatter?.classes,
+		].flatMap((value) => {
+			if (Array.isArray(value)) {
+				return value;
+			}
+			return typeof value === "string" ? [value] : [];
+		});
+
+		return classValues.some((value) => typeof value === "string" && value.trim().toLowerCase() === "scene");
+	}
+
+	private isPathInFolderScope(filePath: string, scopeRoot: string): boolean {
+		const normalizedScopeRoot = normalizePath(scopeRoot);
+		const normalizedFilePath = normalizePath(filePath);
+		if (!normalizedScopeRoot) {
+			return !normalizedFilePath.includes("/");
+		}
+
+		return normalizedFilePath === normalizedScopeRoot || normalizedFilePath.startsWith(`${normalizedScopeRoot}/`);
 	}
 
 	private async copyReviewTemplateToClipboard(selectedText?: string): Promise<void> {

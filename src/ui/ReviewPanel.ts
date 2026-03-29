@@ -1,7 +1,6 @@
 import { ButtonComponent, DropdownComponent, ItemView, setIcon, type WorkspaceLeaf } from "obsidian";
 import { REVIEW_BLOCK_FENCE } from "../core/ReviewBlockFormat";
 import { getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isMoveSuggestion } from "../core/OperationSupport";
-import type { ReviewerProfile } from "../models/ReviewerProfile";
 import type { ReviewSuggestion } from "../models/ReviewSuggestion";
 import type EditorialistPlugin from "../main";
 
@@ -26,7 +25,7 @@ export class ReviewPanel extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Editorial review";
+		return "Editorialist review";
 	}
 
 	getIcon(): string {
@@ -47,7 +46,10 @@ export class ReviewPanel extends ItemView {
 		this.contentEl.addClass("editorialist-panel");
 
 		const header = this.contentEl.createDiv({ cls: "editorialist-panel__header" });
-		header.createEl("h2", { text: "Editorial review" });
+		const titleRow = header.createDiv({ cls: "editorialist-panel__title-row" });
+		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__title-icon" });
+		setIcon(titleIcon, "list-todo");
+		titleRow.createEl("h2", { text: "Editorialist review" });
 
 		if (!session) {
 			header.createDiv({
@@ -57,10 +59,28 @@ export class ReviewPanel extends ItemView {
 			return;
 		}
 
+		const headerDetails = this.plugin.getReviewPanelHeaderDetails();
 		header.createDiv({
-			cls: "editorialist-panel__empty",
-			text: `${session.suggestions.length} suggestions • ${session.notePath}`,
+			cls: "editorialist-panel__summary",
+			text: headerDetails.summary,
 		});
+		if (headerDetails.warnings.length > 0) {
+			const warningBox = header.createDiv({ cls: "editorialist-panel__warnings" });
+			warningBox.createDiv({
+				cls: "editorialist-panel__warnings-title",
+				text: "Warnings",
+			});
+			const warningList = warningBox.createDiv({ cls: "editorialist-panel__warnings-list" });
+			headerDetails.warnings.forEach((warning) => {
+				const item = warningList.createDiv({ cls: "editorialist-panel__warning" });
+				const icon = item.createSpan({ cls: "editorialist-panel__warning-icon" });
+				setIcon(icon, "alert-triangle");
+				item.createSpan({
+					cls: "editorialist-panel__warning-text",
+					text: warning.replace(/^Warning:\s*/i, ""),
+				});
+			});
+		}
 
 		if (session.suggestions.length === 0) {
 			this.contentEl.createDiv({
@@ -70,7 +90,13 @@ export class ReviewPanel extends ItemView {
 			return;
 		}
 
-		this.renderFilters();
+		if (this.shouldShowReviewerFilters(session.suggestions)) {
+			this.contentEl.createDiv({ cls: "editorialist-panel__divider" });
+			this.renderFilters();
+		} else {
+			this.reviewerFilterId = null;
+			this.starredOnly = false;
+		}
 
 		const list = this.contentEl.createDiv({ cls: "editorialist-suggestion-list" });
 		const filteredSuggestions = this.getFilteredSuggestions(session.suggestions);
@@ -105,7 +131,8 @@ export class ReviewPanel extends ItemView {
 		filterLabel.setText("Reviewer filter");
 
 		const filterControls = controls.createDiv({ cls: "editorialist-panel__filter-controls" });
-		const dropdownContainer = filterControls.createDiv({ cls: "editorialist-panel__filter-control" });
+		const inlineGroup = filterControls.createDiv({ cls: "editorialist-panel__filter-inline-group" });
+		const dropdownContainer = inlineGroup.createDiv({ cls: "editorialist-panel__filter-control" });
 		const dropdown = new DropdownComponent(dropdownContainer);
 		dropdown.addOption("", "All reviewers");
 		this.plugin.getSortedReviewerProfiles().forEach((profile) => {
@@ -117,7 +144,7 @@ export class ReviewPanel extends ItemView {
 			this.render();
 		});
 
-		const starredButton = new ButtonComponent(filterControls).onClick(() => {
+		const starredButton = new ButtonComponent(inlineGroup).onClick(() => {
 			this.starredOnly = !this.starredOnly;
 			this.render();
 		});
@@ -130,8 +157,17 @@ export class ReviewPanel extends ItemView {
 		setIcon(starredButton.buttonEl, "star");
 	}
 
+	private shouldShowReviewerFilters(suggestions: ReviewSuggestion[]): boolean {
+		const reviewerIds = new Set(
+			suggestions
+				.map((suggestion) => suggestion.contributor.reviewerId ?? suggestion.contributor.id)
+				.filter((value): value is string => Boolean(value)),
+		);
+
+		return reviewerIds.size > 1;
+	}
+
 	private renderSuggestionCard(parent: HTMLElement, suggestion: ReviewSuggestion, selected: boolean): HTMLElement {
-		const reviewerProfile = this.plugin.getReviewerProfile(suggestion.contributor.reviewerId);
 		const visualState = this.plugin.getSuggestionPresentationState(suggestion);
 
 		const card = parent.createDiv({
@@ -150,43 +186,23 @@ export class ReviewPanel extends ItemView {
 			text: `Block ${suggestion.source.blockIndex + 1} • Entry ${suggestion.source.entryIndex + 1}`,
 		});
 
-		const reviewerHeader = card.createDiv({ cls: "editorialist-reviewer-header" });
-		reviewerHeader.createDiv({
-			cls: "editorialist-suggestion__contributor",
-			text: this.formatContributorLine(suggestion, Boolean(reviewerProfile?.isStarred)),
-		});
-		if (this.plugin.canToggleReviewerStar(suggestion.id)) {
-			const starButton = reviewerHeader.createEl("button", {
-				cls: `editorialist-reviewer-header__star${reviewerProfile?.isStarred ? " is-starred" : ""}`,
-				attr: {
-					"aria-label": "Star reviewer",
-					title: "Star reviewer",
-					type: "button",
-				},
-			});
-			setIcon(starButton, "star");
-			this.bindImmediateAction(starButton, () => {
-				void this.plugin.toggleReviewerStarForSuggestion(suggestion.id);
-			});
-		}
-
-		if (this.hasRawReviewerDifference(suggestion, reviewerProfile)) {
-			card.createDiv({
-				cls: "editorialist-suggestion__reviewer-raw",
-				text: `Raw: ${suggestion.contributor.raw.rawName}`,
-			});
-		}
+		card.createDiv({ cls: "editorialist-suggestion__identity-spacer" });
 
 		this.renderSuggestionCopy(card, suggestion);
 
 		if (suggestion.why) {
 			const why = card.createDiv({ cls: "editorialist-suggestion__why" });
-			why.createEl("strong", { text: "Why" });
+			why.createEl("strong", { text: "WHY" });
 			why.createDiv({ text: suggestion.why });
 		}
 
-		card.createDiv({
-			cls: "editorialist-suggestion__reason",
+		const reason = card.createDiv({
+			cls: `editorialist-suggestion__reason editorialist-suggestion__reason--${this.getSuggestionReasonTone(suggestion)}`,
+		});
+		const reasonIcon = reason.createSpan({ cls: "editorialist-suggestion__reason-icon" });
+		setIcon(reasonIcon, this.getSuggestionReasonIcon(suggestion));
+		reason.createSpan({
+			cls: "editorialist-suggestion__reason-text",
 			text: this.getSuggestionReason(suggestion),
 		});
 
@@ -389,8 +405,27 @@ export class ReviewPanel extends ItemView {
 		const wrapper = parent.createDiv({
 			cls: `editorialist-suggestion__copy-block editorialist-suggestion__copy-block--${title.toLowerCase()}`,
 		});
-		wrapper.createEl("strong", { text: title });
+		wrapper.createEl("strong", { text: title.toUpperCase() });
 		wrapper.createDiv({ cls: "editorialist-suggestion__copy-body", text: body });
+	}
+
+	private getSuggestionReasonTone(suggestion: ReviewSuggestion): "alert" | "muted" {
+		const reason = this.getSuggestionReason(suggestion).toLowerCase();
+		if (
+			reason.includes("no exact match") ||
+			reason.includes("not found") ||
+			reason.includes("multiple") ||
+			reason.includes("ambiguous") ||
+			reason.includes("unresolved")
+		) {
+			return "alert";
+		}
+
+		return "muted";
+	}
+
+	private getSuggestionReasonIcon(suggestion: ReviewSuggestion): string {
+		return this.getSuggestionReasonTone(suggestion) === "alert" ? "alert-triangle" : "square-check";
 	}
 
 	private centerCardInScrollView(card: HTMLElement): void {
@@ -490,34 +525,6 @@ export class ReviewPanel extends ItemView {
 		}
 
 		return kind.charAt(0).toUpperCase() + kind.slice(1);
-	}
-
-	private formatContributorLine(suggestion: ReviewSuggestion, isStarred: boolean): string {
-		const parts = [
-			suggestion.contributor.displayName,
-			this.formatContributorKind(suggestion.contributor.kind),
-		];
-
-		if (suggestion.contributor.kind === "ai" && (suggestion.contributor.provider || suggestion.contributor.model)) {
-			const providerDetail = [suggestion.contributor.provider, suggestion.contributor.model].filter(Boolean).join(" • ");
-			parts.push(`(${providerDetail})`);
-		}
-
-		if (isStarred) {
-			parts.push("★");
-		}
-
-		return parts.join(" · ");
-	}
-
-	private hasRawReviewerDifference(suggestion: ReviewSuggestion, reviewerProfile: ReviewerProfile | null): boolean {
-		const rawName = suggestion.contributor.raw.rawName?.trim();
-		if (!rawName) {
-			return false;
-		}
-
-		const canonicalName = reviewerProfile?.displayName ?? suggestion.contributor.displayName;
-		return rawName !== canonicalName;
 	}
 
 	private getFilteredSuggestions(suggestions: ReviewSuggestion[]): ReviewSuggestion[] {
