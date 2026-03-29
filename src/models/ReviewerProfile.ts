@@ -6,6 +6,7 @@ export type ReviewerResolutionStatus = "exact" | "alias" | "suggested" | "unreso
 export interface ReviewerStats {
 	totalSuggestions: number;
 	accepted: number;
+	deferred: number;
 	rejected: number;
 	unresolved: number;
 	acceptedEdits?: number;
@@ -43,20 +44,37 @@ export interface ReviewerResolution {
 export interface ReviewerSignalRecord {
 	key: string;
 	reviewerId: string;
-	status: "accepted" | "rejected" | "unresolved";
+	status: "accepted" | "deferred" | "rejected" | "unresolved";
 	operation: ReviewOperationType;
 }
 
 export interface PersistedReviewDecisionRecord {
 	key: string;
-	status: "accepted" | "rejected";
+	status: "accepted" | "later" | "rejected";
 	updatedAt: number;
+}
+
+export interface SceneReviewRecord {
+	sceneId?: string;
+	notePath: string;
+	noteTitle: string;
+	bookLabel?: string;
+	batchIds: string[];
+	batchCount: number;
+	pendingCount: number;
+	deferredCount: number;
+	resolvedCount: number;
+	rejectedCount: number;
+	status: "completed" | "cleaned" | "in_progress" | "not_started";
+	lastUpdated: number;
+	cleanedAt?: number;
 }
 
 export interface EditorialistPluginData {
 	reviewerProfiles: ReviewerProfile[];
 	reviewerSignalIndex: Record<string, ReviewerSignalRecord>;
 	reviewDecisionIndex: Record<string, PersistedReviewDecisionRecord>;
+	sceneReviewIndex: Record<string, SceneReviewRecord>;
 	sweepRegistry: Record<string, ReviewSweepRegistryEntry>;
 }
 

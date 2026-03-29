@@ -277,6 +277,7 @@ export class ReviewerDirectory {
 		return {
 			totalSuggestions: 0,
 			accepted: 0,
+			deferred: 0,
 			rejected: 0,
 			unresolved: 0,
 			acceptedEdits: 0,

@@ -49,6 +49,19 @@ export class ReviewPanel extends ItemView {
 		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__title-icon" });
 		setIcon(titleIcon, "list-todo");
 		titleRow.createEl("h2", { text: "Editorialist review" });
+		const settingsButton = titleRow.createEl("button", {
+			cls: "editorialist-panel__settings-button",
+			attr: {
+				"aria-label": "Open Editorialist settings",
+				title: "Open Editorialist settings",
+				type: "button",
+			},
+		});
+		const settingsIcon = settingsButton.createSpan({ cls: "editorialist-panel__settings-icon" });
+		setIcon(settingsIcon, "settings");
+		this.bindImmediateAction(settingsButton, () => {
+			this.plugin.openSettings();
+		});
 
 		if (!session) {
 			const empty = header.createDiv({ cls: "editorialist-panel__empty" });

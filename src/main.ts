@@ -1,5 +1,5 @@
 import type { EditorView } from "@codemirror/view";
-import { MarkdownView, normalizePath, Notice, Plugin, TFile } from "obsidian";
+import { MarkdownView, normalizePath, Notice, Plugin, TFile, type App } from "obsidian";
 import { registerCommands } from "./commands/Commands";
 import { ImportEngine } from "./core/ImportEngine";
 import { MatchEngine } from "./core/MatchEngine";
@@ -22,6 +22,7 @@ import {
 import { ReviewEngine } from "./core/ReviewEngine";
 import { SuggestionParser } from "./core/SuggestionParser";
 import type {
+	EditorialistMetadataExport,
 	ReviewImportBatch,
 	ReviewImportNoteGroup,
 	ReviewSweepRegistryEntry,
@@ -35,6 +36,7 @@ import type {
 	ReviewerProfile,
 	ReviewerResolutionStatus,
 	ReviewerSignalRecord,
+	SceneReviewRecord,
 	ReviewerStats,
 } from "./models/ReviewerProfile";
 import { ReviewStore, type GuidedSweepState } from "./state/ReviewStore";
@@ -85,6 +87,7 @@ export default class EditorialistPlugin extends Plugin {
 		reviewerProfiles: [],
 		reviewerSignalIndex: {},
 		reviewDecisionIndex: {},
+		sceneReviewIndex: {},
 		sweepRegistry: {},
 	};
 	private toolbarOverlayEl: HTMLElement | null = null;
@@ -178,6 +181,7 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		this.store.setSession(hydratedSession, preferredSelectionId);
+		this.restoreDeferredSuggestionsForSession(hydratedSession);
 		this.selectPreferredSuggestionForSession(preferredSelectionId);
 		this.store.updateGuidedSweepCurrentNote(context.filePath);
 		this.pruneDeferredSuggestions();
@@ -246,6 +250,18 @@ export default class EditorialistPlugin extends Plugin {
 		});
 		this.app.workspace.revealLeaf(leaf);
 		this.refreshReviewPanel();
+	}
+
+	openSettings(): void {
+		const appWithSettings = this.app as App & {
+			setting?: {
+				open: () => void;
+				openTabById?: (id: string) => void;
+			};
+		};
+
+		appWithSettings.setting?.open();
+		appWithSettings.setting?.openTabById?.(this.manifest.id);
 	}
 
 	async selectSuggestion(id: string): Promise<void> {
@@ -412,6 +428,7 @@ export default class EditorialistPlugin extends Plugin {
 			suggestionId: suggestion.id,
 		};
 		this.syncActiveEditorDecorations();
+		await this.syncSceneReviewIndex();
 	}
 
 	async rejectSuggestion(id: string): Promise<void> {
@@ -428,6 +445,7 @@ export default class EditorialistPlugin extends Plugin {
 		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next", id);
 		this.store.updateSuggestionStatus(id, "rejected");
 		this.deferredSuggestionIds.delete(id);
+		await this.syncSceneReviewIndex();
 		await this.syncReviewerSignalsForSession(this.store.getSession());
 		if (nextSuggestionId) {
 			this.store.selectSuggestion(nextSuggestionId);
@@ -443,8 +461,16 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
+		const session = this.getReviewSession();
+		const suggestion = this.getSuggestionById(id);
+		if (session && suggestion) {
+			await this.persistReviewDecision(session.notePath, suggestion, "later");
+		}
+
 		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next", id, true);
 		this.deferredSuggestionIds.add(id);
+		await this.syncSceneReviewIndex();
+		await this.syncReviewerSignalsForSession(this.store.getSession());
 		if (nextSuggestionId) {
 			this.store.selectSuggestion(nextSuggestionId);
 			await this.revealSelectedSuggestion();
@@ -552,20 +578,68 @@ export default class EditorialistPlugin extends Plugin {
 		return Object.values(this.pluginData.sweepRegistry).sort((left, right) => right.updatedAt - left.updatedAt);
 	}
 
+	getSceneReviewRecords(options?: { activeBookOnly?: boolean }): SceneReviewRecord[] {
+		const records = Object.values(this.pluginData.sceneReviewIndex).sort((left, right) => {
+			if (left.status !== right.status) {
+				return this.getSceneReviewStatusRank(left.status) - this.getSceneReviewStatusRank(right.status);
+			}
+
+			return right.lastUpdated - left.lastUpdated;
+		});
+
+		if (options?.activeBookOnly && this.radialTimelineActiveBookSourceFolder) {
+			return records.filter((record) => this.isPathInFolderScope(record.notePath, this.radialTimelineActiveBookSourceFolder as string));
+		}
+
+		return records;
+	}
+
+	getActiveBookScopeInfo(): { label: string | null; sourceFolder: string | null } {
+		return {
+			label: this.radialTimelineActiveBookLabel,
+			sourceFolder: this.radialTimelineActiveBookSourceFolder,
+		};
+	}
+
+	async syncOperationalMetadata(): Promise<void> {
+		await this.refreshRadialTimelineBookScope();
+		await this.syncSceneReviewIndex();
+	}
+
 	getReviewActivitySummary(): {
 		accepted: number;
 		cleanedUpSweeps: number;
 		completedSweeps: number;
+		deferred: number;
+		processed: number;
 		inProgressSweeps: number;
 		rejected: number;
 		totalSuggestions: number;
 		totalSweeps: number;
 		unresolved: number;
 	} {
+		const sceneTotals = this.getSceneReviewRecords().reduce(
+			(totals, record) => {
+				totals.totalSuggestions += record.pendingCount + record.deferredCount + record.resolvedCount + record.rejectedCount;
+				totals.accepted += record.resolvedCount;
+				totals.deferred += record.deferredCount;
+				totals.rejected += record.rejectedCount;
+				totals.unresolved += record.pendingCount;
+				return totals;
+			},
+			{
+				totalSuggestions: 0,
+				accepted: 0,
+				deferred: 0,
+				rejected: 0,
+				unresolved: 0,
+			},
+		);
 		const reviewerTotals = this.getReviewerProfiles().reduce(
 			(totals, profile) => {
 				totals.totalSuggestions += profile.stats?.totalSuggestions ?? 0;
 				totals.accepted += profile.stats?.accepted ?? 0;
+				totals.deferred += profile.stats?.deferred ?? 0;
 				totals.rejected += profile.stats?.rejected ?? 0;
 				totals.unresolved += profile.stats?.unresolved ?? 0;
 				return totals;
@@ -573,14 +647,17 @@ export default class EditorialistPlugin extends Plugin {
 			{
 				totalSuggestions: 0,
 				accepted: 0,
+				deferred: 0,
 				rejected: 0,
 				unresolved: 0,
 			},
 		);
 		const entries = this.getSweepRegistryEntries();
+		const totals = sceneTotals.totalSuggestions > 0 ? sceneTotals : reviewerTotals;
 
 		return {
-			...reviewerTotals,
+			...totals,
+			processed: Math.max(0, totals.totalSuggestions - totals.unresolved),
 			totalSweeps: entries.length,
 			inProgressSweeps: entries.filter((entry) => entry.status === "in_progress").length,
 			completedSweeps: entries.filter((entry) => entry.status === "completed").length,
@@ -1039,6 +1116,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		const preferredSelectionId = this.store.getState().selectedSuggestionId;
 		this.store.setSession(hydratedSession, preferredSelectionId);
+		this.restoreDeferredSuggestionsForSession(hydratedSession);
 		this.selectPreferredSuggestionForSession(preferredSelectionId);
 		this.store.updateGuidedSweepCurrentNote(context.filePath);
 		this.pruneDeferredSuggestions();
@@ -1205,10 +1283,19 @@ export default class EditorialistPlugin extends Plugin {
 			return null;
 		}
 
+		const presentationState = this.getSuggestionPresentationState(suggestion);
+
 		return {
 			key,
 			reviewerId,
-			status: suggestion.status === "accepted" ? "accepted" : suggestion.status === "rejected" ? "rejected" : "unresolved",
+			status:
+				presentationState === "accepted" || presentationState === "resolved"
+					? "accepted"
+					: presentationState === "rejected"
+						? "rejected"
+						: presentationState === "later"
+							? "deferred"
+							: "unresolved",
 			operation: suggestion.operation,
 		};
 	}
@@ -1242,6 +1329,7 @@ export default class EditorialistPlugin extends Plugin {
 		const stats = {
 			totalSuggestions: profile.stats?.totalSuggestions ?? 0,
 			accepted: profile.stats?.accepted ?? 0,
+			deferred: profile.stats?.deferred ?? 0,
 			rejected: profile.stats?.rejected ?? 0,
 			unresolved: profile.stats?.unresolved ?? 0,
 			acceptedEdits: profile.stats?.acceptedEdits ?? 0,
@@ -1258,6 +1346,8 @@ export default class EditorialistPlugin extends Plugin {
 			}
 		} else if (record.status === "rejected") {
 			stats.rejected = Math.max(0, stats.rejected + direction);
+		} else if (record.status === "deferred") {
+			stats.deferred = Math.max(0, stats.deferred + direction);
 		} else {
 			stats.unresolved = Math.max(0, stats.unresolved + direction);
 		}
@@ -1661,7 +1751,7 @@ export default class EditorialistPlugin extends Plugin {
 			...session,
 			suggestions: session.suggestions.map((suggestion) => {
 				const record = this.pluginData.reviewDecisionIndex[this.createPersistedReviewDecisionKey(session.notePath, suggestion)];
-				if (!record) {
+				if (!record || record.status === "later") {
 					return suggestion;
 				}
 
@@ -1671,6 +1761,16 @@ export default class EditorialistPlugin extends Plugin {
 				};
 			}),
 		};
+	}
+
+	private restoreDeferredSuggestionsForSession(session: ReviewSession): void {
+		this.deferredSuggestionIds.clear();
+		for (const suggestion of session.suggestions) {
+			const record = this.pluginData.reviewDecisionIndex[this.createPersistedReviewDecisionKey(session.notePath, suggestion)];
+			if (record?.status === "later" && suggestion.status !== "accepted" && suggestion.status !== "rejected" && !isSuggestionResolved(suggestion)) {
+				this.deferredSuggestionIds.add(suggestion.id);
+			}
+		}
 	}
 
 	private async persistReviewDecision(
@@ -1721,6 +1821,10 @@ export default class EditorialistPlugin extends Plugin {
 				savedData?.reviewDecisionIndex && typeof savedData.reviewDecisionIndex === "object"
 					? savedData.reviewDecisionIndex
 					: {},
+			sceneReviewIndex:
+				savedData?.sceneReviewIndex && typeof savedData.sceneReviewIndex === "object"
+					? savedData.sceneReviewIndex
+					: {},
 			sweepRegistry:
 				savedData?.sweepRegistry && typeof savedData.sweepRegistry === "object"
 					? savedData.sweepRegistry
@@ -1760,9 +1864,312 @@ export default class EditorialistPlugin extends Plugin {
 			reviewerProfiles: this.reviewerDirectory.getProfiles(),
 			reviewerSignalIndex: this.pluginData.reviewerSignalIndex,
 			reviewDecisionIndex: this.pluginData.reviewDecisionIndex,
+			sceneReviewIndex: this.pluginData.sceneReviewIndex,
 			sweepRegistry: this.pluginData.sweepRegistry,
 		};
 		await this.saveData(this.pluginData);
+	}
+
+	private async syncSceneReviewIndex(): Promise<void> {
+		const nextIndex: Record<string, SceneReviewRecord> = {};
+		const batchPresence = new Map<string, Set<string>>();
+		const now = Date.now();
+
+		for (const file of this.app.vault.getMarkdownFiles()) {
+			const noteText = this.getNoteContextByPath(file.path)?.view.editor.getValue() ?? (await this.app.vault.cachedRead(file));
+			const importedBlocks = findImportedReviewBlocks(noteText);
+			if (importedBlocks.length === 0) {
+				continue;
+			}
+
+			const batchIds = [...new Set(importedBlocks.map((block) => block.batchId).filter((value): value is string => Boolean(value)))];
+			for (const batchId of batchIds) {
+				const paths = batchPresence.get(batchId) ?? new Set<string>();
+				paths.add(file.path);
+				batchPresence.set(batchId, paths);
+			}
+
+			const session = this.applyPersistedReviewDecisionsToSession(this.reviewEngine.buildSession(file.path, noteText, null));
+			const deferredIds = this.getDeferredSuggestionIdsForSession(session);
+			let pendingCount = 0;
+			let deferredCount = 0;
+			let resolvedCount = 0;
+			let rejectedCount = 0;
+			let lastDecisionAt = 0;
+
+			for (const suggestion of session.suggestions) {
+				const record = this.pluginData.reviewDecisionIndex[this.createPersistedReviewDecisionKey(file.path, suggestion)];
+				if (record?.updatedAt) {
+					lastDecisionAt = Math.max(lastDecisionAt, record.updatedAt);
+				}
+
+				if (deferredIds.has(suggestion.id)) {
+					deferredCount += 1;
+					continue;
+				}
+
+				if (suggestion.status === "rejected") {
+					rejectedCount += 1;
+					continue;
+				}
+
+				if (suggestion.status === "accepted" || isSuggestionResolved(suggestion)) {
+					resolvedCount += 1;
+					continue;
+				}
+
+				pendingCount += 1;
+			}
+
+			const status =
+				pendingCount === 0 && deferredCount === 0
+					? "completed"
+					: resolvedCount === 0 && rejectedCount === 0 && deferredCount === 0
+						? "not_started"
+						: "in_progress";
+
+			nextIndex[file.path] = {
+				sceneId: this.getSceneIdForPath(file.path),
+				notePath: file.path,
+				noteTitle: file.basename,
+				bookLabel: this.getBookHintForPath(file.path),
+				batchIds,
+				batchCount: batchIds.length,
+				pendingCount,
+				deferredCount,
+				resolvedCount,
+				rejectedCount,
+				status,
+				lastUpdated: Math.max(file.stat.mtime, lastDecisionAt),
+			};
+		}
+
+		for (const existing of Object.values(this.pluginData.sceneReviewIndex)) {
+			if (nextIndex[existing.notePath]) {
+				continue;
+			}
+
+			nextIndex[existing.notePath] = {
+				...existing,
+				batchIds: [],
+				batchCount: 0,
+				pendingCount: 0,
+				deferredCount: 0,
+				resolvedCount: 0,
+				rejectedCount: 0,
+				status: "cleaned",
+				cleanedAt: existing.cleanedAt ?? now,
+				lastUpdated: existing.cleanedAt ?? now,
+			};
+		}
+
+		this.pluginData.sceneReviewIndex = nextIndex;
+		this.reconcileSweepRegistryWithSceneInventory(batchPresence, now);
+		await this.savePluginData();
+	}
+
+	private reconcileSweepRegistryWithSceneInventory(batchPresence: Map<string, Set<string>>, now: number): void {
+		const nextRegistry: Record<string, ReviewSweepRegistryEntry> = {};
+		for (const entry of Object.values(this.pluginData.sweepRegistry)) {
+			const currentPaths = [...(batchPresence.get(entry.batchId) ?? new Set<string>())].sort();
+			const sceneOrder = entry.sceneOrder.filter((path) => currentPaths.includes(path));
+			const nextSceneOrder = sceneOrder.length > 0 ? sceneOrder : currentPaths;
+			const currentNotePath = entry.currentNotePath && currentPaths.includes(entry.currentNotePath)
+				? entry.currentNotePath
+				: nextSceneOrder[0];
+
+			nextRegistry[entry.batchId] = {
+				...entry,
+				activeBookLabel: entry.activeBookLabel ?? this.radialTimelineActiveBookLabel ?? undefined,
+				activeBookSourceFolder: entry.activeBookSourceFolder ?? this.radialTimelineActiveBookSourceFolder ?? undefined,
+				cleanedAt: currentPaths.length === 0 ? entry.cleanedAt ?? now : undefined,
+				importedNotePaths: currentPaths,
+				currentNotePath,
+				sceneOrder: nextSceneOrder,
+				status: currentPaths.length === 0 ? "cleaned_up" : entry.status,
+				updatedAt: now,
+			};
+		}
+
+		this.pluginData.sweepRegistry = nextRegistry;
+	}
+
+	private getDeferredSuggestionIdsForSession(session: ReviewSession): Set<string> {
+		const ids = new Set<string>();
+		for (const suggestion of session.suggestions) {
+			const record = this.pluginData.reviewDecisionIndex[this.createPersistedReviewDecisionKey(session.notePath, suggestion)];
+			if (record?.status === "later") {
+				ids.add(suggestion.id);
+			}
+		}
+
+		return ids;
+	}
+
+	private getSceneIdForPath(notePath: string): string | undefined {
+		const file = this.app.vault.getAbstractFileByPath(notePath);
+		if (!(file instanceof TFile)) {
+			return undefined;
+		}
+
+		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+		const values = this.getFrontmatterStringValues(frontmatter, ["id", "ID", "sceneid", "SceneId"]);
+		return values[0]?.trim() || undefined;
+	}
+
+	private getBookHintForPath(notePath: string): string | undefined {
+		if (
+			this.radialTimelineActiveBookLabel &&
+			this.radialTimelineActiveBookSourceFolder &&
+			this.isPathInFolderScope(notePath, this.radialTimelineActiveBookSourceFolder)
+		) {
+			return this.radialTimelineActiveBookLabel;
+		}
+
+		const normalizedPath = normalizePath(notePath);
+		const segments = normalizedPath.split("/");
+		return segments.length > 1 ? segments.slice(0, -1).join("/") : undefined;
+	}
+
+	private getSceneReviewStatusRank(status: SceneReviewRecord["status"]): number {
+		switch (status) {
+			case "in_progress":
+				return 0;
+			case "not_started":
+				return 1;
+			case "completed":
+				return 2;
+			case "cleaned":
+				return 3;
+		}
+	}
+
+	async openSceneNote(notePath: string): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(notePath);
+		if (!(file instanceof TFile)) {
+			new Notice("Scene note not found.");
+			return;
+		}
+
+		const leaf = this.app.workspace.getMostRecentLeaf() ?? this.app.workspace.getLeaf(true);
+		await leaf.openFile(file);
+	}
+
+	async startOrResumeReviewForNote(notePath: string): Promise<void> {
+		await this.openSceneNote(notePath);
+		await this.parseCurrentNote({ suppressNotice: true });
+	}
+
+	async cleanSceneReviewNote(notePath: string): Promise<void> {
+		const context = this.getNoteContextByPath(notePath);
+		let removedCount = 0;
+
+		if (context) {
+			const removed = removeImportedReviewBlocks(context.view.editor.getValue());
+			if (removed.removedCount > 0) {
+				context.view.editor.setValue(removed.text);
+				removedCount = removed.removedCount;
+			}
+		} else {
+			const file = this.app.vault.getAbstractFileByPath(notePath);
+			if (!(file instanceof TFile)) {
+				new Notice("Scene note not found.");
+				return;
+			}
+			const removed = removeImportedReviewBlocks(await this.app.vault.cachedRead(file));
+			if (removed.removedCount > 0) {
+				await this.app.vault.modify(file, removed.text);
+				removedCount = removed.removedCount;
+			}
+		}
+
+		await this.syncSceneReviewIndex();
+		this.resyncSessionForActiveNote();
+		new Notice(
+			removedCount > 0
+				? `Cleaned ${removedCount} imported review block${removedCount === 1 ? "" : "s"} from this note.`
+				: "No imported review blocks were found in this note.",
+		);
+	}
+
+	async cleanupSceneReviewNotes(notePaths: string[]): Promise<number> {
+		let removedCount = 0;
+		for (const notePath of notePaths) {
+			const context = this.getNoteContextByPath(notePath);
+			if (context) {
+				const removed = removeImportedReviewBlocks(context.view.editor.getValue());
+				if (removed.removedCount > 0) {
+					context.view.editor.setValue(removed.text);
+					removedCount += removed.removedCount;
+				}
+				continue;
+			}
+
+			const file = this.app.vault.getAbstractFileByPath(notePath);
+			if (!(file instanceof TFile)) {
+				continue;
+			}
+
+			const removed = removeImportedReviewBlocks(await this.app.vault.cachedRead(file));
+			if (removed.removedCount > 0) {
+				await this.app.vault.modify(file, removed.text);
+				removedCount += removed.removedCount;
+			}
+		}
+
+		await this.syncSceneReviewIndex();
+		this.resyncSessionForActiveNote();
+		return removedCount;
+	}
+
+	async cleanupCompletedSceneReviewNotes(activeBookOnly = false): Promise<number> {
+		const notePaths = this.getSceneReviewRecords({ activeBookOnly })
+			.filter((record) => record.status === "completed")
+			.map((record) => record.notePath);
+		return this.cleanupSceneReviewNotes(notePaths);
+	}
+
+	async cleanupAllSceneReviewNotes(activeBookOnly = false): Promise<number> {
+		const notePaths = this.getSceneReviewRecords({ activeBookOnly })
+			.filter((record) => record.batchCount > 0)
+			.map((record) => record.notePath);
+		return this.cleanupSceneReviewNotes(notePaths);
+	}
+
+	async exportEditorialistMetadata(): Promise<string> {
+		await this.syncOperationalMetadata();
+		const payload: EditorialistMetadataExport = {
+			schemaVersion: "1.0.0",
+			exportedAt: Date.now(),
+			contributors: this.getSortedReviewerProfiles().map((profile) => ({
+				createdAt: profile.createdAt,
+				displayName: profile.displayName,
+				id: profile.id,
+				kind: profile.kind,
+				aliases: [...profile.aliases],
+				isStarred: profile.isStarred,
+				model: profile.model,
+				provider: profile.provider,
+				stats: profile.stats ? { ...profile.stats } : undefined,
+				updatedAt: profile.updatedAt,
+			})),
+			scenes: this.getSceneReviewRecords().map((record) => ({ ...record, batchIds: [...record.batchIds] })),
+			sweeps: this.getSweepRegistryEntries().map((entry) => ({
+				...entry,
+				importedNotePaths: [...entry.importedNotePaths],
+				sceneOrder: [...entry.sceneOrder],
+			})),
+		};
+		const date = new Date();
+		const dateLabel = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+		let targetPath = normalizePath(`editorialist-data-export-${dateLabel}.json`);
+		if (await this.app.vault.adapter.exists(targetPath)) {
+			const timeLabel = `${String(date.getHours()).padStart(2, "0")}${String(date.getMinutes()).padStart(2, "0")}${String(date.getSeconds()).padStart(2, "0")}`;
+			targetPath = normalizePath(`editorialist-data-export-${dateLabel}-${timeLabel}.json`);
+		}
+
+		await this.app.vault.create(targetPath, JSON.stringify(payload, null, 2));
+		return targetPath;
 	}
 
 	private getReviewPanelWarnings(notePath: string): string[] {
@@ -1793,17 +2200,23 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-		const classValues = [
-			frontmatter?.class,
-			frontmatter?.classes,
-		].flatMap((value) => {
+		const classValues = this.getFrontmatterStringValues(frontmatter, ["class", "Class", "classes", "Classes"]);
+
+		return classValues.some((value) => typeof value === "string" && value.trim().toLowerCase() === "scene");
+	}
+
+	private getFrontmatterStringValues(frontmatter: Record<string, unknown> | undefined, keys: string[]): string[] {
+		if (!frontmatter) {
+			return [];
+		}
+
+		return keys.flatMap((key) => {
+			const value = frontmatter[key];
 			if (Array.isArray(value)) {
-				return value;
+				return value.filter((item): item is string => typeof item === "string");
 			}
 			return typeof value === "string" ? [value] : [];
 		});
-
-		return classValues.some((value) => typeof value === "string" && value.trim().toLowerCase() === "scene");
 	}
 
 	private isPathInFolderScope(filePath: string, scopeRoot: string): boolean {
@@ -1991,6 +2404,8 @@ export default class EditorialistPlugin extends Plugin {
 	): Promise<void> {
 		const now = Date.now();
 		this.pluginData.sweepRegistry[batch.batchId] = {
+			activeBookLabel: this.radialTimelineActiveBookLabel ?? undefined,
+			activeBookSourceFolder: this.radialTimelineActiveBookSourceFolder ?? undefined,
 			batchId: batch.batchId,
 			contentHash: batch.contentHash,
 			importedAt: batch.createdAt,
@@ -2001,7 +2416,7 @@ export default class EditorialistPlugin extends Plugin {
 			totalSuggestions: batch.summary.totalSuggestions,
 			updatedAt: now,
 		};
-		await this.savePluginData();
+		await this.syncSceneReviewIndex();
 	}
 
 	private async updateSweepRegistry(
@@ -2167,6 +2582,7 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		context.view.editor.setValue(removed.text);
+		await this.syncSceneReviewIndex();
 		this.resyncSessionForActiveNote();
 		new Notice(`Removed ${removed.removedCount} imported review block${removed.removedCount === 1 ? "" : "s"} from this note.`);
 	}
@@ -2207,10 +2623,12 @@ export default class EditorialistPlugin extends Plugin {
 
 		await this.updateSweepRegistry(batchId, {
 			status: "cleaned_up",
+			cleanedAt: Date.now(),
 		});
 		if (this.getGuidedSweep()?.batchId === batchId) {
 			this.store.setGuidedSweep(null);
 		}
+		await this.syncSceneReviewIndex();
 		this.resyncSessionForActiveNote();
 		new Notice(
 			removedCount > 0

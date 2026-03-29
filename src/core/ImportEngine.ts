@@ -271,15 +271,7 @@ export class ImportEngine {
 
 	private isSceneClassFile(file: TFile): boolean {
 		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-		const classValues = [
-			frontmatter?.class,
-			frontmatter?.classes,
-		].flatMap((value) => {
-			if (Array.isArray(value)) {
-				return value;
-			}
-			return typeof value === "string" ? [value] : [];
-		});
+		const classValues = this.getFrontmatterStringValues(frontmatter, ["class", "Class", "classes", "Classes"]);
 
 		return classValues.some((value) => this.normalizeMetadataValue(value) === "scene");
 	}
@@ -315,19 +307,36 @@ export class ImportEngine {
 		const normalizedSceneId = sceneId.trim().toLowerCase();
 		const cache = this.app.metadataCache.getFileCache(file);
 		const frontmatter = cache?.frontmatter;
-		const frontmatterCandidates = [
-			frontmatter?.sceneid,
-			frontmatter?.sceneId,
-			frontmatter?.scene_id,
-		]
-			.filter((value): value is string => typeof value === "string")
-			.map((value) => value.trim().toLowerCase());
+		const frontmatterCandidates = this.getFrontmatterStringValues(frontmatter, [
+			"id",
+			"Id",
+			"ID",
+			"sceneid",
+			"sceneId",
+			"SceneId",
+			"scene_id",
+			"Scene_ID",
+		]).map((value) => value.trim().toLowerCase());
 
 		return (
 			frontmatterCandidates.includes(normalizedSceneId) ||
 			file.basename.toLowerCase().includes(normalizedSceneId) ||
 			file.path.toLowerCase().includes(normalizedSceneId)
 		);
+	}
+
+	private getFrontmatterStringValues(frontmatter: Record<string, unknown> | undefined, keys: string[]): string[] {
+		if (!frontmatter) {
+			return [];
+		}
+
+		return keys.flatMap((key) => {
+			const value = frontmatter[key];
+			if (Array.isArray(value)) {
+				return value.filter((item): item is string => typeof item === "string");
+			}
+			return typeof value === "string" ? [value] : [];
+		});
 	}
 
 	private getRoutingMismatchReason(file: TFile, suggestion: ReviewSuggestion): string | null {

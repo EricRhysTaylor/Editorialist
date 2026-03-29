@@ -31,7 +31,7 @@ interface DetectionItem {
 	disabled?: boolean;
 	emphasized?: boolean;
 	icon: string;
-	id: "clipboard" | "current-note" | "template";
+	id: "active-book" | "clipboard" | "current-note" | "template";
 	label: string;
 	tone: DetectionTone;
 }
@@ -489,6 +489,10 @@ export class EditorialistModal extends Modal {
 		return batch.groups.some((group) => group.isReady);
 	}
 
+	private hasAnySceneMatch(batch: ReviewImportBatch): boolean {
+		return batch.summary.totalMatchedScenes > 0 || batch.summary.totalResolvedScenes > 0;
+	}
+
 	private isLocalNoteBatch(batch: ReviewImportBatch): boolean {
 		return batch.results.every((result) => {
 			const routing = result.suggestion.routing;
@@ -565,16 +569,39 @@ export class EditorialistModal extends Modal {
 		}
 
 		if (this.clipboardBatch || batch) {
+			const activeBatch = this.clipboardBatch?.batch ?? batch;
+			const readyGroups = activeBatch ? this.hasImportReadyGroup(activeBatch) : false;
+			const hasSceneMatches = activeBatch ? this.hasAnySceneMatch(activeBatch) : false;
+
 			return [
 				{
-					actionLabel: "Import clipboard review batch",
-					actionHint: "→ Import review",
-					emphasized: true,
+					actionLabel: "Clipboard review batch detected",
+					actionHint: "→ Review source",
+					emphasized: !readyGroups,
 					icon: "clipboard",
 					id: "clipboard",
 					label: "Clipboard",
 					description: "Review batch detected",
 					tone: "success",
+				},
+				{
+					actionLabel: readyGroups ? "Import matching scenes from the active book" : "No matching scenes found",
+					actionHint: readyGroups
+						? "→ Import review"
+						: hasSceneMatches
+							? "→ Review matches"
+							: "→ No valid destination",
+					disabled: !readyGroups && !hasSceneMatches,
+					emphasized: readyGroups,
+					icon: readyGroups ? "map-pinned" : "triangle-alert",
+					id: "active-book",
+					label: "Active book scenes",
+					description: readyGroups
+						? `${activeBatch?.summary.totalResolvedScenes ?? 0} matched scene${(activeBatch?.summary.totalResolvedScenes ?? 0) === 1 ? "" : "s"} ready`
+						: hasSceneMatches
+							? "Only ambiguous or unresolved scene matches found"
+							: "No matching scene text found",
+					tone: readyGroups ? "success" : "danger",
 				},
 			];
 		}
@@ -621,18 +648,34 @@ export class EditorialistModal extends Modal {
 
 		if (id === "clipboard") {
 			if (this.clipboardBatch) {
-				if (this.isLocalNoteBatch(this.clipboardBatch.batch)) {
-					await this.options.onImportRawToActiveNote(this.clipboardBatch.rawText, true);
-				} else {
-					await this.options.onImportBatch(this.clipboardBatch.batch, true);
-				}
-				this.close();
+				this.showAssignments = true;
+				this.render();
 				return;
 			}
 
 			this.showManualPaste = true;
 			this.render();
 			return;
+		}
+
+		if (id === "active-book") {
+			if (!this.clipboardBatch) {
+				return;
+			}
+
+			if (!this.hasImportReadyGroup(this.clipboardBatch.batch)) {
+				if (this.hasAnySceneMatch(this.clipboardBatch.batch)) {
+					this.showAssignments = true;
+					this.render();
+					return;
+				}
+
+				new Notice("No matching scene text was found in the active book.");
+				return;
+			}
+
+			await this.options.onImportBatch(this.clipboardBatch.batch, true);
+			this.close();
 		}
 	}
 

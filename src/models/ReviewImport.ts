@@ -19,6 +19,39 @@ export type ReviewVerificationStatus =
 
 export type ReviewSweepStatus = "imported" | "in_progress" | "completed" | "cleaned_up";
 
+export interface EditorialistMetadataExport {
+	schemaVersion: string;
+	exportedAt: number;
+	contributors: {
+		createdAt: number;
+		displayName: string;
+		id: string;
+		kind: string;
+		aliases: string[];
+		isStarred?: boolean;
+		model?: string;
+		provider?: string;
+		stats?: Record<string, number | undefined>;
+		updatedAt: number;
+	}[];
+	scenes: {
+		batchCount: number;
+		batchIds: string[];
+		bookLabel?: string;
+		cleanedAt?: number;
+		deferredCount: number;
+		lastUpdated: number;
+		notePath: string;
+		noteTitle: string;
+		pendingCount: number;
+		rejectedCount: number;
+		resolvedCount: number;
+		sceneId?: string;
+		status: "completed" | "cleaned" | "in_progress" | "not_started";
+	}[];
+	sweeps: ReviewSweepRegistryEntry[];
+}
+
 export interface ReviewImportSuggestionResult {
 	suggestion: ReviewSuggestion;
 	resolvedPath?: string;
@@ -71,6 +104,9 @@ export interface ReviewImportBatch {
 export interface ReviewSweepRegistryEntry {
 	batchId: string;
 	contentHash: string;
+	activeBookLabel?: string;
+	activeBookSourceFolder?: string;
+	cleanedAt?: number;
 	importedAt: number;
 	importedNotePaths: string[];
 	currentNotePath?: string;
