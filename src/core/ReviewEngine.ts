@@ -65,7 +65,11 @@ export class ReviewEngine {
 	private finalizeStatuses(suggestions: ReviewSuggestion[]): ReviewSuggestion[] {
 		return suggestions.map((suggestion) => {
 			if (suggestion.status === "accepted") {
-				return this.markTerminalSuggestion(suggestion, "Accepted into the manuscript.");
+				const targets = [suggestion.location.primary, suggestion.location.target, suggestion.location.anchor];
+				const reason = targets.some((target) => target?.matchType === "already_applied")
+					? "Already reflected in the manuscript."
+					: "Accepted into the manuscript.";
+				return this.markTerminalSuggestion(suggestion, reason);
 			}
 
 			if (suggestion.status === "rejected") {

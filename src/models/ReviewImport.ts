@@ -17,7 +17,7 @@ export type ReviewVerificationStatus =
 	| "advisory"
 	| "note_unresolved";
 
-export type ReviewSweepStatus = "imported" | "in_progress" | "completed" | "cleaned_up";
+export type ReviewSweepStatus = "in_progress" | "completed" | "cleaned";
 
 export interface EditorialistMetadataExport {
 	schemaVersion: string;
@@ -45,10 +45,11 @@ export interface EditorialistMetadataExport {
 		notePath: string;
 		noteTitle: string;
 		pendingCount: number;
+		unresolvedCount: number;
 		rejectedCount: number;
-		resolvedCount: number;
+		acceptedCount: number;
 		sceneId?: string;
-		status: "completed" | "cleaned" | "in_progress" | "not_started";
+		status: "completed" | "cleaned" | "in_progress";
 	}[];
 	sweeps: ReviewSweepRegistryEntry[];
 }

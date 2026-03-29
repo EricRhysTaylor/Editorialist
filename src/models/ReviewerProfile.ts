@@ -73,7 +73,7 @@ export interface ReviewerSignalRecord {
 
 export interface PersistedReviewDecisionRecord {
 	key: string;
-	status: "accepted" | "later" | "rejected";
+	status: "accepted" | "deferred" | "rejected";
 	updatedAt: number;
 }
 
@@ -85,10 +85,11 @@ export interface SceneReviewRecord {
 	batchIds: string[];
 	batchCount: number;
 	pendingCount: number;
+	unresolvedCount: number;
 	deferredCount: number;
-	resolvedCount: number;
+	acceptedCount: number;
 	rejectedCount: number;
-	status: "completed" | "cleaned" | "in_progress" | "not_started";
+	status: "completed" | "cleaned" | "in_progress";
 	lastUpdated: number;
 	cleanedAt?: number;
 }

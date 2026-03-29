@@ -70,6 +70,14 @@ export function registerCommands(plugin: EditorialistPlugin): void {
 	});
 
 	plugin.addCommand({
+		id: "accept-suggestion-and-advance",
+		name: "Apply selected suggestion and advance",
+		callback: () => {
+			void plugin.acceptSelectedSuggestionAndAdvance();
+		},
+	});
+
+	plugin.addCommand({
 		id: "undo-applied-suggestion",
 		name: "Undo applied suggestion",
 		callback: () => {
@@ -88,9 +96,9 @@ export function registerCommands(plugin: EditorialistPlugin): void {
 
 	plugin.addCommand({
 		id: "later-suggestion",
-		name: "Later selected suggestion",
+		name: "Defer selected suggestion",
 		callback: () => {
-			plugin.laterSelectedSuggestion();
+			plugin.deferSelectedSuggestion();
 		},
 	});
 

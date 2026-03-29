@@ -4,6 +4,14 @@ import {
 	isMoveSuggestion,
 } from "./OperationSupport";
 import { normalizeImportedReviewText, REVIEW_BLOCK_FENCE, stripAllReviewBlocks } from "./ReviewBlockFormat";
+import {
+	getActiveNoteScopeRoot,
+	isPathInFolderScope,
+	isSceneClassFile,
+	matchesSceneId,
+	readRadialTimelineActiveBookScope,
+} from "./VaultScope";
+import { countNormalizedMatches, findExactMatches } from "./TextMatching";
 import type { MatchEngine } from "./MatchEngine";
 import type { SuggestionParser } from "./SuggestionParser";
 import type {
@@ -235,108 +243,22 @@ export class ImportEngine {
 	}
 
 	private async getActiveBookScopeFiles(activeNotePath: string | undefined, markdownFiles: TFile[]): Promise<TFile[]> {
-		const scopeRoot = (await this.getRadialTimelineActiveBookSourceFolder()) ?? this.getActiveNoteScopeRoot(activeNotePath);
+		const scopeRoot = (await this.getRadialTimelineActiveBookSourceFolder()) ?? getActiveNoteScopeRoot(activeNotePath);
 		if (!scopeRoot) {
 			return [];
 		}
 
 		return markdownFiles.filter(
-			(file) => this.isPathInFolderScope(file.path, scopeRoot) && this.isSceneClassFile(file),
+			(file) => isPathInFolderScope(file.path, scopeRoot) && isSceneClassFile(this.app, file),
 		);
-	}
-
-	private getActiveNoteScopeRoot(activeNotePath: string | undefined): string | null {
-		if (!activeNotePath) {
-			return null;
-		}
-
-		const normalizedActivePath = normalizePath(activeNotePath);
-		const lastSlashIndex = normalizedActivePath.lastIndexOf("/");
-		if (lastSlashIndex === -1) {
-			return "";
-		}
-
-		return normalizedActivePath.slice(0, lastSlashIndex);
-	}
-
-	private isPathInFolderScope(filePath: string, scopeRoot: string): boolean {
-		const normalizedScopeRoot = normalizePath(scopeRoot);
-		const normalizedFilePath = normalizePath(filePath);
-		if (!normalizedScopeRoot) {
-			return !normalizedFilePath.includes("/");
-		}
-
-		return normalizedFilePath === normalizedScopeRoot || normalizedFilePath.startsWith(`${normalizedScopeRoot}/`);
-	}
-
-	private isSceneClassFile(file: TFile): boolean {
-		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-		const classValues = this.getFrontmatterStringValues(frontmatter, ["class", "Class", "classes", "Classes"]);
-
-		return classValues.some((value) => this.normalizeMetadataValue(value) === "scene");
-	}
-
-	private normalizeMetadataValue(value: unknown): string {
-		return typeof value === "string" ? value.trim().toLowerCase() : "";
 	}
 
 	private async getRadialTimelineActiveBookSourceFolder(): Promise<string | null> {
-		try {
-			const radialDataPath = normalizePath(`${this.app.vault.configDir}/plugins/radial-timeline/data.json`);
-			const adapter = this.app.vault.adapter;
-			if (!(await adapter.exists(radialDataPath))) {
-				return null;
-			}
-
-			const raw = await adapter.read(radialDataPath);
-			const parsed = JSON.parse(raw) as {
-				activeBookId?: string;
-				books?: Array<{ id?: string; sourceFolder?: string }>;
-			};
-			const books = Array.isArray(parsed.books) ? parsed.books : [];
-			const activeBookId = typeof parsed.activeBookId === "string" ? parsed.activeBookId : "";
-			const activeBook = books.find((book) => book.id === activeBookId) ?? books[0];
-			const sourceFolder = activeBook?.sourceFolder?.trim();
-			return sourceFolder ? normalizePath(sourceFolder) : null;
-		} catch {
-			return null;
-		}
+		return (await readRadialTimelineActiveBookScope(this.app)).sourceFolder;
 	}
 
 	private matchesSceneId(file: TFile, sceneId: string): boolean {
-		const normalizedSceneId = sceneId.trim().toLowerCase();
-		const cache = this.app.metadataCache.getFileCache(file);
-		const frontmatter = cache?.frontmatter;
-		const frontmatterCandidates = this.getFrontmatterStringValues(frontmatter, [
-			"id",
-			"Id",
-			"ID",
-			"sceneid",
-			"sceneId",
-			"SceneId",
-			"scene_id",
-			"Scene_ID",
-		]).map((value) => value.trim().toLowerCase());
-
-		return (
-			frontmatterCandidates.includes(normalizedSceneId) ||
-			file.basename.toLowerCase().includes(normalizedSceneId) ||
-			file.path.toLowerCase().includes(normalizedSceneId)
-		);
-	}
-
-	private getFrontmatterStringValues(frontmatter: Record<string, unknown> | undefined, keys: string[]): string[] {
-		if (!frontmatter) {
-			return [];
-		}
-
-		return keys.flatMap((key) => {
-			const value = frontmatter[key];
-			if (Array.isArray(value)) {
-				return value.filter((item): item is string => typeof item === "string");
-			}
-			return typeof value === "string" ? [value] : [];
-		});
+		return matchesSceneId(this.app, file, sceneId);
 	}
 
 	private getRoutingMismatchReason(file: TFile, suggestion: ReviewSuggestion): string | null {
@@ -518,8 +440,8 @@ export class ImportEngine {
 		switch (suggestion.operation) {
 			case "edit":
 				return {
-					exactCount: this.findAllExactMatches(noteText, suggestion.payload.original).length,
-					normalizedCount: this.findAllNormalizedMatches(noteText, suggestion.payload.original),
+						exactCount: this.findAllExactMatches(noteText, suggestion.payload.original).length,
+						normalizedCount: this.findAllNormalizedMatches(noteText, suggestion.payload.original),
 				};
 			case "cut":
 				return {
@@ -789,44 +711,10 @@ export class ImportEngine {
 	}
 
 	private findAllExactMatches(noteText: string, text: string): number[] {
-		if (!text) {
-			return [];
-		}
-
-		const matches: number[] = [];
-		let searchFrom = 0;
-
-		while (searchFrom < noteText.length) {
-			const index = noteText.indexOf(text, searchFrom);
-			if (index === -1) {
-				break;
-			}
-
-			matches.push(index);
-			searchFrom = index + text.length;
-		}
-
-		return matches;
+		return findExactMatches(noteText, text);
 	}
 
 	private findAllNormalizedMatches(noteText: string, text: string): number {
-		const normalizedText = this.matchEngine.normalizeText(noteText);
-		const normalizedTarget = this.matchEngine.normalizeText(text);
-		if (!normalizedText || !normalizedTarget) {
-			return 0;
-		}
-
-		let count = 0;
-		let searchFrom = 0;
-		while (searchFrom < normalizedText.length) {
-			const index = normalizedText.indexOf(normalizedTarget, searchFrom);
-			if (index === -1) {
-				break;
-			}
-			count += 1;
-			searchFrom = index + normalizedTarget.length;
-		}
-
-		return count;
+		return countNormalizedMatches(noteText, text);
 	}
 }

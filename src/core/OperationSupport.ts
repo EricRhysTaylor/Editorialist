@@ -8,6 +8,7 @@ import {
 	type EditSuggestion,
 	type MoveSuggestion,
 	type ReviewSuggestion,
+	type ReviewStatus,
 	type ReviewTargetRef,
 } from "../models/ReviewSuggestion";
 
@@ -22,12 +23,7 @@ export interface ReviewApplyPlan {
 	to: number;
 }
 
-export type ReviewSuggestionVisualState =
-	| "pending"
-	| "accepted"
-	| "rejected"
-	| "resolved"
-	| "unresolved";
+export type ReviewSuggestionPresentationTone = "active" | "muted";
 
 interface OperationSupport<T extends ReviewSuggestion> {
 	canApply: (suggestion: T) => boolean;
@@ -252,11 +248,20 @@ export function getSuggestionAnchorTarget(suggestion: ReviewSuggestion): ReviewT
 
 export function getSuggestionReason(suggestion: ReviewSuggestion): string {
 	if (suggestion.status === "accepted") {
+		const targets = [suggestion.location.primary, suggestion.location.target, suggestion.location.anchor];
+		if (targets.some((target) => target?.matchType === "already_applied")) {
+			return "Already reflected in the manuscript.";
+		}
+
 		return "Accepted into the manuscript.";
 	}
 
 	if (suggestion.status === "rejected") {
 		return "Rejected for this review session.";
+	}
+
+	if (suggestion.status === "deferred") {
+		return "Deferred in this review pass.";
 	}
 
 	return operationSupport[suggestion.operation].getReason(suggestion as never);
@@ -278,20 +283,22 @@ export function isSuggestionResolved(suggestion: ReviewSuggestion): boolean {
 	].some((target) => target?.matchType === "already_applied");
 }
 
-export function getSuggestionVisualState(suggestion: ReviewSuggestion): ReviewSuggestionVisualState {
-	if (suggestion.status === "accepted") {
-		return "accepted";
-	}
+export function getSuggestionPresentationTone(suggestion: ReviewSuggestion): ReviewSuggestionPresentationTone {
+	return suggestion.status === "accepted" || suggestion.status === "rejected" ? "muted" : "active";
+}
 
-	if (suggestion.status === "rejected") {
-		return "rejected";
+export function getSuggestionStatusRank(status: ReviewStatus): number {
+	switch (status) {
+		case "pending":
+		case "unresolved":
+			return 0;
+		case "deferred":
+			return 1;
+		case "accepted":
+			return 2;
+		case "rejected":
+			return 3;
 	}
-
-	if (isSuggestionResolved(suggestion)) {
-		return "resolved";
-	}
-
-	return suggestion.status;
 }
 
 export function canApplySuggestionDirectly(suggestion: ReviewSuggestion): boolean {
@@ -304,14 +311,6 @@ export function createSuggestionApplyPlan(noteText: string, suggestion: ReviewSu
 
 export function getSuggestionSignatureParts(suggestion: ReviewSuggestion): string[] {
 	return operationSupport[suggestion.operation].getSignatureParts(suggestion as never);
-}
-
-export function isSuggestionDirectlyApplicable(suggestion: ReviewSuggestion): boolean {
-	return suggestion.executionMode === "direct";
-}
-
-export function getSuggestionSourceKey(suggestion: ReviewSuggestion): string {
-	return `${suggestion.source.blockIndex}::${suggestion.source.entryIndex}`;
 }
 
 export { isCondenseSuggestion, isCutSuggestion, isEditSuggestion, isMoveSuggestion };

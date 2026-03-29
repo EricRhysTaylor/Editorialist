@@ -86,7 +86,7 @@ export class ReviewStore {
 
 	clearSession(): void {
 		this.state = {
-			guidedSweep: null,
+			guidedSweep: this.state.guidedSweep,
 			session: null,
 			selectedSuggestionId: null,
 		};
@@ -160,63 +160,15 @@ export class ReviewStore {
 		}
 
 		this.replaceSuggestions(
-				this.state.session.suggestions.map((suggestion) =>
-					suggestion.id === id
-						? {
-								...suggestion,
-								status,
-							}
-						: suggestion,
-				),
-			);
-	}
-
-	selectNextSuggestion(fromId?: string): void {
-		const session = this.state.session;
-		if (!session || session.suggestions.length === 0) {
-			this.selectSuggestion(null);
-			return;
-		}
-
-		const suggestions = session.suggestions;
-		const startIndex = fromId
-			? suggestions.findIndex((suggestion) => suggestion.id === fromId)
-			: suggestions.findIndex((suggestion) => suggestion.id === this.state.selectedSuggestionId);
-		const normalizedStartIndex = startIndex === -1 ? suggestions.length - 1 : startIndex;
-
-		for (let offset = 1; offset <= suggestions.length; offset += 1) {
-			const suggestion = suggestions[(normalizedStartIndex + offset + suggestions.length) % suggestions.length];
-			if (suggestion && suggestion.status !== "accepted" && suggestion.status !== "rejected") {
-				this.selectSuggestion(suggestion.id);
-				return;
-			}
-		}
-
-		this.selectSuggestion(null);
-	}
-
-	selectPreviousSuggestion(fromId?: string): void {
-		const session = this.state.session;
-		if (!session || session.suggestions.length === 0) {
-			this.selectSuggestion(null);
-			return;
-		}
-
-		const suggestions = session.suggestions;
-		const startIndex = fromId
-			? suggestions.findIndex((suggestion) => suggestion.id === fromId)
-			: suggestions.findIndex((suggestion) => suggestion.id === this.state.selectedSuggestionId);
-		const normalizedStartIndex = startIndex === -1 ? 0 : startIndex;
-
-		for (let offset = 1; offset <= suggestions.length; offset += 1) {
-			const suggestion = suggestions[(normalizedStartIndex - offset + suggestions.length) % suggestions.length];
-			if (suggestion && suggestion.status !== "accepted" && suggestion.status !== "rejected") {
-				this.selectSuggestion(suggestion.id);
-				return;
-			}
-		}
-
-		this.selectSuggestion(null);
+			this.state.session.suggestions.map((suggestion) =>
+				suggestion.id === id
+					? {
+							...suggestion,
+							status,
+						}
+					: suggestion,
+			),
+		);
 	}
 
 	private emit(): void {

@@ -203,10 +203,11 @@ export class ReviewPanel extends ItemView {
 		index: number,
 		total: number,
 	): HTMLElement {
-		const visualState = this.plugin.getSuggestionPresentationState(suggestion);
+		const statusName = suggestion.status;
+		const tone = this.plugin.getSuggestionPresentationTone(suggestion);
 
 		const card = parent.createDiv({
-			cls: `editorialist-suggestion editorialist-review-card editorialist-suggestion--${visualState}${selected ? " is-selected" : ""}`,
+			cls: `editorialist-suggestion editorialist-suggestion--${statusName} editorialist-suggestion--tone-${tone}${selected ? " is-selected" : ""}`,
 		});
 		this.bindImmediateAction(card, () => {
 			void this.plugin.selectSuggestion(suggestion.id);
@@ -215,7 +216,7 @@ export class ReviewPanel extends ItemView {
 		const meta = card.createDiv({ cls: "editorialist-suggestion__meta" });
 		const metaPrimary = meta.createDiv({ cls: "editorialist-suggestion__meta-primary" });
 		const status = metaPrimary.createDiv({
-			cls: `editorialist-suggestion__label editorialist-suggestion__label--${visualState}`,
+			cls: `editorialist-suggestion__label editorialist-suggestion__label--${statusName}`,
 			attr: {
 				title: `${this.toSentenceCase(suggestion.operation)} suggestion`,
 			},
@@ -224,7 +225,7 @@ export class ReviewPanel extends ItemView {
 		setIcon(statusIcon, this.getOperationIcon(suggestion));
 		status.createSpan({
 			cls: "editorialist-suggestion__label-text",
-			text: this.toSentenceCase(visualState),
+			text: this.toSentenceCase(statusName),
 		});
 		metaPrimary.createDiv({
 			cls: "editorialist-suggestion__position",
@@ -260,12 +261,6 @@ export class ReviewPanel extends ItemView {
 				tooltip: this.jumpMenuSuggestionId === suggestion.id ? "Hide jump options" : "Show jump options",
 			},
 		);
-
-		card.createDiv({ cls: "editorialist-suggestion__identity-spacer" });
-		card.createDiv({
-			cls: "editorialist-suggestion__contributor",
-			text: formatContributorIdentityLabel(suggestion.contributor),
-		});
 
 		this.renderSuggestionCopy(card, suggestion);
 
@@ -602,6 +597,9 @@ export class ReviewPanel extends ItemView {
 		let handledPointerDown = false;
 
 		element.addEventListener("pointerdown", (event) => {
+			if (this.shouldIgnoreImmediateActionEvent(element, event.target)) {
+				return;
+			}
 			if (event.button !== 0) {
 				return;
 			}
@@ -613,6 +611,9 @@ export class ReviewPanel extends ItemView {
 		});
 
 		element.addEventListener("click", (event) => {
+			if (this.shouldIgnoreImmediateActionEvent(element, event.target)) {
+				return;
+			}
 			event.preventDefault();
 			event.stopPropagation();
 			if (handledPointerDown) {
@@ -622,6 +623,22 @@ export class ReviewPanel extends ItemView {
 
 			onClick();
 		});
+	}
+
+	private shouldIgnoreImmediateActionEvent(element: HTMLElement, target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) {
+			return false;
+		}
+
+		if (target === element) {
+			return false;
+		}
+
+		return Boolean(
+			target.closest(
+				"button, a, input, select, textarea, summary, [role='button'], [contenteditable='true'], .dropdown",
+			),
+		);
 	}
 
 	private getFilteredSuggestions(suggestions: ReviewSuggestion[]): ReviewSuggestion[] {

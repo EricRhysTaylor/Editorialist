@@ -14,11 +14,10 @@ import type {
 import type { ParsedReviewerReference } from "../models/ReviewerProfile";
 import type { ReviewerDirectory } from "../state/ReviewerDirectory";
 import { extractReviewBlocks } from "./ReviewBlockFormat";
+import { getLinesWithOffsets, type LineWithOffsets } from "./TextOffsets";
 
 const SECTION_HEADER_PATTERN = /^===\s*(EDIT|MOVE|CUT|CONDENSE)\s*===\s*$/i;
 const FIELD_PATTERN = /^([A-Za-z][A-Za-z ]+):\s*(.*)$/;
-
-type LineWithOffsets = { endOffset: number; startOffset: number; text: string };
 
 interface SectionBuffer {
 	entryIndex: number;
@@ -65,7 +64,7 @@ export class SuggestionParser {
 			const rawBody = block.bodyText;
 			const bodyStart = block.startOffset;
 			const blockEnd = block.endOffset;
-			const lines = this.getLinesWithOffsets(rawBody, bodyStart);
+			const lines = getLinesWithOffsets(rawBody, bodyStart);
 			const metadata = this.parseBlockMetadata(lines, blockIndex);
 			const sections = this.extractSections(lines, blockEnd);
 
@@ -358,36 +357,5 @@ export class SuggestionParser {
 		};
 
 		return routing.sceneId || routing.note || routing.path || routing.scene ? routing : undefined;
-	}
-
-	private getLinesWithOffsets(text: string, baseOffset: number): LineWithOffsets[] {
-		const lines: LineWithOffsets[] = [];
-		const linePattern = /.*(?:\r?\n|$)/g;
-		let match: RegExpExecArray | null;
-
-		while ((match = linePattern.exec(text)) !== null) {
-			const rawLine = match[0];
-			if (rawLine.length === 0) {
-				break;
-			}
-
-			const newlineMatch = rawLine.match(/\r?\n$/);
-			const newlineLength = newlineMatch?.[0].length ?? 0;
-			const textOnly = newlineLength > 0 ? rawLine.slice(0, -newlineLength) : rawLine;
-			const startOffset = baseOffset + match.index;
-			const endOffset = startOffset + textOnly.length;
-
-			lines.push({
-				text: textOnly,
-				startOffset,
-				endOffset,
-			});
-
-			if (linePattern.lastIndex >= text.length) {
-				break;
-			}
-		}
-
-		return lines;
 	}
 }

@@ -8,6 +8,7 @@ import type {
 	ReviewSuggestion,
 	ReviewTargetRef,
 } from "../models/ReviewSuggestion";
+import { findExactMatches, normalizeMatchText } from "./TextMatching";
 
 interface TextResolution {
 	matchCount: number;
@@ -55,7 +56,7 @@ export class MatchEngine {
 
 		return {
 			...suggestion,
-			status: this.preserveTerminalStatus(suggestion.status, resolution.matchCount === 1 ? "pending" : "unresolved"),
+			status: this.resolveSuggestionStatus(suggestion.status, resolution),
 			location: {
 				primary: resolution.target,
 			},
@@ -87,7 +88,7 @@ export class MatchEngine {
 
 		return {
 			...suggestion,
-			status: this.preserveTerminalStatus(suggestion.status, resolution.matchCount === 1 ? "pending" : "unresolved"),
+			status: this.resolveSuggestionStatus(suggestion.status, resolution),
 			location: {
 				target: resolution.target,
 			},
@@ -103,7 +104,7 @@ export class MatchEngine {
 
 		return {
 			...suggestion,
-			status: this.preserveTerminalStatus(suggestion.status, resolution.matchCount === 1 ? "pending" : "unresolved"),
+			status: this.resolveSuggestionStatus(suggestion.status, resolution),
 			location: {
 				target: resolution.target,
 			},
@@ -188,7 +189,7 @@ export class MatchEngine {
 	}
 
 	private resolveTextTarget(noteText: string, text: string, alternateText?: string): TextResolution {
-		const matches = this.findAllExactMatches(noteText, text);
+		const matches = findExactMatches(noteText, text);
 
 		if (matches.length === 1) {
 			const startOffset = matches[0];
@@ -218,7 +219,7 @@ export class MatchEngine {
 		}
 
 		if (alternateText && noteText.includes(alternateText)) {
-			const alternateMatches = this.findAllExactMatches(noteText, alternateText);
+			const alternateMatches = findExactMatches(noteText, alternateText);
 			if (alternateMatches.length === 1) {
 				const startOffset = alternateMatches[0];
 				if (startOffset !== undefined) {
@@ -256,32 +257,21 @@ export class MatchEngine {
 	}
 
 	private preserveTerminalStatus(currentStatus: ReviewStatus, nextStatus: ReviewStatus): ReviewStatus {
-		return currentStatus === "accepted" || currentStatus === "rejected" ? currentStatus : nextStatus;
+		return currentStatus === "accepted" || currentStatus === "rejected" || currentStatus === "deferred"
+			? currentStatus
+			: nextStatus;
 	}
 
-	private findAllExactMatches(noteText: string, text: string): number[] {
-		if (!text) {
-			return [];
+	private resolveSuggestionStatus(currentStatus: ReviewStatus, resolution: TextResolution): ReviewStatus {
+		if (resolution.target.matchType === "already_applied") {
+			return this.preserveTerminalStatus(currentStatus, "accepted");
 		}
 
-		const matches: number[] = [];
-		let searchFrom = 0;
-
-		while (searchFrom < noteText.length) {
-			const index = noteText.indexOf(text, searchFrom);
-			if (index === -1) {
-				break;
-			}
-
-			matches.push(index);
-			searchFrom = index + text.length;
-		}
-
-		return matches;
+		return this.preserveTerminalStatus(currentStatus, resolution.matchCount === 1 ? "pending" : "unresolved");
 	}
 
 	// TODO Phase 2: add normalized matching fallback after the exact path is proven.
 	normalizeText(value: string): string {
-		return value.replace(/[“”]/g, "\"").replace(/[‘’]/g, "'").replace(/\s+/g, " ").trim();
+		return normalizeMatchText(value);
 	}
 }

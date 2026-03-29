@@ -1,7 +1,7 @@
 import { ButtonComponent, Notice, PluginSettingTab, setIcon, type App } from "obsidian";
 import {
-	formatContributorIdentityLabel,
 	formatContributorProviderModel,
+	formatReviewerTypeLabel,
 } from "../core/ContributorIdentity";
 import type { SceneReviewRecord } from "../models/ReviewerProfile";
 import type EditorialistPlugin from "../main";
@@ -21,15 +21,17 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
-		void this.displayAsync();
+		void this.displayAsync(true);
 	}
 
-	private async displayAsync(): Promise<void> {
+	private async displayAsync(refreshMetadata: boolean): Promise<void> {
 		const { containerEl } = this;
 		containerEl.empty();
 		containerEl.addClass("editorialist-settings");
 
-		await this.plugin.syncOperationalMetadata();
+		if (refreshMetadata) {
+			await this.plugin.syncOperationalMetadata();
+		}
 		const summary = this.plugin.getReviewActivitySummary();
 		const activeBook = this.plugin.getActiveBookScopeInfo();
 		if (!activeBook.label) {
@@ -230,14 +232,19 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		progressCard.createDiv({
 			cls: "editorialist-settings__hero-progress-detail",
 			text: summary.totalSuggestions > 0
-				? `${summary.unresolved} pending · ${summary.deferred} deferred`
+				? `${summary.pending} pending · ${summary.unresolved} unresolved · ${summary.deferred} deferred`
 				: "No review activity yet",
 		});
 
 		const summaryGrid = heroBody.createDiv({ cls: "editorialist-settings__hero-summary" });
 		this.createHeroMetric(summaryGrid, "Sweeps", `${summary.totalSweeps}`, `${summary.inProgressSweeps} in progress`);
 		this.createHeroMetric(summaryGrid, "Accepted", `${summary.accepted}`, `${summary.rejected} rejected`);
-		this.createHeroMetric(summaryGrid, "Queue", `${summary.unresolved}`, `${summary.deferred} deferred`);
+		this.createHeroMetric(
+			summaryGrid,
+			"Queue",
+			`${summary.pending + summary.unresolved}`,
+			`${summary.pending} pending · ${summary.unresolved} unresolved`,
+		);
 	}
 
 	private renderActivitySection(
@@ -253,9 +260,14 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const cards = body.createDiv({ cls: "editorialist-settings__stats" });
 
 		this.createStatCard(cards, "Sweeps", `${summary.totalSweeps}`, `${summary.inProgressSweeps} in progress`);
-		this.createStatCard(cards, "Completed", `${summary.completedSweeps}`, `${summary.cleanedUpSweeps} cleaned up`);
+		this.createStatCard(cards, "Completed", `${summary.completedSweeps}`, `${summary.cleanedSweeps} cleaned`);
 		this.createStatCard(cards, "Suggestions", `${summary.totalSuggestions}`, `${summary.accepted} accepted`);
-		this.createStatCard(cards, "Queue", `${summary.unresolved}`, `${summary.deferred} deferred`);
+		this.createStatCard(
+			cards,
+			"Queue",
+			`${summary.pending + summary.unresolved}`,
+			`${summary.pending} pending · ${summary.unresolved} unresolved`,
+		);
 	}
 
 	private renderInventorySection(
@@ -290,7 +302,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const actions = toolbar.createDiv({ cls: "editorialist-settings__inventory-actions" });
 		this.createActionButton(actions, "brush-cleaning", `Clean all ${vocabulary.pluralLabelLower}`, async () => {
 			const removed = await this.plugin.cleanupAllSceneReviewNotes(this.activeBookOnly);
-			this.display();
+			void this.displayAsync(false);
 			new Notice(
 				removed > 0
 					? `Cleaned ${removed} imported review block${removed === 1 ? "" : "s"} across ${vocabulary.pluralLabelLower}.`
@@ -299,7 +311,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 		this.createActionButton(actions, "archive-x", `Clean completed ${vocabulary.pluralLabelLower}`, async () => {
 			const removed = await this.plugin.cleanupCompletedSceneReviewNotes(this.activeBookOnly);
-			this.display();
+			void this.displayAsync(false);
 			new Notice(
 				removed > 0
 					? `Cleaned ${removed} imported review block${removed === 1 ? "" : "s"} from completed ${vocabulary.pluralLabelLower}.`
@@ -314,7 +326,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				this.activeBookOnly ? `Active ${vocabulary.scopeLabel}: ${activeBookLabel}` : `All ${vocabulary.scopeLabel}s`,
 				async () => {
 					this.activeBookOnly = !this.activeBookOnly;
-					this.display();
+					void this.displayAsync(false);
 				},
 			);
 			filterButton.addClass("editorialist-settings__inventory-filter");
@@ -341,8 +353,9 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			"Book / path",
 			"Batches",
 			"Pending",
+			"Unresolved",
 			"Deferred",
-			"Resolved",
+			"Accepted",
 			"Status",
 			"Last updated",
 			"Actions",
@@ -355,8 +368,9 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			row.createEl("td", { text: this.formatInventoryPathHint(record) });
 			row.createEl("td", { text: `${record.batchCount}` });
 			row.createEl("td", { text: `${record.pendingCount}` });
+			row.createEl("td", { text: `${record.unresolvedCount}` });
 			row.createEl("td", { text: `${record.deferredCount}` });
-			row.createEl("td", { text: `${record.resolvedCount}` });
+			row.createEl("td", { text: `${record.acceptedCount}` });
 			const statusCell = row.createEl("td");
 			statusCell.createSpan({
 				cls: `editorialist-settings__inventory-status editorialist-settings__inventory-status--${record.status}`,
@@ -372,16 +386,14 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			this.createActionButton(
 				actionGroup,
 				"play",
-				record.status === "not_started"
-					? `Start ${vocabulary.singularLabelLower} review`
-					: `Resume ${vocabulary.singularLabelLower} review`,
+				`Resume ${vocabulary.singularLabelLower} review`,
 				async () => {
 				await this.plugin.startOrResumeReviewForNote(record.notePath);
 				},
 			);
 			this.createActionButton(actionGroup, "brush-cleaning", `Clean this ${vocabulary.singularLabelLower}`, async () => {
 				await this.plugin.cleanSceneReviewNote(record.notePath);
-				this.display();
+				void this.displayAsync(false);
 			});
 		}
 	}
@@ -390,7 +402,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const body = this.createSection(
 			parent,
 			"Reviewer directory",
-			"People and AI systems that have contributed editorial suggestions.",
+			"People and AI tools that have contributed revision notes.",
 			"users",
 		);
 
@@ -406,16 +418,23 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 		for (const profile of profiles) {
 			const card = list.createDiv({ cls: "editorialist-settings__contributor" });
-			const header = card.createDiv({ cls: "editorialist-settings__contributor-header" });
-			header.createDiv({
+			const identity = card.createDiv({ cls: "editorialist-settings__contributor-identity" });
+			const main = identity.createDiv({ cls: "editorialist-settings__contributor-main" });
+			this.createContributorAvatar(main, profile);
+			const text = main.createDiv({ cls: "editorialist-settings__contributor-text" });
+			text.createDiv({
 				cls: "editorialist-settings__contributor-title",
 				text: profile.displayName,
 			});
+			text.createDiv({
+				cls: "editorialist-settings__contributor-role",
+				text: formatReviewerTypeLabel(profile.reviewerType),
+			});
 
-			const starButton = new ButtonComponent(header)
+			const starButton = new ButtonComponent(identity)
 				.setTooltip(profile.isStarred ? "Unstar contributor" : "Star contributor")
 				.onClick(() => {
-					void this.plugin.toggleReviewerStarById(profile.id).then(() => this.display());
+					void this.plugin.toggleReviewerStarById(profile.id).then(() => this.displayAsync(false));
 				});
 			starButton.buttonEl.addClass("editorialist-settings__star-button");
 			if (profile.isStarred) {
@@ -423,10 +442,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			}
 			setIcon(starButton.buttonEl, "star");
 
-			card.createDiv({
-				cls: "editorialist-settings__contributor-meta",
-				text: this.formatContributorMeta(profile),
-			});
 			const providerModel = formatContributorProviderModel(profile);
 			if (providerModel) {
 				card.createDiv({
@@ -438,28 +453,30 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				cls: "editorialist-settings__contributor-stats",
 				text: this.formatContributorStats(profile),
 			});
-			card.createDiv({
-				cls: "editorialist-settings__contributor-aliases",
-				text: profile.aliases.length > 0 ? `Aliases: ${profile.aliases.join(" · ")}` : "Aliases: none",
-			});
+			if (profile.aliases.length > 0) {
+				card.createDiv({
+					cls: "editorialist-settings__contributor-aliases",
+					text: `Also appears as: ${profile.aliases.join(" · ")}`,
+				});
+			}
 		}
 	}
 
 	private renderMetadataSection(parent: HTMLElement): void {
 		const body = this.createSection(
 			parent,
-			"Admin export",
-			"Back up contributor, sweep, and scene-review metadata without exporting manuscript text.",
+			"Backup",
+			"Save your reviewer history, revision activity, and scene progress without exporting manuscript text.",
 			"database-backup",
 		);
 		const card = body.createDiv({ cls: "editorialist-settings__maintenance-card" });
 		card.createDiv({
 			cls: "editorialist-settings__maintenance-title",
-			text: "Export Editorialist metadata",
+			text: "Export Editorialist backup",
 		});
 		card.createDiv({
 			cls: "editorialist-settings__maintenance-description",
-			text: "Creates a versioned JSON file with contributor profiles, aliases, stars, sweep history, and scene inventory records.",
+			text: "Create a backup file with reviewer profiles, alternate names, starred reviewers, revision history, and scene progress.",
 		});
 		const actions = card.createDiv({ cls: "editorialist-settings__maintenance-actions" });
 		this.createActionButton(actions, "download", "Export backup", async () => {
@@ -468,7 +485,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 		card.createDiv({
 			cls: "editorialist-settings__maintenance-note",
-			text: "The export schema is versioned so a future import and restore workflow can reconnect this metadata safely.",
+			text: "You can keep this backup file and restore the data later if needed.",
 		});
 	}
 
@@ -484,22 +501,22 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 		actionCard.createDiv({
 			cls: "editorialist-settings__maintenance-title",
-			text: "Clear cleaned-up batch records",
+			text: "Clear cleaned batch records",
 		});
 		actionCard.createDiv({
 			cls: "editorialist-settings__maintenance-description",
-			text: "Remove registry entries for imported batches that were already cleaned up.",
+			text: "Remove registry entries for imported batches that were already cleaned.",
 		});
 
 		const actions = actionCard.createDiv({ cls: "editorialist-settings__maintenance-actions" });
 		const clearButton = this.createActionButton(actions, "trash-2", "Clear records", async () => {
-			const removedCount = await this.plugin.clearCleanedUpSweepRecords();
-			this.display();
+			const removedCount = await this.plugin.clearCleanedSweepRecords();
+			void this.displayAsync(false);
 			if (removedCount === 0) {
-				new Notice("No cleaned-up batch records to clear.");
+				new Notice("No cleaned batch records to clear.");
 				return;
 			}
-			new Notice(`Cleared ${removedCount} cleaned-up batch record${removedCount === 1 ? "" : "s"}.`);
+			new Notice(`Cleared ${removedCount} cleaned batch record${removedCount === 1 ? "" : "s"}.`);
 		});
 		clearButton.addClass("editorialist-settings__maintenance-button");
 
@@ -521,7 +538,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				return;
 			}
 			this.activeTab = id;
-			this.display();
+			void this.displayAsync(false);
 		});
 	}
 
@@ -602,17 +619,48 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		return button;
 	}
 
-	private formatContributorMeta(profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number]): string {
-		return formatContributorIdentityLabel(profile);
-	}
-
 	private formatContributorStats(profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number]): string {
 		const stats = profile.stats;
 		if (!stats) {
 			return "No activity yet";
 		}
 
-		return `${stats.totalSuggestions} suggestions · ${stats.accepted} accepted · ${stats.deferred ?? 0} deferred · ${stats.rejected} rejected · ${stats.unresolved} unresolved`;
+		const acceptedRate = stats.totalSuggestions > 0
+			? Math.round((stats.accepted / stats.totalSuggestions) * 100)
+			: 0;
+		return `${stats.totalSuggestions} suggestions • ${stats.accepted} accepted${stats.totalSuggestions > 0 ? ` (${acceptedRate}%)` : ""}`;
+	}
+
+	private createContributorAvatar(
+		parent: HTMLElement,
+		profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number],
+	): void {
+		const avatar = parent.createDiv({
+			cls: `editorialist-settings__contributor-avatar${profile.kind === "ai" ? " is-ai" : ""}`,
+		});
+		if (profile.kind === "ai") {
+			const icon = avatar.createSpan({ cls: "editorialist-settings__contributor-avatar-icon" });
+			setIcon(icon, "bot");
+			return;
+		}
+
+		avatar.createSpan({
+			cls: "editorialist-settings__contributor-avatar-text",
+			text: this.getContributorInitials(profile.displayName),
+		});
+	}
+
+	private getContributorInitials(displayName: string): string {
+		const parts = displayName
+			.split(/\s+/)
+			.map((part) => part.trim())
+			.filter(Boolean)
+			.slice(0, 2);
+		if (parts.length === 0) {
+			return "?";
+		}
+
+		return parts.map((part) => part[0]?.toUpperCase() ?? "").join("");
 	}
 
 	private formatInventoryPathHint(record: SceneReviewRecord): string {
@@ -621,8 +669,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 	private formatInventoryStatus(status: SceneReviewRecord["status"]): string {
 		switch (status) {
-			case "not_started":
-				return "Not started";
 			case "in_progress":
 				return "In progress";
 			case "completed":

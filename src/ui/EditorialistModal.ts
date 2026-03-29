@@ -1,7 +1,7 @@
 import { ButtonComponent, Modal, Notice, TextAreaComponent, setIcon, type App } from "obsidian";
 import { getReviewBlockFenceLabel } from "../core/ReviewBlockFormat";
+import { REVIEW_TEMPLATE_BLOCK } from "../core/ReviewTemplate";
 import type { ReviewImportBatch } from "../models/ReviewImport";
-import { REVIEW_TEMPLATE_BLOCK } from "./PrepareReviewFormatModal";
 
 export interface ClipboardReviewBatch {
 	batch: ReviewImportBatch;

@@ -9,7 +9,7 @@ export type ReviewOperationType = "edit" | "move" | "cut" | "condense" | "insert
 
 export type SupportedReviewOperationType = "edit" | "move" | "cut" | "condense";
 
-export type ReviewStatus = "pending" | "accepted" | "rejected" | "unresolved";
+export type ReviewStatus = "pending" | "accepted" | "rejected" | "deferred" | "unresolved";
 
 export type MatchType = "exact" | "multiple" | "none" | "text_changed" | "already_applied";
 

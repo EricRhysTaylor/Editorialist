@@ -1,3 +1,5 @@
+import { getLinesWithOffsets } from "./TextOffsets";
+
 export const REVIEW_BLOCK_FENCE = "editorialist-review";
 const REVIEW_SECTION_PATTERN = /^===\s*(EDIT|MOVE|CUT|CONDENSE)\s*===\s*$/im;
 const REVIEW_METADATA_PATTERN = /^(BatchId|ImportedBy|Reviewer|ReviewerType|Provider|Model)\s*:/im;
@@ -323,37 +325,6 @@ function normalizeRemovedReviewSpacing(text: string): string {
 		.replace(/\n{3,}/g, "\n\n");
 
 	return collapsed.trimEnd().length > 0 ? `${collapsed.trimEnd()}\n` : "";
-}
-
-function getLinesWithOffsets(text: string, baseOffset: number): Array<{ endOffset: number; startOffset: number; text: string }> {
-	const lines: Array<{ endOffset: number; startOffset: number; text: string }> = [];
-	const linePattern = /.*(?:\r?\n|$)/g;
-	let match: RegExpExecArray | null;
-
-	while ((match = linePattern.exec(text)) !== null) {
-		const rawLine = match[0];
-		if (rawLine.length === 0) {
-			break;
-		}
-
-		const newlineMatch = rawLine.match(/\r?\n$/);
-		const newlineLength = newlineMatch?.[0].length ?? 0;
-		const textOnly = newlineLength > 0 ? rawLine.slice(0, -newlineLength) : rawLine;
-		const startOffset = baseOffset + match.index;
-		const endOffset = startOffset + textOnly.length;
-
-		lines.push({
-			text: textOnly,
-			startOffset,
-			endOffset,
-		});
-
-		if (linePattern.lastIndex >= text.length) {
-			break;
-		}
-	}
-
-	return lines;
 }
 
 function normalizeFieldKey(value: string): string {

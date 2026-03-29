@@ -3,15 +3,18 @@ import type EditorialistPlugin from "../main";
 
 export interface ToolbarState {
 	canApply: boolean;
-	canLater: boolean;
+	canDefer: boolean;
 	canNext: boolean;
 	canPrevious: boolean;
 	canReject: boolean;
+	canUndoLastAccept: boolean;
+	acceptedCount: number;
 	completionLabel?: string;
+	deferredCount: number;
 	hasReviewBlock: boolean;
 	operationLabel: string;
 	pendingCount: number;
-	resolvedCount: number;
+	rejectedCount: number;
 	sceneProgressLabel?: string;
 	selectedIndexLabel: string;
 	selectedLabel: string;
@@ -43,13 +46,21 @@ export function createReviewToolbarElement(
 	renderMetaSegment(meta, `${state.pendingCount} pending`);
 	renderMetaSeparator(meta);
 	renderMetaSegment(meta, `${state.unresolvedCount} unresolved`);
+	if (state.deferredCount > 0) {
+		renderMetaSeparator(meta);
+		renderMetaSegment(meta, `${state.deferredCount} deferred`);
+	}
 	if (state.completionLabel) {
 		renderMetaSeparator(meta);
-		renderMetaSegment(meta, state.completionLabel, "editorialist-toolbar__meta-segment--resolved");
+		renderMetaSegment(meta, state.completionLabel, "editorialist-toolbar__meta-segment--positive");
 	}
-	if (state.resolvedCount > 0) {
+	if (state.acceptedCount > 0) {
 		renderMetaSeparator(meta);
-		renderMetaSegment(meta, `${state.resolvedCount} resolved`, "editorialist-toolbar__meta-segment--resolved");
+		renderMetaSegment(meta, `${state.acceptedCount} accepted`, "editorialist-toolbar__meta-segment--positive");
+	}
+	if (state.rejectedCount > 0) {
+		renderMetaSeparator(meta);
+		renderMetaSegment(meta, `${state.rejectedCount} rejected`, "editorialist-toolbar__meta-segment--negative");
 	}
 
 	const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
@@ -59,15 +70,35 @@ export function createReviewToolbarElement(
 	buildButton(actions, "Next", "arrow-right", () => {
 		void plugin.selectNextSuggestion();
 	}, !state.canNext);
-	buildButton(actions, "Apply", "check", () => {
-		void plugin.acceptSelectedSuggestion();
-	}, !state.canApply, true);
-	buildButton(actions, "Later", "clock", () => {
-		plugin.laterSelectedSuggestion();
-	}, !state.canLater);
-	buildButton(actions, "Reject", "x", () => {
-		void plugin.rejectSelectedSuggestion();
-	}, !state.canReject);
+	buildButton(
+		actions,
+		"Apply",
+		"check",
+		() => {
+			void plugin.acceptSelectedSuggestion();
+		},
+		!state.canApply,
+		true,
+		{
+			label: "Apply and advance",
+			icon: "list-end",
+			onClick: () => {
+				void plugin.acceptSelectedSuggestionAndAdvance();
+			},
+		},
+	);
+	buildButton(actions, "Defer", "clock", () => {
+		plugin.deferSelectedSuggestion();
+	}, !state.canDefer);
+	if (state.canUndoLastAccept) {
+		buildButton(actions, "Undo", "rotate-ccw", () => {
+			void plugin.undoLastAppliedSuggestion();
+		}, false);
+	} else {
+		buildButton(actions, "Reject", "x", () => {
+			void plugin.rejectSelectedSuggestion();
+		}, !state.canReject);
+	}
 
 	return overlay;
 }
@@ -79,6 +110,11 @@ function buildButton(
 	onClick: () => void,
 	disabled = false,
 	isApply = false,
+	alternateAction?: {
+		label: string;
+		icon: string;
+		onClick: () => void;
+	},
 ): void {
 	const button = new ButtonComponent(parent).setTooltip(label);
 	button.setDisabled(disabled);
@@ -87,11 +123,91 @@ function buildButton(
 		button.buttonEl.addClass("editorialist-toolbar__button--apply");
 	}
 	markAsNonEditorSurface(button.buttonEl);
-	button.buttonEl.setAttribute("aria-label", label);
 	const iconEl = button.buttonEl.createSpan({ cls: "editorialist-toolbar__button-icon" });
 	markAsNonEditorSurface(iconEl);
-	setIcon(iconEl, icon);
-	bindImmediateAction(button.buttonEl, onClick);
+	let isAlternateActive = false;
+	let trackingDepth = 0;
+	let modifierTracking: AbortController | null = null;
+	let removalObserver: MutationObserver | null = null;
+	if (alternateAction) {
+		removalObserver = new MutationObserver(() => {
+			if (!button.buttonEl.isConnected) {
+				stopModifierTracking();
+				removalObserver?.disconnect();
+			}
+		});
+	}
+
+	const applyPresentation = (useAlternate: boolean): void => {
+		isAlternateActive = useAlternate;
+		const nextLabel = useAlternate ? alternateAction?.label ?? label : label;
+		const nextIcon = useAlternate ? alternateAction?.icon ?? icon : icon;
+		button.setTooltip(nextLabel);
+		button.buttonEl.setAttribute("aria-label", nextLabel);
+		button.buttonEl.setAttribute("data-editorialist-shift-mode", useAlternate ? "true" : "false");
+		setIcon(iconEl, nextIcon);
+	};
+
+	const syncModifierPresentation = (shiftPressed: boolean): void => {
+		applyPresentation(Boolean(alternateAction) && shiftPressed);
+	};
+
+	const stopModifierTracking = (): void => {
+		modifierTracking?.abort();
+		modifierTracking = null;
+		syncModifierPresentation(false);
+	};
+
+	const startModifierTracking = (): void => {
+		if (!alternateAction || modifierTracking) {
+			return;
+		}
+
+		modifierTracking = new AbortController();
+		const { signal } = modifierTracking;
+		window.addEventListener("keydown", (event) => {
+			syncModifierPresentation(event.shiftKey);
+		}, { signal });
+		window.addEventListener("keyup", (event) => {
+			syncModifierPresentation(event.shiftKey);
+		}, { signal });
+		window.addEventListener("blur", () => {
+			syncModifierPresentation(false);
+		}, { signal });
+	};
+
+	const beginModifierAwareness = (): void => {
+		trackingDepth += 1;
+		if (trackingDepth === 1) {
+			startModifierTracking();
+		}
+	};
+
+	const endModifierAwareness = (): void => {
+		trackingDepth = Math.max(0, trackingDepth - 1);
+		if (trackingDepth === 0) {
+			stopModifierTracking();
+		}
+	};
+
+	button.buttonEl.addEventListener("pointerenter", beginModifierAwareness);
+	button.buttonEl.addEventListener("pointerleave", endModifierAwareness);
+	button.buttonEl.addEventListener("focus", beginModifierAwareness);
+	button.buttonEl.addEventListener("blur", endModifierAwareness);
+	removalObserver?.observe(document.body, {
+		childList: true,
+		subtree: true,
+	});
+
+	applyPresentation(false);
+	bindImmediateAction(button.buttonEl, (event) => {
+		if (alternateAction && event.shiftKey) {
+			alternateAction.onClick();
+			return;
+		}
+
+		onClick();
+	});
 }
 
 function renderMetaSegment(parent: HTMLElement, text: string, className?: string): void {
@@ -110,7 +226,10 @@ function renderMetaSeparator(parent: HTMLElement): void {
 	markAsNonEditorSurface(separator);
 }
 
-function bindImmediateAction(element: HTMLElement, onClick: () => void): void {
+function bindImmediateAction(
+	element: HTMLElement,
+	onClick: (event: MouseEvent | PointerEvent) => void,
+): void {
 	let handledPointerDown = false;
 
 	element.addEventListener("pointerdown", (event) => {
@@ -121,7 +240,7 @@ function bindImmediateAction(element: HTMLElement, onClick: () => void): void {
 		handledPointerDown = true;
 		event.preventDefault();
 		event.stopPropagation();
-		onClick();
+		onClick(event);
 	});
 
 	element.addEventListener("click", (event) => {
@@ -132,7 +251,7 @@ function bindImmediateAction(element: HTMLElement, onClick: () => void): void {
 			return;
 		}
 
-		onClick();
+		onClick(event);
 	});
 }
 
