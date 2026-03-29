@@ -33,6 +33,20 @@ export class MatchEngine {
 	}
 
 	private resolveEditSuggestion(noteText: string, suggestion: EditSuggestion): EditSuggestion {
+		if (suggestion.payload.original === suggestion.payload.revised) {
+			return {
+				...suggestion,
+				status: this.preserveTerminalStatus(suggestion.status, "unresolved"),
+				location: {
+					primary: {
+						text: suggestion.payload.original,
+						matchType: "none",
+						reason: "Original and revised text are identical. Check this suggestion.",
+					},
+				},
+			};
+		}
+
 		const resolution = this.resolveTextTarget(
 			noteText,
 			suggestion.payload.original,
@@ -204,6 +218,23 @@ export class MatchEngine {
 		}
 
 		if (alternateText && noteText.includes(alternateText)) {
+			const alternateMatches = this.findAllExactMatches(noteText, alternateText);
+			if (alternateMatches.length === 1) {
+				const startOffset = alternateMatches[0];
+				if (startOffset !== undefined) {
+					return {
+						matchCount: 0,
+						target: {
+							text,
+							startOffset,
+							endOffset: startOffset + alternateText.length,
+							matchType: "already_applied",
+							reason: "Suggestion may already be applied.",
+						},
+					};
+				}
+			}
+
 			return {
 				matchCount: 0,
 				target: {

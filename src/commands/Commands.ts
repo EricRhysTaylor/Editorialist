@@ -62,10 +62,18 @@ export function registerCommands(plugin: EditorialistPlugin): void {
 
 	plugin.addCommand({
 		id: "accept-suggestion",
-		name: "Accept selected suggestion",
+		name: "Apply selected suggestion",
 		hotkeys: [withModShift("Enter")],
 		callback: () => {
 			void plugin.acceptSelectedSuggestion();
+		},
+	});
+
+	plugin.addCommand({
+		id: "undo-applied-suggestion",
+		name: "Undo applied suggestion",
+		callback: () => {
+			void plugin.undoLastAppliedSuggestion();
 		},
 	});
 
@@ -75,6 +83,14 @@ export function registerCommands(plugin: EditorialistPlugin): void {
 		hotkeys: [withModShift("Backspace")],
 		callback: () => {
 			void plugin.rejectSelectedSuggestion();
+		},
+	});
+
+	plugin.addCommand({
+		id: "later-suggestion",
+		name: "Later selected suggestion",
+		callback: () => {
+			plugin.laterSelectedSuggestion();
 		},
 	});
 
@@ -102,6 +118,22 @@ export function registerCommands(plugin: EditorialistPlugin): void {
 		hotkeys: [withModShift("S")],
 		callback: () => {
 			void plugin.jumpToSelectedSuggestionSource();
+		},
+	});
+
+	plugin.addCommand({
+		id: "remove-imported-review-blocks-in-note",
+		name: "Remove imported review blocks in this note",
+		callback: () => {
+			void plugin.removeImportedReviewBlocksInCurrentNote();
+		},
+	});
+
+	plugin.addCommand({
+		id: "clean-up-current-review-batch",
+		name: "Clean up current review batch",
+		callback: () => {
+			void plugin.cleanupCurrentReviewBatch();
 		},
 	});
 }

@@ -17,7 +17,6 @@ export interface EditorialistModalOptions {
 	onInspectBatch: (rawText: string) => Promise<ReviewImportBatch>;
 	onLoadClipboardBatch: () => Promise<ClipboardReviewBatch | null>;
 	onOpenReviewPanel: () => Promise<void>;
-	onResetReviewSession: () => void;
 	onStartReviewInCurrentNote: () => Promise<void>;
 }
 
@@ -26,8 +25,13 @@ type DetectionTone = "danger" | "muted" | "success";
 type ModalState = "checking" | "clipboard" | "current-note" | "empty";
 
 interface DetectionItem {
+	actionLabel?: string;
+	actionHint?: string;
 	description: string;
+	disabled?: boolean;
+	emphasized?: boolean;
 	icon: string;
+	id: "clipboard" | "current-note" | "template";
 	label: string;
 	tone: DetectionTone;
 }
@@ -81,7 +85,6 @@ export class EditorialistModal extends Modal {
 		const shell = this.contentEl.createDiv({ cls: "editorialist-control-modal__content" });
 
 		this.renderHeader(shell);
-		this.renderWorkflow(shell);
 		this.renderPrimaryState(shell);
 
 		if (this.showManualPaste) {
@@ -112,30 +115,13 @@ export class EditorialistModal extends Modal {
 			text: "Import, prepare, and start editorial review",
 		});
 
-		const status = text.createDiv({ cls: "editorialist-control-modal__header-status" });
-		status.createDiv({
-			cls: `editorialist-control-modal__status-line editorialist-control-modal__status-line--${this.getClipboardTone()}`,
-			text: this.getClipboardStatusText(),
-		});
-		status.createDiv({
-			cls: "editorialist-control-modal__next-step",
-			text: this.getNextStepText(),
-		});
-	}
-
-	private renderWorkflow(parent: HTMLElement): void {
-		const workflow = parent.createDiv({ cls: "editorialist-control-modal__workflow" });
-		workflow.createDiv({
-			cls: "editorialist-control-modal__workflow-title",
-			text: "How it works",
-		});
-
-		const steps = workflow.createEl("ol", { cls: "editorialist-control-modal__workflow-list" });
-		steps.createEl("li", { text: "Give the AI chatbot the proper formatting guide" });
-		steps.createEl("li", { text: "Copy the AI edits in Editorialist format" });
-		const stepThree = steps.createEl("li", { text: "Open Editorialist begin (this modal)" });
-		if (this.options.currentNoteHasReviewBlock) {
-			stepThree.addClass("editorialist-control-modal__workflow-step--active");
+		const statusText = this.getClipboardStatusText();
+		if (statusText) {
+			const status = text.createDiv({ cls: "editorialist-control-modal__header-status" });
+			status.createDiv({
+				cls: "editorialist-control-modal__status-line editorialist-control-modal__status-line--muted",
+				text: statusText,
+			});
 		}
 	}
 
@@ -166,139 +152,83 @@ export class EditorialistModal extends Modal {
 		const card = parent.createDiv({ cls: "editorialist-control-modal__card" });
 		card.createDiv({
 			cls: "editorialist-control-modal__card-title",
-			text: "Clipboard review batch validated",
+			text: "Clipboard ready",
 		});
 		card.createDiv({
 			cls: "editorialist-control-modal__card-copy",
-			text: this.describeBatch(clipboardBatch.batch),
-		});
-		card.createDiv({
-			cls: "editorialist-control-modal__card-next",
-			text: this.getNextStepText(),
+			text: "Review batch detected.",
 		});
 
 		this.renderDetectionGrid(card, clipboardBatch.batch);
-		this.renderActionDivider(card);
-
-		const actions = card.createDiv({ cls: "editorialist-control-modal__actions" });
-		this.buildButton(actions, "Import to active note", async () => {
-			await this.options.onImportRawToActiveNote(clipboardBatch.rawText, true);
-			this.close();
-		}, {
-			cta: this.isLocalNoteBatch(clipboardBatch.batch),
-		});
-		this.buildButton(
-			actions,
-			"Import and start review",
-			async () => {
-				await this.options.onImportBatch(clipboardBatch.batch, true);
-				this.close();
-			},
+		this.renderSecondaryActions(card, [
 			{
-				cta: !this.isLocalNoteBatch(clipboardBatch.batch),
-				disabled: !this.hasImportReadyGroup(clipboardBatch.batch),
+				icon: "clipboard",
+				label: this.showManualPaste ? "Hide manual paste" : "Paste review batch manually",
+				onClick: async () => {
+					this.showManualPaste = !this.showManualPaste;
+					if (this.showManualPaste && !this.manualText.trim()) {
+						this.manualText = clipboardBatch.rawText;
+					}
+					this.render();
+				},
 			},
-		);
-		this.buildButton(
-			actions,
-			"Import to matching scenes",
-			async () => {
-				await this.options.onImportBatch(clipboardBatch.batch, false);
-				this.close();
-			},
-			{
-				disabled: !this.hasImportReadyGroup(clipboardBatch.batch),
-			},
-		);
-		this.buildButton(actions, this.showAssignments ? "Hide assignments" : "Review assignments", async () => {
-			this.showAssignments = !this.showAssignments;
-			this.manualBatch = clipboardBatch.batch;
-			this.render();
-		});
-		this.buildButton(actions, this.showManualPaste ? "Hide manual paste" : "Paste manually", async () => {
-			this.showManualPaste = !this.showManualPaste;
-			if (this.showManualPaste && !this.manualText.trim()) {
-				this.manualText = clipboardBatch.rawText;
-			}
-			this.render();
-		});
+		]);
 	}
 
 	private renderCurrentNoteState(parent: HTMLElement): void {
 		const card = parent.createDiv({ cls: "editorialist-control-modal__card" });
 		card.createDiv({
 			cls: "editorialist-control-modal__card-title",
-			text: "Review block found in current note",
+			text: "Current note ready",
 		});
 		card.createDiv({
 			cls: "editorialist-control-modal__card-copy",
-			text: this.options.activeNoteLabel
-				? `Ready to start review in ${this.options.activeNoteLabel}.`
-				: "Ready to start review in the active note.",
-		});
-		card.createDiv({
-			cls: "editorialist-control-modal__card-next",
-			text: this.getNextStepText(),
+			text: this.options.activeNoteLabel ?? "Review block found",
 		});
 
 		this.renderDetectionGrid(card);
-		this.renderActionDivider(card);
-
-		const actions = card.createDiv({ cls: "editorialist-control-modal__actions" });
-		this.buildButton(
-			actions,
-			"Start review in this note",
-			async () => {
-				await this.options.onStartReviewInCurrentNote();
-				this.close();
+		this.renderSecondaryActions(card, [
+			{
+				icon: "clipboard",
+				label: this.showManualPaste ? "Hide manual paste" : "Paste review batch manually",
+				onClick: async () => {
+					this.showManualPaste = !this.showManualPaste;
+					this.render();
+				},
 			},
-			{ cta: true },
-		);
-		this.buildButton(actions, "Open review panel", async () => {
-			await this.options.onOpenReviewPanel();
-			this.close();
-		});
-		this.buildButton(actions, "Reset review session", async () => {
-			this.options.onResetReviewSession();
-			this.close();
-		});
-		this.buildButton(actions, this.showManualPaste ? "Hide manual paste" : "Paste review batch manually", async () => {
-			this.showManualPaste = !this.showManualPaste;
-			this.render();
-		});
+			{
+				icon: "navigation",
+				label: "Open review panel",
+				onClick: async () => {
+					await this.options.onOpenReviewPanel();
+					this.close();
+				},
+			},
+		]);
 	}
 
 	private renderEmptyState(parent: HTMLElement): void {
 		const card = parent.createDiv({ cls: "editorialist-control-modal__card" });
 		card.createDiv({
 			cls: "editorialist-control-modal__card-title",
-			text: "No review content detected",
+			text: "Get started",
 		});
 		card.createDiv({
 			cls: "editorialist-control-modal__card-copy",
-			text: "Copy a review template or paste a full review batch to begin.",
-		});
-		card.createDiv({
-			cls: "editorialist-control-modal__card-next",
-			text: this.getNextStepText(),
+			text: "Copy the template or paste a review batch.",
 		});
 
 		this.renderDetectionGrid(card);
-		this.renderActionDivider(card);
-
-		const actions = card.createDiv({ cls: "editorialist-control-modal__actions" });
-		this.buildButton(
-			actions,
-			"Copy review template",
-			async () => {
-				await this.options.onCopyTemplate();
+		this.renderSecondaryActions(card, [
+			{
+				icon: "clipboard",
+				label: this.showManualPaste ? "Hide manual paste" : "Paste review batch manually",
+				onClick: async () => {
+					this.showManualPaste = !this.showManualPaste;
+					this.render();
+				},
 			},
-			{ cta: true, icon: "copy" },
-		);
-		this.buildButton(actions, this.showManualPaste ? "Hide manual paste" : "Paste review batch manually", async () => {
-			this.showManualPaste = !this.showManualPaste;
-			this.render();
-		});
+		]);
 	}
 
 	private renderManualPaste(parent: HTMLElement): void {
@@ -309,7 +239,7 @@ export class EditorialistModal extends Modal {
 		});
 		section.createDiv({
 			cls: "editorialist-control-modal__section-copy",
-			text: "Paste a full Editorialist review batch and continue with the same import flow.",
+			text: "Paste a full Editorialist review batch.",
 		});
 
 		const inputContainer = section.createDiv({ cls: "editorialist-control-modal__input" });
@@ -334,6 +264,7 @@ export class EditorialistModal extends Modal {
 			this.render();
 		}, {
 			disabled: !this.manualText.trim(),
+			icon: "navigation",
 		});
 		this.buildButton(actions, "Import to matching scenes", async () => {
 			const batch = await this.ensureManualBatch();
@@ -345,6 +276,7 @@ export class EditorialistModal extends Modal {
 			this.close();
 		}, {
 			disabled: !this.manualText.trim(),
+			icon: "download",
 		});
 		this.buildButton(actions, "Import and start review", async () => {
 			const batch = await this.ensureManualBatch();
@@ -356,6 +288,7 @@ export class EditorialistModal extends Modal {
 			this.close();
 		}, {
 			disabled: !this.manualText.trim(),
+			icon: "download",
 		});
 		this.buildButton(actions, "Import to active note", async () => {
 			if (!this.manualText.trim()) {
@@ -366,6 +299,7 @@ export class EditorialistModal extends Modal {
 			this.close();
 		}, {
 			disabled: !this.manualText.trim(),
+			icon: "download",
 		});
 		this.buildButton(actions, "Clear input", async () => {
 			this.manualText = "";
@@ -374,16 +308,17 @@ export class EditorialistModal extends Modal {
 			this.render();
 		}, {
 			disabled: !this.manualText.trim(),
+			icon: "x",
 		});
 	}
 
 	private renderAssignments(parent: HTMLElement, batch: ReviewImportBatch): void {
 		const summary = parent.createDiv({ cls: "editorialist-control-modal__summary" });
 		summary.createDiv({
-			text: `${batch.summary.totalSuggestions} suggestions • ${batch.summary.totalResolvedScenes} resolved scenes • ${batch.summary.totalUnresolvedScenes} unresolved scenes`,
+			text: `${batch.summary.totalMatchedScenes} matched scenes • ${batch.summary.totalSuggestions} entries • ${batch.summary.totalUnresolvedScenes} unresolved scenes • ${batch.summary.totalMismatches} mismatches`,
 		});
 		summary.createDiv({
-			text: `${batch.summary.totalExactMatches} exact • ${batch.summary.totalAdvisoryOnly} advisory • ${batch.summary.totalUnresolvedMatches} unresolved or multiple`,
+			text: `${batch.summary.totalResolvedScenes} ready • ${batch.summary.totalExactMatches} exact • ${batch.summary.totalAdvisoryOnly} advisory • ${batch.summary.totalUnresolvedMatches} unresolved or multiple`,
 		});
 
 		const list = parent.createDiv({ cls: "editorialist-control-modal__list" });
@@ -395,7 +330,7 @@ export class EditorialistModal extends Modal {
 			});
 			card.createDiv({
 				cls: "editorialist-control-modal__group-meta",
-				text: `${group.suggestions.length} suggestions • ${group.exactCount} exact • ${group.advisoryCount} advisory • ${group.unresolvedCount} unresolved`,
+				text: `${group.suggestions.length} entries • ${group.exactCount} exact • ${group.advisoryCount} advisory • ${group.mismatchCount} mismatched • ${group.unresolvedCount} unresolved`,
 			});
 			card.createDiv({
 				cls: "editorialist-control-modal__group-path",
@@ -436,7 +371,18 @@ export class EditorialistModal extends Modal {
 			text: "Example format",
 		});
 
-		const toggle = new ButtonComponent(header)
+		const actions = header.createDiv({ cls: "editorialist-control-modal__example-actions" });
+		const copy = new ButtonComponent(actions)
+			.setButtonText("Copy template")
+			.onClick(() => {
+				void this.runAction(async () => {
+					await this.options.onCopyTemplate();
+				});
+			});
+		copy.buttonEl.addClass("editorialist-control-modal__example-button");
+		setIcon(copy.buttonEl.createSpan({ cls: "editorialist-control-modal__button-icon" }), "copy");
+
+		const toggle = new ButtonComponent(actions)
 			.setIcon(this.showExample ? "chevron-up" : "chevron-down")
 			.setTooltip(this.showExample ? "Contract example format" : "Expand example format")
 			.onClick(() => {
@@ -463,8 +409,22 @@ export class EditorialistModal extends Modal {
 		const grid = parent.createDiv({ cls: "editorialist-control-modal__detection-grid" });
 		for (const item of this.getDetectionItems(batch)) {
 			const card = grid.createDiv({
-				cls: `editorialist-control-modal__detection editorialist-control-modal__detection--${item.tone}`,
+				cls: `editorialist-control-modal__detection editorialist-control-modal__detection--${item.tone}${item.emphasized ? " is-emphasized" : ""}${item.disabled ? " is-disabled" : ""}`,
 			});
+			card.setAttribute("role", "button");
+			card.tabIndex = item.disabled || this.isWorking ? -1 : 0;
+			card.setAttribute("aria-label", item.actionLabel ?? item.label);
+			if (!item.disabled && !this.isWorking) {
+				card.addEventListener("click", () => {
+					void this.runAction(() => this.handleDetectionAction(item.id));
+				});
+				card.addEventListener("keydown", (event) => {
+					if (event.key === "Enter" || event.key === " ") {
+						event.preventDefault();
+						void this.runAction(() => this.handleDetectionAction(item.id));
+					}
+				});
+			}
 			const icon = card.createDiv({ cls: "editorialist-control-modal__detection-icon" });
 			setIcon(icon, item.icon);
 			card.createDiv({
@@ -475,11 +435,35 @@ export class EditorialistModal extends Modal {
 				cls: "editorialist-control-modal__detection-copy",
 				text: item.description,
 			});
+			if (item.actionHint) {
+				card.createDiv({
+					cls: "editorialist-control-modal__detection-hint",
+					text: item.actionHint,
+				});
+			}
 		}
 	}
 
-	private renderActionDivider(parent: HTMLElement): void {
+	private renderSecondaryActions(
+		parent: HTMLElement,
+		actionsConfig: Array<{
+			icon: string;
+			label: string;
+			onClick: () => Promise<void>;
+		}>,
+	): void {
+		if (actionsConfig.length === 0) {
+			return;
+		}
+
 		parent.createEl("hr", { cls: "editorialist-control-modal__divider" });
+		const actions = parent.createDiv({ cls: "editorialist-control-modal__secondary-actions" });
+		actionsConfig.forEach((action) => {
+			this.buildButton(actions, action.label, action.onClick, {
+				icon: action.icon,
+				subtle: true,
+			});
+		});
 	}
 
 	private async ensureManualBatch(): Promise<ReviewImportBatch | null> {
@@ -509,14 +493,6 @@ export class EditorialistModal extends Modal {
 		}
 
 		return this.clipboardBatch?.batch ?? null;
-	}
-
-	private describeBatch(batch: ReviewImportBatch): string {
-		const directCount = Math.max(0, batch.summary.totalSuggestions - batch.summary.totalAdvisoryOnly);
-		const targetLabel = this.isLocalNoteBatch(batch)
-			? "local note"
-			: `${batch.groups.length} scene${batch.groups.length === 1 ? "" : "s"}`;
-		return `${batch.summary.totalSuggestions} suggestions for ${targetLabel} • ${directCount} direct • ${batch.summary.totalAdvisoryOnly} advisory`;
 	}
 
 	private hasDetectedSuggestions(batch: ReviewImportBatch): boolean {
@@ -568,72 +544,122 @@ export class EditorialistModal extends Modal {
 
 	private getClipboardStatusText(): string {
 		if (this.clipboardState === "ready") {
-			return "Clipboard: validated Editorialist review content detected.";
+			return "Clipboard ready";
 		}
 
 		if (this.clipboardState === "empty") {
-			return "Clipboard: no recognized Editorialist review content.";
+			return "";
 		}
 
-		return "Clipboard: checking for Editorialist review content.";
-	}
-
-	private getNextStepText(): string {
-		if (this.clipboardBatch) {
-			if (this.isLocalNoteBatch(this.clipboardBatch.batch)) {
-				return "Next: click Import to active note to begin the edit sweep in this note.";
-			}
-
-			return "Next: review assignments or import to matching scenes, then begin the review sweep.";
-		}
-
-		if (this.options.currentNoteHasReviewBlock) {
-			return "Next: click Start review in this note to begin the edit sweep.";
-		}
-
-		return "Next: copy the review template, then paste AI output here or into the clipboard.";
+		return "Checking clipboard";
 	}
 
 	private getDetectionItems(batch?: ReviewImportBatch): DetectionItem[] {
-		const localNoteBatch = batch ? this.isLocalNoteBatch(batch) : false;
 		const clipboardDescription =
 			this.clipboardState === "ready"
-				? batch
-					? `${batch.summary.totalSuggestions} suggestions validated`
-					: "Validated review content found"
+				? "Review batch detected"
 				: this.clipboardState === "empty"
-					? "No recognized review content"
+					? "No review content"
 					: "Checking clipboard";
-		const targetDescription = batch
-			? localNoteBatch
-				? "Local note target"
-				: `${batch.groups.length} scene${batch.groups.length === 1 ? "" : "s"} detected`
-			: this.options.currentNoteHasReviewBlock
-				? "Ready in current note"
-				: "Import first to begin";
+
+		if (this.options.currentNoteHasReviewBlock) {
+			return [
+				{
+					actionLabel: "Start review in current note",
+					actionHint: "→ Start review",
+					emphasized: true,
+					icon: "file-text",
+					id: "current-note",
+					label: "Current note",
+					description: "Review block found",
+					tone: "success",
+				},
+				{
+					actionLabel: this.clipboardState === "ready" ? "Import clipboard review batch" : "Paste review batch manually",
+					actionHint:
+						this.clipboardState === "ready"
+							? "→ Import review"
+							: "→ Paste review",
+					emphasized: false,
+					icon: "clipboard",
+					id: "clipboard",
+					label: "Clipboard",
+					description: clipboardDescription,
+					tone: this.getClipboardTone(),
+				},
+			];
+		}
+
+		if (this.clipboardBatch || batch) {
+			return [
+				{
+					actionLabel: "Import clipboard review batch",
+					actionHint: "→ Import review",
+					emphasized: true,
+					icon: "clipboard",
+					id: "clipboard",
+					label: "Clipboard",
+					description: "Review batch detected",
+					tone: "success",
+				},
+			];
+		}
 
 		return [
 			{
+				actionLabel: "Copy review template",
+				actionHint: "→ Copy template",
+				emphasized: true,
+				icon: "copy",
+				id: "template",
+				label: "Copy template",
+				description: "Get the review format",
+				tone: "success",
+			},
+			{
+				actionLabel: "Paste review batch manually",
+				actionHint: "→ Paste review",
+				emphasized: false,
 				icon: "clipboard",
+				id: "clipboard",
 				label: "Clipboard",
-				description: clipboardDescription,
-				tone: this.getClipboardTone(),
-			},
-			{
-				icon: "file-text",
-				label: "Current note",
-				description: this.options.currentNoteHasReviewBlock
-					? "Review block found"
-					: "No review block found",
-				tone: this.options.currentNoteHasReviewBlock ? "success" : "muted",
-			},
-			{
-				icon: "play",
-				label: "Begin sweep",
-				description: targetDescription,
-				tone: this.options.currentNoteHasReviewBlock || localNoteBatch ? "success" : "muted",
+				description: "No review content",
+				tone: "danger",
 			},
 		];
+	}
+
+	private async handleDetectionAction(id: DetectionItem["id"]): Promise<void> {
+		if (id === "template") {
+			await this.options.onCopyTemplate();
+			return;
+		}
+
+		if (id === "current-note") {
+			if (!this.options.currentNoteHasReviewBlock) {
+				return;
+			}
+
+			await this.options.onStartReviewInCurrentNote();
+			this.close();
+			return;
+		}
+
+		if (id === "clipboard") {
+			if (this.clipboardBatch) {
+				if (this.isLocalNoteBatch(this.clipboardBatch.batch)) {
+					await this.options.onImportRawToActiveNote(this.clipboardBatch.rawText, true);
+				} else {
+					await this.options.onImportBatch(this.clipboardBatch.batch, true);
+				}
+				this.close();
+				return;
+			}
+
+			this.showManualPaste = true;
+			this.render();
+			return;
+		}
 	}
 
 	private buildButton(
@@ -644,6 +670,7 @@ export class EditorialistModal extends Modal {
 			cta?: boolean;
 			disabled?: boolean;
 			icon?: string;
+			subtle?: boolean;
 		},
 	): void {
 		const button = new ButtonComponent(parent).setButtonText(label);
@@ -652,8 +679,12 @@ export class EditorialistModal extends Modal {
 			button.setCta();
 		}
 		button.buttonEl.addClass("editorialist-control-modal__button");
+		if (options?.subtle) {
+			button.buttonEl.addClass("editorialist-control-modal__button--subtle");
+		}
 		if (options?.icon) {
 			const icon = button.buttonEl.createSpan({ cls: "editorialist-control-modal__button-icon" });
+			button.buttonEl.prepend(icon);
 			setIcon(icon, options.icon);
 		}
 		button.onClick(() => {

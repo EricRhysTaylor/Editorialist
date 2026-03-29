@@ -1,3 +1,4 @@
+import type { ReviewSweepRegistryEntry } from "./ReviewImport";
 import type { ReviewContributorKind, ReviewOperationType } from "./ReviewSuggestion";
 
 export type ReviewerResolutionStatus = "exact" | "alias" | "suggested" | "unresolved" | "new";
@@ -49,6 +50,7 @@ export interface ReviewerSignalRecord {
 export interface EditorialistPluginData {
 	reviewerProfiles: ReviewerProfile[];
 	reviewerSignalIndex: Record<string, ReviewerSignalRecord>;
+	sweepRegistry: Record<string, ReviewSweepRegistryEntry>;
 }
 
 // TODO Phase 2: add reviewer profile import/export.

@@ -35,6 +35,9 @@ export class ImportEngine {
 	}
 
 	async inspectBatch(rawText: string): Promise<ReviewImportBatch> {
+		const normalizedBatchText = normalizeImportedReviewText(rawText) ?? rawText.trim();
+		const contentHash = this.createContentHash(normalizedBatchText);
+		const createdAt = Date.now();
 		const parsedDocument = this.parseBatch(rawText);
 		const results: ReviewImportSuggestionResult[] = [];
 
@@ -46,6 +49,9 @@ export class ImportEngine {
 		const summary = this.buildSummary(results, groups);
 
 		return {
+			batchId: `batch-${createdAt.toString(36)}-${contentHash.slice(0, 8)}`,
+			contentHash,
+			createdAt,
 			rawText,
 			results,
 			groups,
@@ -67,7 +73,7 @@ export class ImportEngine {
 			}
 
 			const currentText = await this.app.vault.cachedRead(file);
-			const block = this.serializeGroup(group);
+			const block = this.serializeGroup(batch.batchId, group);
 			const nextText = this.appendImportBlock(currentText, block);
 			await this.app.vault.modify(file, nextText);
 			importedGroups.push(group);
@@ -210,6 +216,11 @@ export class ImportEngine {
 			return `SceneId resolves to ${file.basename}, but Note says ${noteHint}.`;
 		}
 
+		const sceneHint = suggestion.routing?.scene?.trim();
+		if (sceneHint && file.basename !== sceneHint) {
+			return `SceneId resolves to ${file.basename}, but Scene says ${sceneHint}.`;
+		}
+
 		return null;
 	}
 
@@ -307,7 +318,13 @@ export class ImportEngine {
 				const first = suggestionResults[0];
 				const exactCount = suggestionResults.filter((result) => result.verificationStatus === "exact").length;
 				const advisoryCount = suggestionResults.filter((result) => result.verificationStatus === "advisory").length;
-				const unresolvedCount = suggestionResults.filter((result) => result.verificationStatus === "multiple" || result.verificationStatus === "none" || result.routeStatus !== "resolved").length;
+				const unresolvedCount = suggestionResults.filter(
+					(result) =>
+						result.verificationStatus === "multiple" ||
+						result.verificationStatus === "none" ||
+						result.verificationStatus === "note_unresolved",
+				).length;
+				const mismatchCount = suggestionResults.filter((result) => result.routeStatus === "mismatch").length;
 
 				return {
 					filePath,
@@ -317,21 +334,23 @@ export class ImportEngine {
 					exactCount,
 					advisoryCount,
 					unresolvedCount,
+					mismatchCount,
 					isReady: suggestionResults.every((result) => result.routeStatus === "resolved"),
 				};
-			})
-			.sort((left, right) => left.fileName.localeCompare(right.fileName));
+			});
 	}
 
 	private buildSummary(results: ReviewImportSuggestionResult[], groups: ReviewImportNoteGroup[]): ReviewImportSummary {
 		return {
 			totalSuggestions: results.length,
+			totalMatchedScenes: groups.length,
 			totalResolvedScenes: groups.filter((group) => group.isReady).length,
 			totalUnresolvedScenes: new Set(
 				results
 					.filter((result) => result.routeStatus !== "resolved")
 					.map((result) => result.suggestion.routing?.sceneId ?? result.suggestion.id),
 			).size,
+			totalMismatches: results.filter((result) => result.routeStatus === "mismatch").length,
 			totalExactMatches: results.filter((result) => result.verificationStatus === "exact").length,
 			totalAdvisoryOnly: results.filter((result) => result.verificationStatus === "advisory").length,
 			totalUnresolvedMatches: results.filter(
@@ -343,10 +362,12 @@ export class ImportEngine {
 		};
 	}
 
-	private serializeGroup(group: ReviewImportNoteGroup): string {
+	private serializeGroup(batchId: string, group: ReviewImportNoteGroup): string {
 		const metadata = this.extractMetadata(group.suggestions);
 		const lines: string[] = [`\`\`\`${REVIEW_BLOCK_FENCE}`];
 
+		lines.push(`BatchId: ${batchId}`);
+		lines.push("ImportedBy: Editorialist");
 		lines.push(`Reviewer: ${metadata.reviewer}`);
 		lines.push(`ReviewerType: ${metadata.reviewerType}`);
 
@@ -421,5 +442,15 @@ export class ImportEngine {
 	private appendImportBlock(currentText: string, block: string): string {
 		const trimmedText = currentText.trimEnd();
 		return trimmedText.length > 0 ? `${trimmedText}\n\n${block}\n` : `${block}\n`;
+	}
+
+	private createContentHash(value: string): string {
+		let hash = 2166136261;
+		for (let index = 0; index < value.length; index += 1) {
+			hash ^= value.charCodeAt(index);
+			hash = Math.imul(hash, 16777619);
+		}
+
+		return (hash >>> 0).toString(16).padStart(8, "0");
 	}
 }

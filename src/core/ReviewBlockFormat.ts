@@ -1,14 +1,25 @@
 export const REVIEW_BLOCK_FENCE = "editorialist-review";
 const REVIEW_SECTION_PATTERN = /^===\s*(EDIT|MOVE|CUT|CONDENSE)\s*===\s*$/im;
-const REVIEW_METADATA_PATTERN = /^(Reviewer|ReviewerType|Provider|Model)\s*:/im;
+const REVIEW_METADATA_PATTERN = /^(BatchId|ImportedBy|Reviewer|ReviewerType|Provider|Model)\s*:/im;
 const GENERAL_FIELD_PATTERN = /^([A-Za-z][A-Za-z ]+):\s*(.*)$/;
-const REVIEW_METADATA_KEYS = new Set(["reviewer", "reviewertype", "provider", "model"]);
+const REVIEW_METADATA_KEYS = new Set(["batchid", "importedby", "reviewer", "reviewertype", "provider", "model"]);
 
 export interface ExtractedReviewBlock {
 	bodyText: string;
 	endOffset: number;
 	source: "fenced" | "raw";
 	startOffset: number;
+}
+
+export interface ImportedReviewBlock extends ExtractedReviewBlock {
+	batchId?: string;
+	importedBy?: string;
+}
+
+export interface RemoveImportedReviewBlocksResult {
+	batchIds: string[];
+	removedCount: number;
+	text: string;
 }
 
 export function createReviewBlockPattern(): RegExp {
@@ -52,6 +63,31 @@ export function getReviewBlockFenceLabel(): string {
 	return `${REVIEW_BLOCK_FENCE} block`;
 }
 
+export function getReviewBlockMetadata(bodyText: string): Record<string, string> {
+	const metadata: Record<string, string> = {};
+	for (const line of bodyText.split(/\r?\n/)) {
+		const match = line.trim().match(GENERAL_FIELD_PATTERN);
+		if (!match) {
+			if (REVIEW_SECTION_PATTERN.test(line.trim())) {
+				break;
+			}
+			continue;
+		}
+
+		const key = normalizeFieldKey(match[1] ?? "");
+		if (!REVIEW_METADATA_KEYS.has(key)) {
+			if (REVIEW_SECTION_PATTERN.test(line.trim())) {
+				break;
+			}
+			continue;
+		}
+
+		metadata[key] = (match[2] ?? "").trim();
+	}
+
+	return metadata;
+}
+
 export function extractReviewBlocks(noteText: string): ExtractedReviewBlock[] {
 	const trimmed = noteText.trim();
 	if (!trimmed) {
@@ -66,6 +102,47 @@ export function extractReviewBlocks(noteText: string): ExtractedReviewBlock[] {
 	const unfencedBody = unwrapPlainCodeFence(trimmed);
 	const rawBlock = extractRawTopReviewBlock(unfencedBody);
 	return rawBlock ? [rawBlock] : [];
+}
+
+export function findImportedReviewBlocks(noteText: string, batchId?: string): ImportedReviewBlock[] {
+	return extractReviewBlocks(noteText)
+		.map((block) => {
+			const metadata = getReviewBlockMetadata(block.bodyText);
+			return {
+				...block,
+				batchId: metadata.batchid,
+				importedBy: metadata.importedby,
+			};
+		})
+		.filter((block) => {
+			if (block.importedBy !== "Editorialist") {
+				return false;
+			}
+
+			return batchId ? block.batchId === batchId : true;
+		});
+}
+
+export function removeImportedReviewBlocks(noteText: string, batchId?: string): RemoveImportedReviewBlocksResult {
+	const blocks = findImportedReviewBlocks(noteText, batchId).sort((left, right) => right.startOffset - left.startOffset);
+	if (blocks.length === 0) {
+		return {
+			batchIds: [],
+			removedCount: 0,
+			text: noteText,
+		};
+	}
+
+	let nextText = noteText;
+	for (const block of blocks) {
+		nextText = nextText.slice(0, block.startOffset) + nextText.slice(block.endOffset);
+	}
+
+	return {
+		batchIds: [...new Set(blocks.map((block) => block.batchId).filter((value): value is string => Boolean(value)))],
+		removedCount: blocks.length,
+		text: normalizeRemovedReviewSpacing(nextText),
+	};
 }
 
 function unwrapPlainCodeFence(rawText: string): string {
@@ -213,6 +290,14 @@ function looksLikeReviewBody(text: string): boolean {
 
 	const rawBlock = extractRawTopReviewBlock(text);
 	return rawBlock !== null && rawBlock.startOffset === 0 && rawBlock.bodyText.trim() === text.trim();
+}
+
+function normalizeRemovedReviewSpacing(text: string): string {
+	const collapsed = text
+		.replace(/[ \t]+\n/g, "\n")
+		.replace(/\n{3,}/g, "\n\n");
+
+	return collapsed.trimEnd().length > 0 ? `${collapsed.trimEnd()}\n` : "";
 }
 
 function getLinesWithOffsets(text: string, baseOffset: number): Array<{ endOffset: number; startOffset: number; text: string }> {

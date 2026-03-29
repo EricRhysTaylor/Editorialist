@@ -1,16 +1,14 @@
 import { type Extension, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
-import type EditorialistPlugin from "../main";
-import { ReviewToolbarWidget, type ToolbarState } from "./Toolbar";
 
 export interface ReviewDecorationSnapshot {
 	highlight: { end: number; start: number } | null;
-	toolbar: ToolbarState | null;
+	highlightTone: "active" | "applied";
 }
 
 interface ReviewDecorationState {
 	highlight: { end: number; start: number } | null;
-	toolbar: ToolbarState | null;
+	highlightTone: "active" | "applied";
 }
 
 const syncReviewDecorationsEffect = StateEffect.define<ReviewDecorationSnapshot>();
@@ -19,12 +17,12 @@ const reviewDecorationsField = StateField.define<ReviewDecorationState>({
 	create() {
 		return {
 			highlight: null,
-			toolbar: null,
+			highlightTone: "active",
 		};
 	},
 	update(value, transaction) {
 		let highlight = value.highlight;
-		let toolbar = value.toolbar;
+		let highlightTone = value.highlightTone;
 
 		if (highlight) {
 			highlight = {
@@ -36,23 +34,20 @@ const reviewDecorationsField = StateField.define<ReviewDecorationState>({
 		for (const effect of transaction.effects) {
 			if (effect.is(syncReviewDecorationsEffect)) {
 				highlight = effect.value.highlight;
-				toolbar = effect.value.toolbar;
+				highlightTone = effect.value.highlightTone;
 			}
 		}
 
 		return {
 			highlight,
-			toolbar,
+			highlightTone,
 		};
 	},
 	provide: (field) => EditorView.decorations.from(field, buildDecorations),
 });
 
-let activePlugin: EditorialistPlugin;
-
-export function createReviewDecorationsExtension(plugin: EditorialistPlugin): Extension {
-	activePlugin = plugin;
-	return reviewDecorationsField;
+export function createReviewDecorationsExtension(): Extension {
+	return [reviewDecorationsField];
 }
 
 export function syncReviewDecorations(editorView: EditorView, snapshot: ReviewDecorationSnapshot): void {
@@ -64,24 +59,15 @@ export function syncReviewDecorations(editorView: EditorView, snapshot: ReviewDe
 function buildDecorations(state: ReviewDecorationState): DecorationSet {
 	const builder = new RangeSetBuilder<Decoration>();
 
-	if (state.toolbar) {
-		builder.add(
-			0,
-			0,
-			Decoration.widget({
-				widget: new ReviewToolbarWidget(activePlugin, state.toolbar),
-				block: true,
-				side: -1,
-			}),
-		);
-	}
-
 	if (state.highlight && state.highlight.end > state.highlight.start) {
 		builder.add(
 			state.highlight.start,
 			state.highlight.end,
 			Decoration.mark({
-				class: "editorialist-match-highlight",
+				class:
+					state.highlightTone === "applied"
+						? "editorialist-match-highlight editorialist-match-highlight--applied"
+						: "editorialist-match-highlight editorialist-match-highlight--active",
 			}),
 		);
 	}

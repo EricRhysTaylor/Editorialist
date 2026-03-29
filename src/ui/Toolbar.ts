@@ -1,76 +1,144 @@
-import { ButtonComponent } from "obsidian";
-import { WidgetType } from "@codemirror/view";
+import { ButtonComponent, setIcon } from "obsidian";
 import type EditorialistPlugin from "../main";
 
 export interface ToolbarState {
-	canAccept: boolean;
+	canApply: boolean;
+	canLater: boolean;
+	canNext: boolean;
+	canPrevious: boolean;
 	canReject: boolean;
 	hasReviewBlock: boolean;
+	operationLabel: string;
 	pendingCount: number;
+	resolvedCount: number;
+	sceneProgressLabel?: string;
+	selectedIndexLabel: string;
+	selectedLabel: string;
 	unresolvedCount: number;
 }
 
-export class ReviewToolbarWidget extends WidgetType {
-	constructor(
-		private readonly plugin: EditorialistPlugin,
-		private readonly state: ToolbarState,
-	) {
-		super();
+export function createReviewToolbarElement(
+	plugin: EditorialistPlugin,
+	state: ToolbarState,
+): HTMLElement {
+	const overlay = document.createElement("div");
+	overlay.className = "editorialist-toolbar-overlay";
+	markAsNonEditorSurface(overlay);
+
+	const toolbar = overlay.createDiv({ cls: "editorialist-toolbar" });
+	markAsNonEditorSurface(toolbar);
+	toolbar.setAttribute("role", "toolbar");
+	toolbar.setAttribute("aria-label", "Editorialist review toolbar");
+
+	const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
+	markAsNonEditorSurface(meta);
+	renderMetaSegment(meta, state.operationLabel);
+	renderMetaSeparator(meta);
+	if (state.sceneProgressLabel) {
+		renderMetaSegment(meta, state.sceneProgressLabel);
+		renderMetaSeparator(meta);
+	}
+	renderMetaSegment(meta, state.selectedIndexLabel);
+	renderMetaSeparator(meta);
+	renderMetaSegment(meta, `${state.pendingCount} pending`);
+	renderMetaSeparator(meta);
+	renderMetaSegment(meta, `${state.unresolvedCount} unresolved`);
+	if (state.resolvedCount > 0) {
+		renderMetaSeparator(meta);
+		renderMetaSegment(meta, `${state.resolvedCount} resolved`, "editorialist-toolbar__meta-segment--resolved");
 	}
 
-	eq(other: ReviewToolbarWidget): boolean {
-		return JSON.stringify(this.state) === JSON.stringify(other.state);
+	const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
+	buildButton(actions, "Previous", "arrow-left", () => {
+		void plugin.selectPreviousSuggestion();
+	}, !state.canPrevious);
+	buildButton(actions, "Apply", "check", () => {
+		void plugin.acceptSelectedSuggestion();
+	}, !state.canApply, true);
+	buildButton(actions, "Later", "clock", () => {
+		plugin.laterSelectedSuggestion();
+	}, !state.canLater);
+	buildButton(actions, "Reject", "x", () => {
+		void plugin.rejectSelectedSuggestion();
+	}, !state.canReject);
+	buildButton(actions, "Next", "arrow-right", () => {
+		void plugin.selectNextSuggestion();
+	}, !state.canNext);
+
+	return overlay;
+}
+
+function buildButton(
+	parent: HTMLElement,
+	label: string,
+	icon: string,
+	onClick: () => void,
+	disabled = false,
+	isApply = false,
+): void {
+	const button = new ButtonComponent(parent).setTooltip(label);
+	button.setDisabled(disabled);
+	button.buttonEl.addClass("editorialist-toolbar__button");
+	if (isApply) {
+		button.buttonEl.addClass("editorialist-toolbar__button--apply");
 	}
+	markAsNonEditorSurface(button.buttonEl);
+	button.buttonEl.setAttribute("aria-label", label);
+	const iconEl = button.buttonEl.createSpan({ cls: "editorialist-toolbar__button-icon" });
+	markAsNonEditorSurface(iconEl);
+	setIcon(iconEl, icon);
+	bindImmediateAction(button.buttonEl, onClick);
+}
 
-	toDOM(): HTMLElement {
-		const container = document.createElement("div");
-		container.className = "editorialist-toolbar";
+function renderMetaSegment(parent: HTMLElement, text: string, className?: string): void {
+	const segment = parent.createSpan({
+		cls: className ? `editorialist-toolbar__meta-segment ${className}` : "editorialist-toolbar__meta-segment",
+		text,
+	});
+	markAsNonEditorSurface(segment);
+}
 
-		const meta = container.createDiv({ cls: "editorialist-toolbar__meta" });
-		meta.setText(
-			this.state.hasReviewBlock
-				? `${this.state.pendingCount} pending • ${this.state.unresolvedCount} unresolved`
-				: "No review block in this note",
-		);
+function renderMetaSeparator(parent: HTMLElement): void {
+	const separator = parent.createSpan({
+		cls: "editorialist-toolbar__meta-separator",
+		text: "•",
+	});
+	markAsNonEditorSurface(separator);
+}
 
-		const actions = container.createDiv({ cls: "editorialist-toolbar__actions" });
-		this.buildButton(actions, "Parse review blocks", () => {
-			void this.plugin.parseCurrentNote();
-		});
-		this.buildButton(actions, "Open review panel", () => {
-			void this.plugin.openReviewPanel();
-		});
-		this.buildButton(
-			actions,
-			"Accept",
-			() => {
-				void this.plugin.acceptSelectedSuggestion();
-			},
-			!this.state.canAccept,
-		);
-		this.buildButton(
-			actions,
-			"Reject",
-			() => {
-				void this.plugin.rejectSelectedSuggestion();
-			},
-			!this.state.canReject,
-		);
+function bindImmediateAction(element: HTMLElement, onClick: () => void): void {
+	let handledPointerDown = false;
 
-		return container;
-	}
+	element.addEventListener("pointerdown", (event) => {
+		if (event.button !== 0) {
+			return;
+		}
 
-	ignoreEvent(): boolean {
-		return false;
-	}
+		handledPointerDown = true;
+		event.preventDefault();
+		event.stopPropagation();
+		onClick();
+	});
 
-	private buildButton(parent: HTMLElement, label: string, onClick: () => void, disabled = false): void {
-		const button = new ButtonComponent(parent).setButtonText(label);
-		button.setDisabled(disabled);
-		button.buttonEl.addEventListener("click", (event) => {
-			event.preventDefault();
-			event.stopPropagation();
-			onClick();
-		});
-	}
+	element.addEventListener("click", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		if (handledPointerDown) {
+			handledPointerDown = false;
+			return;
+		}
+
+		onClick();
+	});
+}
+
+function markAsNonEditorSurface(element: HTMLElement): void {
+	element.setAttribute("contenteditable", "false");
+	element.setAttribute("spellcheck", "false");
+	element.setAttribute("translate", "no");
+	element.setAttribute("data-gramm", "false");
+	element.setAttribute("data-gramm_editor", "false");
+	element.setAttribute("data-enable-grammarly", "false");
+	element.setAttribute("data-grammarly-part", "false");
+	element.setAttribute("data-lexical-editor", "false");
 }

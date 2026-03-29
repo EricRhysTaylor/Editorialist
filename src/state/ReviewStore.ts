@@ -1,6 +1,14 @@
 import type { ReviewSession, ReviewSuggestion, ReviewStatus } from "../models/ReviewSuggestion";
 
+export interface GuidedSweepState {
+	batchId: string;
+	currentNoteIndex: number;
+	notePaths: string[];
+	startedAt: number;
+}
+
 export interface ReviewStoreState {
+	guidedSweep: GuidedSweepState | null;
 	selectedSuggestionId: string | null;
 	session: ReviewSession | null;
 }
@@ -11,6 +19,7 @@ export class ReviewStore {
 	private readonly listeners = new Set<Listener>();
 
 	private state: ReviewStoreState = {
+		guidedSweep: null,
 		selectedSuggestionId: null,
 		session: null,
 	};
@@ -25,6 +34,12 @@ export class ReviewStore {
 
 	getState(): ReviewStoreState {
 		return {
+			guidedSweep: this.state.guidedSweep
+				? {
+						...this.state.guidedSweep,
+						notePaths: [...this.state.guidedSweep.notePaths],
+					}
+				: null,
 			selectedSuggestionId: this.state.selectedSuggestionId,
 			session: this.state.session
 				? {
@@ -37,6 +52,10 @@ export class ReviewStore {
 
 	getSession(): ReviewSession | null {
 		return this.state.session;
+	}
+
+	getGuidedSweep(): GuidedSweepState | null {
+		return this.state.guidedSweep;
 	}
 
 	getSelectedSuggestion(): ReviewSuggestion | null {
@@ -58,6 +77,7 @@ export class ReviewStore {
 				: firstOpenSuggestion?.id ?? session.suggestions[0]?.id ?? null;
 
 		this.state = {
+			guidedSweep: this.state.guidedSweep,
 			session,
 			selectedSuggestionId,
 		};
@@ -66,6 +86,7 @@ export class ReviewStore {
 
 	clearSession(): void {
 		this.state = {
+			guidedSweep: null,
 			session: null,
 			selectedSuggestionId: null,
 		};
@@ -97,8 +118,38 @@ export class ReviewStore {
 			: suggestions[0]?.id ?? null;
 
 		this.state = {
+			guidedSweep: this.state.guidedSweep,
 			session,
 			selectedSuggestionId,
+		};
+		this.emit();
+	}
+
+	setGuidedSweep(guidedSweep: GuidedSweepState | null): void {
+		this.state = {
+			...this.state,
+			guidedSweep,
+		};
+		this.emit();
+	}
+
+	updateGuidedSweepCurrentNote(notePath: string): void {
+		const guidedSweep = this.state.guidedSweep;
+		if (!guidedSweep) {
+			return;
+		}
+
+		const currentNoteIndex = guidedSweep.notePaths.findIndex((candidate) => candidate === notePath);
+		if (currentNoteIndex === -1 || currentNoteIndex === guidedSweep.currentNoteIndex) {
+			return;
+		}
+
+		this.state = {
+			...this.state,
+			guidedSweep: {
+				...guidedSweep,
+				currentNoteIndex,
+			},
 		};
 		this.emit();
 	}

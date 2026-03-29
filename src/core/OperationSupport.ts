@@ -22,6 +22,13 @@ export interface ReviewApplyPlan {
 	to: number;
 }
 
+export type ReviewSuggestionVisualState =
+	| "pending"
+	| "accepted"
+	| "rejected"
+	| "resolved"
+	| "unresolved";
+
 interface OperationSupport<T extends ReviewSuggestion> {
 	canApply: (suggestion: T) => boolean;
 	createApplyPlan: (noteText: string, suggestion: T) => ReviewApplyPlan | null;
@@ -257,6 +264,34 @@ export function getSuggestionReason(suggestion: ReviewSuggestion): string {
 
 export function getSuggestionCopyBlocks(suggestion: ReviewSuggestion): ReviewCopyBlock[] {
 	return operationSupport[suggestion.operation].getCopyBlocks(suggestion as never);
+}
+
+export function isSuggestionResolved(suggestion: ReviewSuggestion): boolean {
+	if (suggestion.status === "accepted") {
+		return true;
+	}
+
+	return [
+		suggestion.location.primary,
+		suggestion.location.target,
+		suggestion.location.anchor,
+	].some((target) => target?.matchType === "already_applied");
+}
+
+export function getSuggestionVisualState(suggestion: ReviewSuggestion): ReviewSuggestionVisualState {
+	if (suggestion.status === "accepted") {
+		return "accepted";
+	}
+
+	if (suggestion.status === "rejected") {
+		return "rejected";
+	}
+
+	if (isSuggestionResolved(suggestion)) {
+		return "resolved";
+	}
+
+	return suggestion.status;
 }
 
 export function canApplySuggestionDirectly(suggestion: ReviewSuggestion): boolean {
