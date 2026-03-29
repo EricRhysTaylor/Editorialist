@@ -41,7 +41,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const shell = containerEl.createDiv({ cls: "editorialist-settings__shell" });
 		const tabBar = shell.createDiv({ cls: "editorialist-settings__tabs" });
 		this.createTab(tabBar, "core", "settings", "Core");
-		this.createTab(tabBar, "reviewer", "users", "Reviewers");
+		this.createTab(tabBar, "reviewer", "users", "Contributors");
 
 		const coreContent = shell.createDiv({ cls: "editorialist-settings__tab-content" });
 		const reviewerContent = shell.createDiv({ cls: "editorialist-settings__tab-content" });
@@ -143,7 +143,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 		const row = card.createDiv({ cls: "editorialist-settings__rt-card-row" });
 		const content = row.createDiv({ cls: "editorialist-settings__rt-card-content" });
-		const badge = content.createSpan({ cls: "editorialist-settings__hero-intro-badge" });
+		const badge = content.createSpan({ cls: "editorialist-settings__hero-intro-badge editorialist-settings__rt-card-badge" });
 		const badgeIcon = badge.createSpan({ cls: "editorialist-settings__hero-intro-badge-icon" });
 		setIcon(badgeIcon, "shell");
 		badge.createSpan({
@@ -156,7 +156,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 		content.createDiv({
 			cls: "editorialist-settings__rt-card-body",
-			text: "Editorialist works with any notes, but it becomes much more powerful when your manuscript is structured into scenes.",
+			text: "Editorialist works with any notes, but it becomes even more useful when it is combined with the visual architecture of the Radial Timeline plugin for Obsidian and its scene and book project organization.",
 		});
 
 		const list = content.createEl("ul", { cls: "editorialist-settings__rt-card-list" });
@@ -280,7 +280,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const body = this.createSection(
 			parent,
 			`${vocabulary.singularLabel} inventory`,
-			`Every ${vocabulary.singularLabelLower} that currently carries Editorialist revision notes or has been cleaned and retained in the metadata log.`,
+			`${vocabulary.pluralLabel} with revision notes and their current progress.`,
 			"table-properties",
 		);
 
@@ -349,51 +349,52 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const table = tableWrap.createEl("table", { cls: "editorialist-settings__inventory-table" });
 		const head = table.createTHead().insertRow();
 		[
+			"",
 			vocabulary.singularLabel,
-			"Book / path",
-			"Batches",
-			"Pending",
-			"Unresolved",
-			"Deferred",
-			"Accepted",
-			"Status",
-			"Last updated",
-			"Actions",
-		].forEach((label) => head.createEl("th", { text: label }));
+			"Revision notes",
+			"Open",
+			"Done",
+		].forEach((label, index) => {
+			const cell = head.createEl("th", { text: label });
+			if (index === 0) {
+				cell.addClass("editorialist-settings__inventory-col-completion");
+				cell.setAttribute("aria-label", "Complete");
+			}
+			if (index >= 2) {
+				cell.addClass("editorialist-settings__inventory-col-number");
+			}
+		});
 
 		const bodyEl = table.createTBody();
 		for (const record of inventory) {
+			const openCount = record.pendingCount + record.unresolvedCount + record.deferredCount;
 			const row = bodyEl.insertRow();
-			row.createEl("td", { text: record.noteTitle });
-			row.createEl("td", { text: this.formatInventoryPathHint(record) });
-			row.createEl("td", { text: `${record.batchCount}` });
-			row.createEl("td", { text: `${record.pendingCount}` });
-			row.createEl("td", { text: `${record.unresolvedCount}` });
-			row.createEl("td", { text: `${record.deferredCount}` });
-			row.createEl("td", { text: `${record.acceptedCount}` });
-			const statusCell = row.createEl("td");
-			statusCell.createSpan({
-				cls: `editorialist-settings__inventory-status editorialist-settings__inventory-status--${record.status}`,
-				text: this.formatInventoryStatus(record.status),
-			});
-			row.createEl("td", { text: this.formatDateTime(record.lastUpdated) });
-
-			const actionsCell = row.createEl("td");
-			const actionGroup = actionsCell.createDiv({ cls: "editorialist-settings__inventory-row-actions" });
-			this.createActionButton(actionGroup, "file-text", `Open ${vocabulary.singularLabelLower}`, async () => {
-				await this.plugin.openSceneNote(record.notePath);
-			});
-			this.createActionButton(
-				actionGroup,
-				"play",
-				`Resume ${vocabulary.singularLabelLower} review`,
-				async () => {
-				await this.plugin.startOrResumeReviewForNote(record.notePath);
+			const completionCell = row.createEl("td", { cls: "editorialist-settings__inventory-col-completion" });
+			const completionIcon = completionCell.createSpan({
+				cls: `editorialist-settings__inventory-completion${openCount === 0 ? " is-complete" : ""}`,
+				attr: {
+					"aria-label": openCount === 0 ? `${record.noteTitle} complete` : `${record.noteTitle} still open`,
 				},
-			);
-			this.createActionButton(actionGroup, "brush-cleaning", `Clean this ${vocabulary.singularLabelLower}`, async () => {
-				await this.plugin.cleanSceneReviewNote(record.notePath);
-				void this.displayAsync(false);
+			});
+			if (openCount === 0) {
+				setIcon(completionIcon, "check");
+			}
+
+			row.createEl("td", {
+				cls: "editorialist-settings__inventory-col-scene",
+				text: record.noteTitle,
+			});
+			row.createEl("td", {
+				cls: "editorialist-settings__inventory-col-number",
+				text: `${record.batchCount}`,
+			});
+			row.createEl("td", {
+				cls: "editorialist-settings__inventory-col-number",
+				text: `${openCount}`,
+			});
+			row.createEl("td", {
+				cls: "editorialist-settings__inventory-col-number",
+				text: `${record.acceptedCount}`,
 			});
 		}
 	}
@@ -401,13 +402,20 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private renderContributorsSection(parent: HTMLElement): void {
 		const body = this.createSection(
 			parent,
-			"Reviewer directory",
-			"People and AI tools that have contributed revision notes.",
+			"Contributor directory",
+			"People and AI tools that have contributed revision notes across your manuscript.",
 			"users",
 		);
+		body.parentElement?.addClass("editorialist-settings__section--primary");
+		body.parentElement?.addClass("editorialist-settings__section--contributors");
+
+		const profiles = this.plugin.getSortedReviewerProfiles();
+		body.createDiv({
+			cls: "editorialist-settings__section-meta",
+			text: `${profiles.length} contributor${profiles.length === 1 ? "" : "s"}`,
+		});
 
 		const list = body.createDiv({ cls: "editorialist-settings__contributors" });
-		const profiles = this.plugin.getSortedReviewerProfiles();
 		if (profiles.length === 0) {
 			list.createDiv({
 				cls: "editorialist-settings__empty",
@@ -426,10 +434,18 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				cls: "editorialist-settings__contributor-title",
 				text: profile.displayName,
 			});
-			text.createDiv({
+			const roleLine = text.createDiv({ cls: "editorialist-settings__contributor-role-line" });
+			roleLine.createSpan({
 				cls: "editorialist-settings__contributor-role",
 				text: formatReviewerTypeLabel(profile.reviewerType),
 			});
+			const providerModel = formatContributorProviderModel(profile);
+			if (providerModel) {
+				roleLine.createSpan({
+					cls: "editorialist-settings__contributor-source",
+					text: providerModel,
+				});
+			}
 
 			const starButton = new ButtonComponent(identity)
 				.setTooltip(profile.isStarred ? "Unstar contributor" : "Star contributor")
@@ -442,13 +458,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			}
 			setIcon(starButton.buttonEl, "star");
 
-			const providerModel = formatContributorProviderModel(profile);
-			if (providerModel) {
-				card.createDiv({
-					cls: "editorialist-settings__contributor-meta",
-					text: providerModel,
-				});
-			}
 			card.createDiv({
 				cls: "editorialist-settings__contributor-stats",
 				text: this.formatContributorStats(profile),
@@ -460,6 +469,16 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				});
 			}
 		}
+
+		const fillerCount = (4 - (profiles.length % 4)) % 4;
+		for (let index = 0; index < fillerCount; index += 1) {
+			list.createDiv({
+				cls: "editorialist-settings__contributor editorialist-settings__contributor--filler",
+				attr: {
+					"aria-hidden": "true",
+				},
+			});
+		}
 	}
 
 	private renderMetadataSection(parent: HTMLElement): void {
@@ -469,6 +488,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			"Save your reviewer history, revision activity, and scene progress without exporting manuscript text.",
 			"database-backup",
 		);
+		body.parentElement?.addClass("editorialist-settings__section--utility");
 		const card = body.createDiv({ cls: "editorialist-settings__maintenance-card" });
 		card.createDiv({
 			cls: "editorialist-settings__maintenance-title",
@@ -496,19 +516,28 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			"Keep Editorialist records tidy without touching accepted manuscript edits.",
 			"wrench",
 		);
-		const actionCard = body.createDiv({
-			cls: "editorialist-settings__maintenance-card",
+		body.parentElement?.addClass("editorialist-settings__section--maintenance");
+
+		const actionRow = body.createDiv({
+			cls: "editorialist-settings__maintenance-row",
 		});
-		actionCard.createDiv({
+		const actionInfo = actionRow.createDiv({
+			cls: "editorialist-settings__maintenance-info",
+		});
+		actionInfo.createDiv({
 			cls: "editorialist-settings__maintenance-title",
-			text: "Clear cleaned batch records",
+			text: "Clear cleaned records",
 		});
-		actionCard.createDiv({
+		actionInfo.createDiv({
 			cls: "editorialist-settings__maintenance-description",
-			text: "Remove registry entries for imported batches that were already cleaned.",
+			text: "Remove saved records for revision passes that are already cleaned.",
+		});
+		actionInfo.createDiv({
+			cls: "editorialist-settings__maintenance-note",
+			text: "This does not affect your manuscript.",
 		});
 
-		const actions = actionCard.createDiv({ cls: "editorialist-settings__maintenance-actions" });
+		const actions = actionRow.createDiv({ cls: "editorialist-settings__maintenance-actions" });
 		const clearButton = this.createActionButton(actions, "trash-2", "Clear records", async () => {
 			const removedCount = await this.plugin.clearCleanedSweepRecords();
 			void this.displayAsync(false);
@@ -519,11 +548,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			new Notice(`Cleared ${removedCount} cleaned batch record${removedCount === 1 ? "" : "s"}.`);
 		});
 		clearButton.addClass("editorialist-settings__maintenance-button");
-
-		actionCard.createDiv({
-			cls: "editorialist-settings__maintenance-note",
-			text: "Contributor alias management and broader cleanup tools can expand here later.",
-		});
 	}
 
 	private createTab(parent: HTMLElement, id: "core" | "reviewer", icon: string, label: string): void {
@@ -622,13 +646,23 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private formatContributorStats(profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number]): string {
 		const stats = profile.stats;
 		if (!stats) {
-			return "No activity yet";
+			return "No contribution history yet";
 		}
 
 		const acceptedRate = stats.totalSuggestions > 0
 			? Math.round((stats.accepted / stats.totalSuggestions) * 100)
 			: 0;
-		return `${stats.totalSuggestions} suggestions • ${stats.accepted} accepted${stats.totalSuggestions > 0 ? ` (${acceptedRate}%)` : ""}`;
+		const parts = [
+			`${stats.totalSuggestions} contribution${stats.totalSuggestions === 1 ? "" : "s"}`,
+			`${stats.accepted} accepted`,
+		];
+		if (stats.totalSuggestions > 0) {
+			parts.push(`${acceptedRate}% acceptance`);
+		}
+		if (stats.totalSuggestions >= 5 && acceptedRate >= 80) {
+			parts.push("trusted");
+		}
+		return parts.join(" • ");
 	}
 
 	private createContributorAvatar(
@@ -663,27 +697,4 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		return parts.map((part) => part[0]?.toUpperCase() ?? "").join("");
 	}
 
-	private formatInventoryPathHint(record: SceneReviewRecord): string {
-		return record.bookLabel ?? record.notePath;
-	}
-
-	private formatInventoryStatus(status: SceneReviewRecord["status"]): string {
-		switch (status) {
-			case "in_progress":
-				return "In progress";
-			case "completed":
-				return "Completed";
-			case "cleaned":
-				return "Cleaned";
-		}
-	}
-
-	private formatDateTime(timestamp: number): string {
-		return new Date(timestamp).toLocaleString([], {
-			month: "short",
-			day: "numeric",
-			hour: "numeric",
-			minute: "2-digit",
-		});
-	}
 }

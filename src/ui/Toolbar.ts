@@ -1,7 +1,8 @@
 import { ButtonComponent, setIcon } from "obsidian";
 import type EditorialistPlugin from "../main";
 
-export interface ToolbarState {
+export interface ReviewToolbarState {
+	mode: "review";
 	canApply: boolean;
 	canDefer: boolean;
 	canNext: boolean;
@@ -21,6 +22,25 @@ export interface ToolbarState {
 	unresolvedCount: number;
 }
 
+export interface HandoffToolbarState {
+	mode: "handoff";
+	currentLabel: string;
+	isFinal: boolean;
+	primaryActionLabel: string;
+	progressLabel: string;
+	secondaryActionLabel?: string;
+	title: string;
+}
+
+export interface PanelToolbarState {
+	mode: "panel";
+	progressLabel?: string;
+	remainingLabel: string;
+	title: string;
+}
+
+export type ToolbarState = ReviewToolbarState | HandoffToolbarState | PanelToolbarState;
+
 export function createReviewToolbarElement(
 	plugin: EditorialistPlugin,
 	state: ToolbarState,
@@ -32,6 +52,50 @@ export function createReviewToolbarElement(
 	const toolbar = overlay.createDiv({ cls: "editorialist-toolbar" });
 	markAsNonEditorSurface(toolbar);
 	toolbar.setAttribute("role", "toolbar");
+
+	if (state.mode === "handoff") {
+		toolbar.addClass("editorialist-toolbar--handoff");
+		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
+		markAsNonEditorSurface(meta);
+		renderMetaSegment(meta, state.title, "editorialist-toolbar__meta-segment--positive");
+		renderMetaSeparator(meta);
+		renderMetaSegment(meta, state.progressLabel);
+
+		const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
+		buildActionButton(
+			actions,
+			state.primaryActionLabel,
+			state.isFinal ? "check-check" : "arrow-right",
+			() => {
+				if (state.isFinal) {
+					void plugin.finishGuidedSweep();
+					return;
+				}
+
+				void plugin.continueGuidedSweep();
+			},
+		);
+		if (state.secondaryActionLabel) {
+			buildActionButton(actions, state.secondaryActionLabel, "flag", () => {
+				void plugin.finishGuidedSweep();
+			}, true);
+		}
+		return overlay;
+	}
+
+	if (state.mode === "panel") {
+		toolbar.addClass("editorialist-toolbar--panel");
+		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
+		markAsNonEditorSurface(meta);
+		renderMetaSegment(meta, state.title);
+		if (state.progressLabel) {
+			renderMetaSeparator(meta);
+			renderMetaSegment(meta, state.progressLabel);
+		}
+		renderMetaSeparator(meta);
+		renderMetaSegment(meta, state.remainingLabel);
+		return overlay;
+	}
 
 	const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
 	markAsNonEditorSurface(meta);
@@ -125,7 +189,6 @@ function buildButton(
 	markAsNonEditorSurface(button.buttonEl);
 	const iconEl = button.buttonEl.createSpan({ cls: "editorialist-toolbar__button-icon" });
 	markAsNonEditorSurface(iconEl);
-	let isAlternateActive = false;
 	let trackingDepth = 0;
 	let modifierTracking: AbortController | null = null;
 	let removalObserver: MutationObserver | null = null;
@@ -139,7 +202,6 @@ function buildButton(
 	}
 
 	const applyPresentation = (useAlternate: boolean): void => {
-		isAlternateActive = useAlternate;
 		const nextLabel = useAlternate ? alternateAction?.label ?? label : label;
 		const nextIcon = useAlternate ? alternateAction?.icon ?? icon : icon;
 		button.setTooltip(nextLabel);
@@ -206,6 +268,30 @@ function buildButton(
 			return;
 		}
 
+		onClick();
+	});
+}
+
+function buildActionButton(
+	parent: HTMLElement,
+	label: string,
+	icon: string,
+	onClick: () => void,
+	isSecondary = false,
+): void {
+	const button = new ButtonComponent(parent).setTooltip(label);
+	button.buttonEl.addClass("editorialist-toolbar__button", "editorialist-toolbar__button--text");
+	if (isSecondary) {
+		button.buttonEl.addClass("editorialist-toolbar__button--secondary");
+	}
+	markAsNonEditorSurface(button.buttonEl);
+	button.buttonEl.setAttribute("aria-label", label);
+	const iconEl = button.buttonEl.createSpan({ cls: "editorialist-toolbar__button-icon" });
+	markAsNonEditorSurface(iconEl);
+	setIcon(iconEl, icon);
+	const labelEl = button.buttonEl.createSpan({ cls: "editorialist-toolbar__button-label", text: label });
+	markAsNonEditorSurface(labelEl);
+	bindImmediateAction(button.buttonEl, () => {
 		onClick();
 	});
 }

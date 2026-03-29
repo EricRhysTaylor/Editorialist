@@ -11,6 +11,9 @@ export interface ClipboardReviewBatch {
 export interface EditorialistModalOptions {
 	activeNoteLabel?: string;
 	currentNoteHasReviewBlock: boolean;
+	currentNoteStatus?: "ready" | "completed";
+	nextNoteLabel?: string;
+	noteUnitLabel?: "note" | "scene";
 	onCopyTemplate: () => Promise<void>;
 	onImportBatch: (batch: ReviewImportBatch, startReview: boolean) => Promise<void>;
 	onImportRawToActiveNote: (rawText: string, startReview: boolean) => Promise<void>;
@@ -18,6 +21,7 @@ export interface EditorialistModalOptions {
 	onLoadClipboardBatch: () => Promise<ClipboardReviewBatch | null>;
 	onOpenReviewPanel: () => Promise<void>;
 	onStartReviewInCurrentNote: () => Promise<void>;
+	onStartReviewInNextNote: () => Promise<void>;
 }
 
 type ClipboardState = "checking" | "ready" | "empty";
@@ -31,7 +35,7 @@ interface DetectionItem {
 	disabled?: boolean;
 	emphasized?: boolean;
 	icon: string;
-	id: "active-book" | "clipboard" | "current-note" | "template";
+	id: "active-book" | "clipboard" | "current-note" | "next-note" | "template";
 	label: string;
 	tone: DetectionTone;
 }
@@ -166,16 +170,8 @@ export class EditorialistModal extends Modal {
 		this.renderDetectionGrid(card);
 		this.renderSecondaryActions(card, [
 			{
-				icon: "clipboard",
-				label: this.showManualPaste ? "Hide pasted notes" : "Paste formatted revision notes",
-				onClick: async () => {
-					this.showManualPaste = !this.showManualPaste;
-					this.render();
-				},
-			},
-			{
-				icon: "navigation",
-				label: "Open panel",
+				icon: "list-todo",
+				label: "Open revisions side-panel",
 				onClick: async () => {
 					await this.options.onOpenReviewPanel();
 					this.close();
@@ -381,8 +377,12 @@ export class EditorialistModal extends Modal {
 	}
 
 	private renderDetectionGrid(parent: HTMLElement, batch?: ReviewImportBatch): void {
+		const items = this.getDetectionItems(batch);
 		const grid = parent.createDiv({ cls: "editorialist-control-modal__detection-grid" });
-		for (const item of this.getDetectionItems(batch)) {
+		if (items.length >= 3) {
+			grid.addClass("editorialist-control-modal__detection-grid--triple");
+		}
+		for (const item of items) {
 			const card = grid.createDiv({
 				cls: `editorialist-control-modal__detection editorialist-control-modal__detection--${item.tone}${item.emphasized ? " is-emphasized" : ""}${item.disabled ? " is-disabled" : ""}`,
 			});
@@ -420,14 +420,15 @@ export class EditorialistModal extends Modal {
 
 	private renderSelectionSummary(parent: HTMLElement, batch?: ReviewImportBatch): void {
 		const items = this.getDetectionItems(batch);
-		const availableCount = items.filter((item) => item.tone === "success" && !item.disabled).length;
+		const availableCount = items.filter((item) => !item.disabled).length;
+		const selectionSummary = this.getSelectionSummary(items);
 		parent.createDiv({
 			cls: "editorialist-control-modal__card-title",
-			text: "Please make your selection",
+			text: selectionSummary.title,
 		});
 		parent.createDiv({
 			cls: "editorialist-control-modal__card-copy",
-			text: availableCount === 2 ? "2 options available" : "1 option available",
+			text: `${availableCount} option${availableCount === 1 ? "" : "s"} available${selectionSummary.copy ? ` • ${selectionSummary.copy}` : ""}`,
 		});
 	}
 
@@ -533,9 +534,42 @@ export class EditorialistModal extends Modal {
 		return this.getClipboardTone();
 	}
 
+	private getSelectionSummary(items: DetectionItem[]): { copy?: string; title: string } {
+		const currentUnitLabel = this.options.noteUnitLabel ?? "note";
+		const nextLabel = this.options.nextNoteLabel;
+		const isCurrentComplete = this.options.currentNoteHasReviewBlock && this.options.currentNoteStatus === "completed";
+		if (isCurrentComplete && nextLabel) {
+			return {
+				title: `Current ${currentUnitLabel} complete`,
+				copy: `Continue with ${nextLabel} or reopen this ${currentUnitLabel}`,
+			};
+		}
+
+		if (isCurrentComplete) {
+			return {
+				title: `Current ${currentUnitLabel} complete`,
+				copy: `This ${currentUnitLabel} is already processed`,
+			};
+		}
+
+		if (items.some((item) => item.id === "next-note")) {
+			return {
+				title: "Please make your selection",
+				copy: `Continue with the next ${currentUnitLabel} when you are ready`,
+			};
+		}
+
+		return {
+			title: "Please make your selection",
+		};
+	}
+
 	private getDetectionItems(batch?: ReviewImportBatch): DetectionItem[] {
 		const activeBatch = this.clipboardBatch?.batch ?? batch;
 		const localNoteBatch = activeBatch ? this.isLocalNoteBatch(activeBatch) : false;
+		const currentUnitLabel = this.options.noteUnitLabel ?? "note";
+		const currentNoteStatus = this.options.currentNoteStatus ?? "ready";
+		const isCurrentComplete = currentNoteStatus === "completed";
 		const clipboardDescription =
 			this.clipboardState === "ready"
 				? "Formatted revision notes found"
@@ -544,31 +578,47 @@ export class EditorialistModal extends Modal {
 					: "Checking clipboard";
 
 		if (this.options.currentNoteHasReviewBlock) {
-			return [
+			const items: DetectionItem[] = [
 				{
 					actionLabel: "Start review in current note",
-					actionHint: "→ Start review",
-					emphasized: true,
+					actionHint: isCurrentComplete ? `→ Open completed ${currentUnitLabel}` : "→ Start review",
+					emphasized: !isCurrentComplete,
 					icon: "file-text",
 					id: "current-note",
-					label: this.options.activeNoteLabel ? `Current note: ${this.options.activeNoteLabel}` : "Current note",
-					description: "Formatted revision notes found",
-					tone: "success",
-				},
-				{
-					actionLabel: this.clipboardState === "ready" ? "Preview clipboard notes" : "Paste formatted revision notes",
-					actionHint:
-						this.clipboardState === "ready"
-							? "→ Preview notes"
-							: "→ Paste review",
-					emphasized: false,
-					icon: "clipboard",
-					id: "clipboard",
-					label: "Clipboard",
-					description: clipboardDescription,
-					tone: this.getClipboardTone(),
+					label: this.options.activeNoteLabel ? `Current ${currentUnitLabel}: ${this.options.activeNoteLabel}` : `Current ${currentUnitLabel}`,
+					description: isCurrentComplete ? "All revision notes already processed" : "Formatted revision notes found",
+					tone: isCurrentComplete ? "muted" : "success",
 				},
 			];
+
+			if (isCurrentComplete && this.options.nextNoteLabel) {
+				items.push({
+					actionLabel: `Open next ${currentUnitLabel}`,
+					actionHint: `→ Open next ${currentUnitLabel}`,
+					emphasized: true,
+					icon: "arrow-right",
+					id: "next-note",
+					label: `Next ${currentUnitLabel}: ${this.options.nextNoteLabel}`,
+					description: `Continue review in the next ${currentUnitLabel}`,
+					tone: "success",
+				});
+			}
+
+			items.push({
+				actionLabel: this.clipboardState === "ready" ? "Preview clipboard notes" : "Paste formatted revision notes",
+				actionHint:
+					this.clipboardState === "ready"
+						? "→ Preview notes"
+						: "→ Paste review",
+				emphasized: false,
+				icon: "clipboard",
+				id: "clipboard",
+				label: "Clipboard",
+				description: clipboardDescription,
+				tone: this.getClipboardTone(),
+			});
+
+			return items;
 		}
 
 		if (this.clipboardBatch || batch) {
@@ -652,6 +702,12 @@ export class EditorialistModal extends Modal {
 			}
 
 			await this.options.onStartReviewInCurrentNote();
+			this.close();
+			return;
+		}
+
+		if (id === "next-note") {
+			await this.options.onStartReviewInNextNote();
 			this.close();
 			return;
 		}

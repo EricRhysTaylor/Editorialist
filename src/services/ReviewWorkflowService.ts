@@ -4,7 +4,6 @@ import type { ReviewRegistryService } from "./ReviewRegistryService";
 
 interface ReviewWorkflowHost {
 	clearReviewSelection: () => Promise<void>;
-	confirmSweepCompletion: () => Promise<"cleanup" | "keep" | null>;
 	cleanupBatchById: (batchId: string) => Promise<void>;
 	notify: (message: string) => void;
 	openNoteForReview: (filePath: string) => Promise<void>;
@@ -108,7 +107,6 @@ export class ReviewWorkflowService {
 			return;
 		}
 
-		this.host.notify("Scene complete. Continuing to next scene.");
 		await this.registry.updateSweepRegistry(guidedSweep.batchId, {
 			currentNotePath: nextNotePath,
 			status: "in_progress",
@@ -120,7 +118,7 @@ export class ReviewWorkflowService {
 		await this.openSweepNote(nextNotePath);
 	}
 
-	private async finishGuidedSweep(): Promise<void> {
+	async finishGuidedSweep(): Promise<void> {
 		const guidedSweep = this.store.getGuidedSweep();
 		if (!guidedSweep) {
 			return;
@@ -130,12 +128,6 @@ export class ReviewWorkflowService {
 			status: "completed",
 		});
 		this.store.setGuidedSweep(null);
-		const choice = await this.host.confirmSweepCompletion();
-		if (choice === "cleanup") {
-			await this.host.cleanupBatchById(guidedSweep.batchId);
-			return;
-		}
-
 		this.host.notify("Guided sweep complete.");
 	}
 

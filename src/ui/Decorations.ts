@@ -3,12 +3,12 @@ import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
 
 export interface ReviewDecorationSnapshot {
 	highlight: { end: number; start: number } | null;
-	highlightTone: "active" | "applied";
+	highlightTone: "active" | "muted";
 }
 
 interface ReviewDecorationState {
 	highlight: { end: number; start: number } | null;
-	highlightTone: "active" | "applied";
+	highlightTone: "active" | "muted";
 }
 
 const syncReviewDecorationsEffect = StateEffect.define<ReviewDecorationSnapshot>();
@@ -65,8 +65,8 @@ function buildDecorations(state: ReviewDecorationState): DecorationSet {
 			state.highlight.end,
 			Decoration.mark({
 				class:
-					state.highlightTone === "applied"
-						? "editorialist-match-highlight editorialist-match-highlight--applied"
+					state.highlightTone === "muted"
+						? "editorialist-match-highlight editorialist-match-highlight--muted"
 						: "editorialist-match-highlight editorialist-match-highlight--active",
 			}),
 		);

@@ -85,6 +85,14 @@ export class ReviewRegistryService {
 		};
 	}
 
+	usesSceneTerminology(notePath?: string): boolean {
+		if (notePath) {
+			return this.isSceneClassNote(notePath);
+		}
+
+		return Boolean(this.activeBookScope.sourceFolder);
+	}
+
 	getSweepRegistryEntries(): ReviewSweepRegistryEntry[] {
 		return Object.values(this.sweepRegistry).sort((left, right) => right.updatedAt - left.updatedAt);
 	}
@@ -385,7 +393,7 @@ export class ReviewRegistryService {
 				acceptedCount,
 				rejectedCount,
 				status:
-					pendingCount === 0 && unresolvedCount === 0 && deferredCount === 0
+					pendingCount === 0 && unresolvedCount === 0
 						? "completed"
 						: "in_progress",
 				lastUpdated: Math.max(file.stat.mtime, lastDecisionAt),

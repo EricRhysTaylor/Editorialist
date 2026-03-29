@@ -74,11 +74,46 @@ export class ReviewPanel extends ItemView {
 			shortcut.createEl("kbd", { text: "⌘" });
 			shortcut.createEl("kbd", { text: "P" });
 			empty.appendText(" ");
-			empty.createSpan({
+			const launchLink = empty.createEl("button", {
+				cls: "editorialist-panel__command-link",
+				attr: {
+					type: "button",
+					title: "Open Editorialist begin",
+				},
+			});
+			launchLink.createSpan({
 				cls: "editorialist-panel__command-name",
 				text: "Editorialist begin",
 			});
+			this.bindImmediateAction(launchLink, () => {
+				void this.plugin.openEditorialistModal();
+			});
 			empty.appendText(" to import formatted revision notes or continue in this note.");
+
+			const launchTarget = this.plugin.getNextLogicalReviewLaunchTarget();
+			if (launchTarget) {
+				const next = header.createDiv({ cls: "editorialist-panel__launch-target" });
+				next.createDiv({
+					cls: "editorialist-panel__launch-target-label",
+					text: `Next ${launchTarget.unitLabel}`,
+				});
+				const nextButton = next.createEl("button", {
+					cls: "editorialist-panel__launch-target-link",
+					attr: {
+						type: "button",
+						title: `Open ${launchTarget.label}`,
+					},
+				});
+				nextButton.createSpan({
+					cls: "editorialist-panel__launch-target-text",
+					text: launchTarget.label,
+				});
+				const nextIcon = nextButton.createSpan({ cls: "editorialist-panel__launch-target-icon" });
+				setIcon(nextIcon, "arrow-right");
+				this.bindImmediateAction(nextButton, () => {
+					void this.plugin.startOrResumeReviewForNote(launchTarget.notePath);
+				});
+			}
 			return;
 		}
 
@@ -113,6 +148,19 @@ export class ReviewPanel extends ItemView {
 			return;
 		}
 
+		const handoff = this.plugin.getGuidedSweepHandoffState();
+		if (handoff) {
+			this.contentEl.createDiv({ cls: "editorialist-panel__divider" });
+			this.renderSweepHandoffCard(handoff);
+			return;
+		}
+
+		const panelOnlyState = this.plugin.getPanelOnlyReviewState();
+		if (panelOnlyState) {
+			this.contentEl.createDiv({ cls: "editorialist-panel__divider" });
+			this.renderPanelOnlyState(panelOnlyState);
+		}
+
 		if (this.shouldShowReviewerFilters(session.suggestions)) {
 			this.contentEl.createDiv({ cls: "editorialist-panel__divider" });
 			this.renderFilters();
@@ -132,23 +180,33 @@ export class ReviewPanel extends ItemView {
 		}
 
 		let selectedCard: HTMLElement | null = null;
+		let panelPrimaryCard: HTMLElement | null = null;
+		const panelPrimarySuggestionId = panelOnlyState
+			? this.getPanelPrimarySuggestionId(filteredSuggestions, selectedSuggestionId)
+			: null;
 		filteredSuggestions.forEach((suggestion, index) => {
 			const card = this.renderSuggestionCard(
 				list,
 				suggestion,
 				selectedSuggestionId === suggestion.id,
+				panelPrimarySuggestionId === suggestion.id,
 				index,
 				filteredSuggestions.length,
 			);
 			if (selectedSuggestionId === suggestion.id) {
 				selectedCard = card;
 			}
+			if (panelPrimarySuggestionId === suggestion.id) {
+				panelPrimaryCard = card;
+			}
 		});
 
-		if (selectedCard) {
+		const cardToCenter = (selectedCard ?? panelPrimaryCard) as HTMLElement | null;
+		if (cardToCenter) {
+			const targetCard = cardToCenter;
 			requestAnimationFrame(() => {
-				if (selectedCard?.isConnected) {
-					this.centerCardInScrollView(selectedCard);
+				if (document.body.contains(targetCard)) {
+					this.centerCardInScrollView(targetCard);
 				}
 			});
 		}
@@ -196,10 +254,85 @@ export class ReviewPanel extends ItemView {
 		return reviewerIds.size > 1;
 	}
 
+	private renderSweepHandoffCard(handoff: ReturnType<EditorialistPlugin["getGuidedSweepHandoffState"]>): void {
+		if (!handoff) {
+			return;
+		}
+
+		const card = this.contentEl.createDiv({ cls: "editorialist-panel__handoff" });
+		const header = card.createDiv({ cls: "editorialist-panel__handoff-header" });
+		header.createDiv({
+			cls: "editorialist-panel__handoff-title",
+			text: handoff.title,
+		});
+		header.createDiv({
+			cls: "editorialist-panel__handoff-progress",
+			text: handoff.panelProgressLabel,
+		});
+
+		card.createDiv({
+			cls: "editorialist-panel__handoff-summary",
+			text: handoff.summary,
+		});
+
+		if (handoff.nextLabel && !handoff.isFinal) {
+			const next = card.createDiv({ cls: "editorialist-panel__handoff-next" });
+			next.createSpan({
+				cls: "editorialist-panel__handoff-next-label",
+				text: `Up next: ${handoff.nextLabel}`,
+			});
+		}
+
+		const actions = card.createDiv({ cls: "editorialist-panel__handoff-actions" });
+		const primaryAction = new ButtonComponent(actions)
+			.setButtonText(handoff.primaryActionLabel)
+			.setCta();
+		this.bindImmediateAction(primaryAction.buttonEl, () => {
+			if (handoff.isFinal) {
+				void this.plugin.finishGuidedSweep();
+				return;
+			}
+
+			void this.plugin.continueGuidedSweep();
+		});
+
+		if (handoff.secondaryActionLabel) {
+			const secondaryAction = new ButtonComponent(actions).setButtonText(handoff.secondaryActionLabel);
+			this.bindImmediateAction(secondaryAction.buttonEl, () => {
+				void this.plugin.finishGuidedSweep();
+			});
+		}
+	}
+
+	private renderPanelOnlyState(panelOnlyState: ReturnType<EditorialistPlugin["getPanelOnlyReviewState"]>): void {
+		if (!panelOnlyState) {
+			return;
+		}
+
+		const card = this.contentEl.createDiv({ cls: "editorialist-panel__panel-only" });
+		const header = card.createDiv({ cls: "editorialist-panel__panel-only-header" });
+		const title = header.createDiv({ cls: "editorialist-panel__panel-only-title" });
+		const titleIcon = title.createSpan({ cls: "editorialist-panel__panel-only-title-icon" });
+		setIcon(titleIcon, "panel-right-open");
+		title.createSpan({ text: panelOnlyState.title });
+		if (panelOnlyState.progressLabel) {
+			header.createDiv({
+				cls: "editorialist-panel__panel-only-progress",
+				text: panelOnlyState.progressLabel,
+			});
+		}
+
+		card.createDiv({
+			cls: "editorialist-panel__panel-only-copy",
+			text: panelOnlyState.description,
+		});
+	}
+
 	private renderSuggestionCard(
 		parent: HTMLElement,
 		suggestion: ReviewSuggestion,
 		selected: boolean,
+		panelPrimary: boolean,
 		index: number,
 		total: number,
 	): HTMLElement {
@@ -207,7 +340,7 @@ export class ReviewPanel extends ItemView {
 		const tone = this.plugin.getSuggestionPresentationTone(suggestion);
 
 		const card = parent.createDiv({
-			cls: `editorialist-suggestion editorialist-suggestion--${statusName} editorialist-suggestion--tone-${tone}${selected ? " is-selected" : ""}`,
+			cls: `editorialist-suggestion editorialist-suggestion--${statusName} editorialist-suggestion--tone-${tone}${selected ? " is-selected" : ""}${panelPrimary ? " is-panel-primary" : ""}`,
 		});
 		this.bindImmediateAction(card, () => {
 			void this.plugin.selectSuggestion(suggestion.id);
@@ -224,6 +357,10 @@ export class ReviewPanel extends ItemView {
 		const statusIcon = status.createSpan({ cls: "editorialist-suggestion__label-icon" });
 		setIcon(statusIcon, this.getOperationIcon(suggestion));
 		status.createSpan({
+			cls: "editorialist-suggestion__label-separator",
+			text: "•",
+		});
+		status.createSpan({
 			cls: "editorialist-suggestion__label-text",
 			text: this.toSentenceCase(statusName),
 		});
@@ -231,6 +368,15 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-suggestion__position",
 			text: `${index + 1} of ${total}`,
 		});
+		if (panelPrimary) {
+			const panelFocus = metaPrimary.createDiv({ cls: "editorialist-suggestion__panel-focus" });
+			const panelFocusIcon = panelFocus.createSpan({ cls: "editorialist-suggestion__panel-focus-icon" });
+			setIcon(panelFocusIcon, "list-todo");
+			panelFocus.createSpan({
+				cls: "editorialist-suggestion__panel-focus-text",
+				text: "Continue here",
+			});
+		}
 
 		const hasReviewerMenu = this.needsReviewerMenu(suggestion);
 		const actions = meta.createDiv({ cls: "editorialist-suggestion__actions" });
@@ -283,6 +429,20 @@ export class ReviewPanel extends ItemView {
 		}
 
 		return card;
+	}
+
+	private getPanelPrimarySuggestionId(
+		suggestions: ReviewSuggestion[],
+		selectedSuggestionId: string | null,
+	): string | null {
+		if (
+			selectedSuggestionId &&
+			suggestions.some((suggestion) => suggestion.id === selectedSuggestionId && this.isOpenSuggestion(suggestion))
+		) {
+			return selectedSuggestionId;
+		}
+
+		return suggestions.find((suggestion) => this.isOpenSuggestion(suggestion))?.id ?? null;
 	}
 
 	private renderSuggestionCopy(parent: HTMLElement, suggestion: ReviewSuggestion): void {
@@ -634,11 +794,10 @@ export class ReviewPanel extends ItemView {
 			return false;
 		}
 
-		return Boolean(
-			target.closest(
-				"button, a, input, select, textarea, summary, [role='button'], [contenteditable='true'], .dropdown",
-			),
+		const interactiveAncestor = target.closest(
+			"button, a, input, select, textarea, summary, [role='button'], [contenteditable='true'], .dropdown",
 		);
+		return Boolean(interactiveAncestor && interactiveAncestor !== element);
 	}
 
 	private getFilteredSuggestions(suggestions: ReviewSuggestion[]): ReviewSuggestion[] {
@@ -686,6 +845,10 @@ export class ReviewPanel extends ItemView {
 		return left.source.entryIndex - right.source.entryIndex;
 	}
 
+	private isOpenSuggestion(suggestion: ReviewSuggestion): boolean {
+		return suggestion.status === "pending" || suggestion.status === "deferred" || suggestion.status === "unresolved";
+	}
+
 	private toSentenceCase(value: string): string {
 		return value.charAt(0).toUpperCase() + value.slice(1);
 	}
@@ -700,8 +863,6 @@ export class ReviewPanel extends ItemView {
 				return "minimize-2";
 			case "move":
 				return "arrow-right-left";
-			default:
-				return "circle";
 		}
 	}
 

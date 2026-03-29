@@ -65,6 +65,43 @@ interface LastAppliedChange {
 	suggestionId: string;
 }
 
+interface GuidedSweepHandoffState {
+	currentLabel: string;
+	currentPath: string;
+	isFinal: boolean;
+	nextLabel?: string;
+	nextPath?: string;
+	primaryActionLabel: string;
+	progressLabel: string;
+	panelProgressLabel: string;
+	secondaryActionLabel?: string;
+	summary: string;
+	title: string;
+	unitLabel: "note" | "scene";
+}
+
+interface EditorialistLaunchState {
+	currentNoteHasReviewBlock: boolean;
+	currentNoteStatus?: "ready" | "completed";
+	nextNoteLabel?: string;
+	nextNotePath?: string;
+	noteUnitLabel: "note" | "scene";
+}
+
+interface PanelOnlyReviewState {
+	description: string;
+	progressLabel?: string;
+	remainingCount: number;
+	title: string;
+	unitLabel: "note" | "scene";
+}
+
+interface ReviewLaunchTarget {
+	label: string;
+	notePath: string;
+	unitLabel: "note" | "scene";
+}
+
 export default class EditorialistPlugin extends Plugin {
 	readonly store = new ReviewStore();
 
@@ -83,15 +120,6 @@ export default class EditorialistPlugin extends Plugin {
 			this.store.selectSuggestion(null);
 			await this.revealSelectedSuggestion();
 		},
-		confirmSweepCompletion: async () =>
-			openEditorialistChoiceModal(this.app, {
-				title: "Sweep complete",
-				description: "This guided sweep is complete. Keep the imported review blocks or clean up this batch now.",
-				choices: [
-					{ label: "Keep review blocks", value: "keep" },
-					{ label: "Clean up this batch", value: "cleanup" },
-				],
-			}),
 		cleanupBatchById: async (batchId) => {
 			await this.cleanupReviewBatch(batchId);
 		},
@@ -107,10 +135,11 @@ export default class EditorialistPlugin extends Plugin {
 	private importEngine!: ImportEngine;
 
 	private activeHighlightRange: OffsetRange | null = null;
-	private activeHighlightTone: "active" | "applied" = "active";
+	private activeHighlightTone: "active" | "muted" = "active";
 	private lastAppliedChange: LastAppliedChange | null = null;
 	private toolbarOverlayEl: HTMLElement | null = null;
 	private toolbarOverlayEditorView: EditorView | null = null;
+	private toolbarOverlayState: ToolbarState | null = null;
 	private readonly toolbarOverlayScrollHandler = (): void => {
 		this.positionToolbarOverlay();
 	};
@@ -201,11 +230,11 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		this.store.setSession(hydratedSession, preferredSelectionId);
-		this.selectPreferredSuggestionForSession(preferredSelectionId);
+		this.syncSelectionForSession(hydratedSession, preferredSelectionId);
 		await this.workflow.syncCurrentNote(context.filePath);
 		await this.registry.syncReviewerSignalsForSession(hydratedSession);
 		await this.openReviewPanel();
-		this.revealSelectedSuggestion();
+		await this.revealSelectedSuggestion();
 		if (!suppressNotice) {
 			new Notice(
 				hydratedSession.suggestions.length > 0
@@ -226,9 +255,13 @@ export default class EditorialistPlugin extends Plugin {
 	async openEditorialistModal(): Promise<void> {
 		const context = this.getActiveNoteContext();
 		const selectedText = this.getActiveEditorSelection();
+		const launchState = this.getEditorialistLaunchState(context);
 		new EditorialistModal(this.app, {
 			activeNoteLabel: context?.view.file?.basename,
-			currentNoteHasReviewBlock: Boolean(context && noteContainsReviewBlock(context.text)),
+			currentNoteHasReviewBlock: launchState.currentNoteHasReviewBlock,
+			currentNoteStatus: launchState.currentNoteStatus,
+			nextNoteLabel: launchState.nextNoteLabel,
+			noteUnitLabel: launchState.noteUnitLabel,
 			onCopyTemplate: async () => {
 				await this.copyReviewTemplateToClipboard(selectedText);
 			},
@@ -246,6 +279,9 @@ export default class EditorialistPlugin extends Plugin {
 			},
 			onStartReviewInCurrentNote: async () => {
 				await this.parseCurrentNote({ suppressNotice: true });
+			},
+			onStartReviewInNextNote: async () => {
+				await this.openNextSweepNoteFromLaunch();
 			},
 		}).open();
 	}
@@ -339,6 +375,14 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		await this.selectNextSuggestion();
+	}
+
+	async continueGuidedSweep(): Promise<void> {
+		await this.workflow.advanceGuidedSweep();
+	}
+
+	async finishGuidedSweep(): Promise<void> {
+		await this.workflow.finishGuidedSweep();
 	}
 
 	async rejectSelectedSuggestion(): Promise<void> {
@@ -440,20 +484,33 @@ export default class EditorialistPlugin extends Plugin {
 		await this.registry.clearPersistedReviewDecision(context.filePath, suggestion, { persist: false });
 		this.refreshSessionAfterAcceptedEdit(session, suggestion.id);
 		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), { persist: false });
-		this.store.selectSuggestion(id);
-		this.activeHighlightRange = {
-			start: applyPlan.from,
-			end: appliedEnd,
-		};
-		this.activeHighlightTone = "applied";
 		this.lastAppliedChange = {
 			start: applyPlan.from,
 			end: appliedEnd,
 			notePath: context.filePath,
 			suggestionId: suggestion.id,
 		};
-		this.syncActiveEditorDecorations();
 		await this.registry.syncSceneInventory();
+		const refreshedSession = this.store.getSession();
+		if (this.shouldShowGuidedSweepHandoff(refreshedSession)) {
+			await this.enterGuidedSweepHandoff();
+			return true;
+		}
+
+		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next", id);
+		if (this.getPanelOnlyReviewStateForSession(refreshedSession) && nextSuggestionId) {
+			this.store.selectSuggestion(nextSuggestionId);
+			await this.revealSelectedSuggestion();
+			return true;
+		}
+
+		this.store.selectSuggestion(id);
+		this.activeHighlightRange = {
+			start: applyPlan.from,
+			end: appliedEnd,
+		};
+		this.activeHighlightTone = "muted";
+		this.syncActiveEditorDecorations();
 		return true;
 	}
 
@@ -478,7 +535,9 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		await this.workflow.advanceGuidedSweep();
+		if (this.shouldShowGuidedSweepHandoff(this.store.getSession())) {
+			await this.enterGuidedSweepHandoff();
+		}
 	}
 
 	async deferSuggestion(id: string): Promise<void> {
@@ -502,7 +561,9 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		await this.workflow.advanceGuidedSweep();
+		if (this.shouldShowGuidedSweepHandoff(this.store.getSession())) {
+			await this.enterGuidedSweepHandoff();
+		}
 	}
 
 	async undoLastAppliedSuggestion(): Promise<void> {
@@ -646,7 +707,7 @@ export default class EditorialistPlugin extends Plugin {
 		const parts = [`${session.suggestions.length} suggestions`];
 		const guidedSweep = this.getGuidedSweep();
 		if (guidedSweep?.notePaths.length) {
-			parts.push(`${guidedSweep.notePaths.length} scene${guidedSweep.notePaths.length === 1 ? "" : "s"}`);
+			parts.push(`${guidedSweep.notePaths.length} ${this.getSweepUnitLabel(guidedSweep.notePaths.length, session.notePath)}`);
 			if (guidedSweep.notePaths.length > 1) {
 				parts.push(`${guidedSweep.currentNoteIndex + 1}/${guidedSweep.notePaths.length}`);
 			}
@@ -654,13 +715,107 @@ export default class EditorialistPlugin extends Plugin {
 			const batchId = this.getCurrentBatchId();
 			const entry = this.getSweepRegistryEntry(batchId ?? undefined);
 			if (entry?.importedNotePaths.length) {
-				parts.push(`${entry.importedNotePaths.length} scene${entry.importedNotePaths.length === 1 ? "" : "s"}`);
+				parts.push(`${entry.importedNotePaths.length} ${this.getSweepUnitLabel(entry.importedNotePaths.length, session.notePath)}`);
 			}
 		}
 
 		return {
 			summary: parts.join(" • "),
 			warnings: this.getReviewPanelWarnings(session.notePath),
+		};
+	}
+
+	getGuidedSweepHandoffState(): GuidedSweepHandoffState | null {
+		const guidedSweep = this.getGuidedSweep();
+		const session = this.getReviewSession() ?? this.store.getSession();
+		if (!guidedSweep || !session || !this.shouldShowGuidedSweepHandoff(session)) {
+			return null;
+		}
+
+		const currentPath = guidedSweep.notePaths[guidedSweep.currentNoteIndex] ?? session.notePath;
+		const nextPath = guidedSweep.notePaths[guidedSweep.currentNoteIndex + 1];
+		const isFinal = !nextPath;
+		const unitLabel = this.registry.usesSceneTerminology(currentPath) ? "scene" : "note";
+		const unitTitle = this.toTitleCase(unitLabel);
+		const acceptedCount = session.suggestions.filter((suggestion) => suggestion.status === "accepted").length;
+		const rejectedCount = session.suggestions.filter((suggestion) => suggestion.status === "rejected").length;
+		const deferredCount = session.suggestions.filter((suggestion) => suggestion.status === "deferred").length;
+		const reviewedCount = acceptedCount + rejectedCount;
+		const summaryParts = [`${reviewedCount} reviewed`];
+		if (acceptedCount > 0) {
+			summaryParts.push(`${acceptedCount} accepted`);
+		}
+		if (rejectedCount > 0) {
+			summaryParts.push(`${rejectedCount} rejected`);
+		}
+		if (deferredCount > 0) {
+			summaryParts.push(`${deferredCount} deferred`);
+		}
+
+		return {
+			currentLabel: this.getNoteDisplayLabel(currentPath),
+			currentPath,
+			isFinal,
+			nextLabel: nextPath ? this.getNoteDisplayLabel(nextPath) : undefined,
+			nextPath,
+			primaryActionLabel: isFinal ? "Finish sweep" : `Next ${unitLabel}`,
+			progressLabel: `${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`,
+			panelProgressLabel: `${unitTitle} ${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`,
+			secondaryActionLabel: isFinal ? undefined : "Finish sweep",
+			summary: summaryParts.join(" · "),
+			title: `${unitTitle} complete`,
+			unitLabel,
+		};
+	}
+
+	getPanelOnlyReviewState(): PanelOnlyReviewState | null {
+		return this.getPanelOnlyReviewStateForSession();
+	}
+
+	getNextLogicalReviewLaunchTarget(): ReviewLaunchTarget | null {
+		const context = this.getActiveNoteContext();
+		const launchState = this.getEditorialistLaunchState(context);
+		if (context && launchState.currentNoteHasReviewBlock && launchState.currentNoteStatus === "ready") {
+			return {
+				label: this.getNoteDisplayLabel(context.filePath),
+				notePath: context.filePath,
+				unitLabel: launchState.noteUnitLabel,
+			};
+		}
+
+		if (launchState.nextNotePath && launchState.nextNoteLabel) {
+			return {
+				label: launchState.nextNoteLabel,
+				notePath: launchState.nextNotePath,
+				unitLabel: launchState.noteUnitLabel,
+			};
+		}
+
+		const guidedSweep = this.getGuidedSweep();
+		if (guidedSweep?.notePaths.length) {
+			const candidatePath = guidedSweep.notePaths
+				.slice(guidedSweep.currentNoteIndex)
+				.find((notePath) => this.isSweepableSceneRecord(this.getSceneReviewRecordByPath(notePath)));
+			if (candidatePath) {
+				return {
+					label: this.getNoteDisplayLabel(candidatePath),
+					notePath: candidatePath,
+					unitLabel: this.registry.usesSceneTerminology(candidatePath) ? "scene" : "note",
+				};
+			}
+		}
+
+		const activeBookCandidate =
+			this.getSceneReviewRecords({ activeBookOnly: true }).find((record) => this.isSweepableSceneRecord(record)) ??
+			this.getSceneReviewRecords().find((record) => this.isSweepableSceneRecord(record));
+		if (!activeBookCandidate) {
+			return null;
+		}
+
+		return {
+			label: activeBookCandidate.noteTitle,
+			notePath: activeBookCandidate.notePath,
+			unitLabel: this.registry.usesSceneTerminology(activeBookCandidate.notePath) ? "scene" : "note",
 		};
 	}
 
@@ -944,14 +1099,80 @@ export default class EditorialistPlugin extends Plugin {
 		return view.editor.cm as EditorView;
 	}
 
+	private getEditorialistLaunchState(context: ActiveNoteContext | null): EditorialistLaunchState {
+		const noteUnitLabel = context && this.registry.usesSceneTerminology(context.filePath) ? "scene" : "note";
+		if (!context) {
+			return {
+				currentNoteHasReviewBlock: false,
+				noteUnitLabel,
+			};
+		}
+
+		const previousSession = this.store.getSession();
+		const session = this.registry.applyPersistedReviewState(
+			this.reviewEngine.buildSession(
+				context.filePath,
+				context.text,
+				previousSession?.notePath === context.filePath ? previousSession : null,
+			),
+		);
+		if (!session.hasReviewBlock) {
+			return {
+				currentNoteHasReviewBlock: false,
+				noteUnitLabel,
+			};
+		}
+
+		const batchId = this.registry.resolveCurrentBatchId(this.store.getGuidedSweep()?.batchId ?? null, context.text);
+		const entry = this.registry.getSweepRegistryEntry(batchId ?? undefined);
+		const notePaths = entry ? (entry.sceneOrder.length > 0 ? entry.sceneOrder : entry.importedNotePaths) : [];
+		const currentIndex = notePaths.findIndex((path) => path === context.filePath);
+		const nextNotePath = currentIndex === -1 ? undefined : notePaths[currentIndex + 1];
+
+		return {
+			currentNoteHasReviewBlock: true,
+			currentNoteStatus: this.hasLiveActionableSuggestions(session.suggestions) ? "ready" : "completed",
+			nextNoteLabel: nextNotePath ? this.getNoteDisplayLabel(nextNotePath) : undefined,
+			nextNotePath,
+			noteUnitLabel,
+		};
+	}
+
 	private getToolbarState(hasReviewBlock: boolean): ToolbarState | null {
 		if (!hasReviewBlock) {
 			return null;
 		}
 
 		const session = this.getReviewSession();
+		if (!session) {
+			return null;
+		}
+
+		const handoff = this.getGuidedSweepHandoffState();
+		if (handoff) {
+			return {
+				mode: "handoff",
+				currentLabel: handoff.currentLabel,
+				isFinal: handoff.isFinal,
+				primaryActionLabel: handoff.primaryActionLabel,
+				progressLabel: handoff.progressLabel,
+				secondaryActionLabel: handoff.secondaryActionLabel,
+				title: handoff.title,
+			};
+		}
+
+		const panelOnlyState = this.getPanelOnlyReviewStateForSession(session);
+		if (panelOnlyState) {
+			return {
+				mode: "panel",
+				progressLabel: panelOnlyState.progressLabel,
+				remainingLabel: `${panelOnlyState.remainingCount} remaining`,
+				title: "Panel review remaining",
+			};
+		}
+
 		const selected = this.store.getSelectedSuggestion();
-		if (!session || !selected) {
+		if (!selected) {
 			return null;
 		}
 
@@ -964,12 +1185,14 @@ export default class EditorialistPlugin extends Plugin {
 		const deferredCount = suggestions.filter((suggestion) => suggestion.status === "deferred").length;
 		const canUndoLastAccept = this.shouldShowUndoForSelectedSuggestion(selected.id);
 		const guidedSweep = this.getGuidedSweep();
+		const unitLabel = this.getSweepUnitLabel(guidedSweep?.notePaths.length ?? 0, session.notePath);
 		const sceneProgressLabel =
 			guidedSweep && guidedSweep.notePaths.length > 1
-				? `scene ${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`
+				? `${this.toTitleCase(unitLabel.slice(0, -1))} ${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`
 				: undefined;
 
 		return {
+			mode: "review",
 			hasReviewBlock,
 			completionLabel: this.isSweepComplete(suggestions) ? "sweep complete" : undefined,
 			pendingCount,
@@ -989,6 +1212,48 @@ export default class EditorialistPlugin extends Plugin {
 			operationLabel: selected.operation.toUpperCase(),
 			selectedLabel: selectedIndex === -1 ? "Current suggestion" : `Suggestion ${selectedIndex + 1} of ${suggestions.length}`,
 		};
+	}
+
+	private async openNextSweepNoteFromLaunch(): Promise<void> {
+		const context = this.getActiveNoteContext();
+		if (!context) {
+			new Notice("No active markdown note to continue from.");
+			return;
+		}
+
+		const launchState = this.getEditorialistLaunchState(context);
+		const unitLabel = launchState.noteUnitLabel;
+		if (!launchState.nextNotePath) {
+			new Notice(`No next ${unitLabel} is available.`);
+			return;
+		}
+
+		const batchId = this.registry.resolveCurrentBatchId(this.store.getGuidedSweep()?.batchId ?? null, context.text);
+		const entry = this.registry.getSweepRegistryEntry(batchId ?? undefined);
+		if (!entry) {
+			await this.startOrResumeReviewForNote(launchState.nextNotePath);
+			return;
+		}
+
+		const notePaths = entry.sceneOrder.length > 0 ? entry.sceneOrder : entry.importedNotePaths;
+		const currentNoteIndex = notePaths.findIndex((path) => path === context.filePath);
+		if (currentNoteIndex === -1) {
+			await this.startOrResumeReviewForNote(launchState.nextNotePath);
+			return;
+		}
+
+		this.store.setGuidedSweep({
+			batchId: entry.batchId,
+			currentNoteIndex,
+			notePaths,
+			startedAt: entry.importedAt,
+		});
+		await this.registry.updateSweepRegistry(entry.batchId, {
+			currentNotePath: context.filePath,
+			sceneOrder: notePaths,
+			status: "in_progress",
+		});
+		await this.workflow.advanceGuidedSweep();
 	}
 
 	private syncActiveEditorDecorations(): void {
@@ -1033,7 +1298,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		const preferredSelectionId = this.store.getState().selectedSuggestionId;
 		this.store.setSession(hydratedSession, preferredSelectionId);
-		this.selectPreferredSuggestionForSession(preferredSelectionId);
+		this.syncSelectionForSession(hydratedSession, preferredSelectionId);
 		void this.workflow.syncCurrentNote(context.filePath);
 		void this.registry.syncReviewerSignalsForSession(hydratedSession);
 		this.setDefaultHighlightForSelection();
@@ -1206,6 +1471,7 @@ export default class EditorialistPlugin extends Plugin {
 		if (!suggestion) {
 			this.activeHighlightRange = null;
 			this.activeHighlightTone = "active";
+			this.syncActiveEditorDecorations();
 			return;
 		}
 
@@ -1348,6 +1614,59 @@ export default class EditorialistPlugin extends Plugin {
 		return suggestions[0]?.id ?? null;
 	}
 
+	private shouldShowGuidedSweepHandoff(session?: ReviewSession | null): boolean {
+		const targetSession = session ?? this.getReviewSession();
+		return Boolean(this.getGuidedSweep() && targetSession && !this.hasLiveActionableSuggestions(targetSession.suggestions));
+	}
+
+	private hasLiveActionableSuggestions(suggestions: ReviewSuggestion[]): boolean {
+		return suggestions.some((suggestion) => this.isSuggestionOpen(suggestion));
+	}
+
+	private getPanelOnlyReviewStateForSession(session?: ReviewSession | null): PanelOnlyReviewState | null {
+		const targetSession = session ?? this.getReviewSession();
+		if (!targetSession) {
+			return null;
+		}
+
+		const openSuggestions = targetSession.suggestions.filter((suggestion) => this.isSuggestionOpen(suggestion));
+		if (openSuggestions.length === 0) {
+			return null;
+		}
+
+		if (openSuggestions.some((suggestion) => this.canRevealSuggestionInManuscript(suggestion))) {
+			return null;
+		}
+
+		const guidedSweep = this.getGuidedSweep();
+		const unitLabel = this.registry.usesSceneTerminology(targetSession.notePath) ? "scene" : "note";
+		const unitTitle = this.toTitleCase(unitLabel);
+		const progressLabel =
+			guidedSweep && guidedSweep.notePaths.length > 1
+				? `${unitTitle} ${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`
+				: undefined;
+
+		return {
+			description: "The remaining revision notes don't map to a specific line.",
+			progressLabel,
+			remainingCount: openSuggestions.length,
+			title: "Continue review in the panel",
+			unitLabel,
+		};
+	}
+
+	private getSceneReviewRecordByPath(notePath: string): SceneReviewRecord | null {
+		return this.getSceneReviewRecords().find((record) => record.notePath === notePath) ?? null;
+	}
+
+	private isSweepableSceneRecord(record: SceneReviewRecord | null): boolean {
+		if (!record || record.batchCount === 0 || record.status === "cleaned") {
+			return false;
+		}
+
+		return record.pendingCount > 0 || record.unresolvedCount > 0 || record.deferredCount > 0;
+	}
+
 	private isSweepComplete(suggestions: ReviewSuggestion[]): boolean {
 		return !suggestions.some((suggestion) => this.isSuggestionOpen(suggestion));
 	}
@@ -1375,6 +1694,38 @@ export default class EditorialistPlugin extends Plugin {
 				}
 			: null;
 		this.activeHighlightTone = "active";
+	}
+
+	private syncSelectionForSession(session: ReviewSession, preferredSelectionId?: string | null): void {
+		if (this.shouldShowGuidedSweepHandoff(session)) {
+			this.store.selectSuggestion(null);
+			this.activeHighlightRange = null;
+			this.activeHighlightTone = "active";
+			return;
+		}
+
+		this.selectPreferredSuggestionForSession(preferredSelectionId);
+	}
+
+	private async enterGuidedSweepHandoff(): Promise<void> {
+		this.store.selectSuggestion(null);
+		this.activeHighlightRange = null;
+		this.activeHighlightTone = "active";
+		this.syncActiveEditorDecorations();
+	}
+
+	private getSweepUnitLabel(count: number, notePath?: string): string {
+		const singular = this.registry.usesSceneTerminology(notePath) ? "scene" : "note";
+		return count === 1 ? singular : `${singular}s`;
+	}
+
+	private getNoteDisplayLabel(notePath: string): string {
+		const file = this.app.vault.getAbstractFileByPath(notePath);
+		return file instanceof TFile ? file.basename : notePath.split("/").pop() ?? notePath;
+	}
+
+	private toTitleCase(value: string): string {
+		return value.charAt(0).toUpperCase() + value.slice(1);
 	}
 
 	private async focusEditorRange(start: number, end: number): Promise<void> {
@@ -1430,7 +1781,10 @@ export default class EditorialistPlugin extends Plugin {
 		toolbarState: ToolbarState | null,
 		highlight: OffsetRange | null,
 	): void {
-		if (!editorView || !toolbarState || !highlight || highlight.end <= highlight.start) {
+		const isHandoff = toolbarState?.mode === "handoff";
+		const isPanel = toolbarState?.mode === "panel";
+		const hasHighlight = Boolean(highlight && highlight.end > highlight.start);
+		if (!editorView || !toolbarState || (!isHandoff && !isPanel && !hasHighlight)) {
 			this.destroyToolbarOverlay();
 			return;
 		}
@@ -1450,34 +1804,48 @@ export default class EditorialistPlugin extends Plugin {
 			this.toolbarOverlayEl.remove();
 		}
 
+		this.toolbarOverlayState = toolbarState;
 		this.toolbarOverlayEl = createReviewToolbarElement(this, toolbarState);
 		document.body.appendChild(this.toolbarOverlayEl);
 		this.positionToolbarOverlay();
 	}
 
 	private positionToolbarOverlay(): void {
-		if (!this.toolbarOverlayEl || !this.toolbarOverlayEditorView || !this.activeHighlightRange) {
+		if (!this.toolbarOverlayEl || !this.toolbarOverlayEditorView || !this.toolbarOverlayState) {
 			return;
 		}
 
-		const coords = this.toolbarOverlayEditorView.coordsAtPos(this.activeHighlightRange.start);
 		const editorRect = this.toolbarOverlayEditorView.scrollDOM.getBoundingClientRect();
-		if (!coords) {
-			this.toolbarOverlayEl.style.display = "none";
-			return;
-		}
-
 		const toolbar = this.toolbarOverlayEl.firstElementChild as HTMLElement | null;
 		const toolbarHeight = toolbar?.offsetHeight ?? 0;
 		const left = editorRect.left + editorRect.width / 2;
-		const top = coords.top - 50 - toolbarHeight;
-		const minimumTop = editorRect.top + 8;
-		const maximumTop = editorRect.bottom - 8 - toolbarHeight;
-		const clampedTop = Math.min(Math.max(top, minimumTop), maximumTop);
+		let clampedTop = editorRect.top + 8;
 
-		if (coords.bottom < editorRect.top || coords.top > editorRect.bottom) {
-			this.toolbarOverlayEl.style.display = "none";
-			return;
+		if (this.toolbarOverlayState.mode === "review") {
+			if (!this.activeHighlightRange) {
+				this.toolbarOverlayEl.style.display = "none";
+				return;
+			}
+
+			const coords = this.toolbarOverlayEditorView.coordsAtPos(this.activeHighlightRange.start);
+			if (!coords) {
+				this.toolbarOverlayEl.style.display = "none";
+				return;
+			}
+
+			const top = coords.top - 50 - toolbarHeight;
+			const minimumTop = editorRect.top + 8;
+			const maximumTop = editorRect.bottom - 8 - toolbarHeight;
+			clampedTop = Math.min(Math.max(top, minimumTop), maximumTop);
+
+			if (coords.bottom < editorRect.top || coords.top > editorRect.bottom) {
+				this.toolbarOverlayEl.style.display = "none";
+				return;
+			}
+		} else {
+			const minimumTop = editorRect.top + 12;
+			const maximumTop = editorRect.bottom - 8 - toolbarHeight;
+			clampedTop = Math.min(Math.max(editorRect.top + 20, minimumTop), maximumTop);
 		}
 
 		this.toolbarOverlayEl.style.display = "";
@@ -1490,6 +1858,7 @@ export default class EditorialistPlugin extends Plugin {
 			this.toolbarOverlayEditorView.scrollDOM.removeEventListener("scroll", this.toolbarOverlayScrollHandler);
 			this.toolbarOverlayEditorView = null;
 		}
+		this.toolbarOverlayState = null;
 
 		if (this.toolbarOverlayEl) {
 			this.toolbarOverlayEl.remove();
