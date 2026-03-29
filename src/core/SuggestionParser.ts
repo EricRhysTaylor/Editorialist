@@ -89,8 +89,8 @@ export class SuggestionParser {
 	}
 
 	private parseBlockMetadata(lines: LineWithOffsets[], _blockIndex: number): BlockMetadata {
-		let reviewer = "Unknown reviewer";
-		let reviewerType = "author";
+		let reviewer: string | undefined;
+		let reviewerType: string | undefined;
 		let provider: string | undefined;
 		let model: string | undefined;
 

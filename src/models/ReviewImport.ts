@@ -27,6 +27,7 @@ export interface EditorialistMetadataExport {
 		displayName: string;
 		id: string;
 		kind: string;
+		reviewerType: string;
 		aliases: string[];
 		isStarred?: boolean;
 		model?: string;

@@ -1,14 +1,18 @@
 import { ButtonComponent, DropdownComponent, ItemView, setIcon, type WorkspaceLeaf } from "obsidian";
+import { formatContributorIdentityLabel } from "../core/ContributorIdentity";
 import { getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isMoveSuggestion } from "../core/OperationSupport";
 import type { ReviewSuggestion } from "../models/ReviewSuggestion";
 import type EditorialistPlugin from "../main";
 
 export const REVIEW_PANEL_VIEW_TYPE = "editorialist-review-panel";
 
+type ReviewerMenuAction = "assign" | "create" | "unresolved" | "save_alias";
+
 export class ReviewPanel extends ItemView {
 	private jumpMenuSuggestionId: string | null = null;
 	private reviewerFilterId: string | null = null;
 	private reviewerMenuSuggestionId: string | null = null;
+	private reviewerMenuAction: ReviewerMenuAction | null = null;
 	private reviewerPickerValue: string | null = null;
 	private starredOnly = false;
 
@@ -128,8 +132,14 @@ export class ReviewPanel extends ItemView {
 		}
 
 		let selectedCard: HTMLElement | null = null;
-		filteredSuggestions.forEach((suggestion) => {
-			const card = this.renderSuggestionCard(list, suggestion, selectedSuggestionId === suggestion.id);
+		filteredSuggestions.forEach((suggestion, index) => {
+			const card = this.renderSuggestionCard(
+				list,
+				suggestion,
+				selectedSuggestionId === suggestion.id,
+				index,
+				filteredSuggestions.length,
+			);
 			if (selectedSuggestionId === suggestion.id) {
 				selectedCard = card;
 			}
@@ -155,7 +165,7 @@ export class ReviewPanel extends ItemView {
 		const dropdown = new DropdownComponent(dropdownContainer);
 		dropdown.addOption("", "All reviewers");
 		this.plugin.getSortedReviewerProfiles().forEach((profile) => {
-			dropdown.addOption(profile.id, profile.displayName);
+			dropdown.addOption(profile.id, formatContributorIdentityLabel(profile));
 		});
 		dropdown.setValue(this.reviewerFilterId ?? "");
 		dropdown.onChange((value) => {
@@ -186,7 +196,13 @@ export class ReviewPanel extends ItemView {
 		return reviewerIds.size > 1;
 	}
 
-	private renderSuggestionCard(parent: HTMLElement, suggestion: ReviewSuggestion, selected: boolean): HTMLElement {
+	private renderSuggestionCard(
+		parent: HTMLElement,
+		suggestion: ReviewSuggestion,
+		selected: boolean,
+		index: number,
+		total: number,
+	): HTMLElement {
 		const visualState = this.plugin.getSuggestionPresentationState(suggestion);
 
 		const card = parent.createDiv({
@@ -197,15 +213,59 @@ export class ReviewPanel extends ItemView {
 		});
 
 		const meta = card.createDiv({ cls: "editorialist-suggestion__meta" });
-		meta.createDiv({
+		const metaPrimary = meta.createDiv({ cls: "editorialist-suggestion__meta-primary" });
+		const status = metaPrimary.createDiv({
 			cls: `editorialist-suggestion__label editorialist-suggestion__label--${visualState}`,
-			text: `${suggestion.operation.toUpperCase()} • ${this.toSentenceCase(visualState)}`,
+			attr: {
+				title: `${this.toSentenceCase(suggestion.operation)} suggestion`,
+			},
 		});
-		meta.createDiv({
-			text: `Block ${suggestion.source.blockIndex + 1} • Entry ${suggestion.source.entryIndex + 1}`,
+		const statusIcon = status.createSpan({ cls: "editorialist-suggestion__label-icon" });
+		setIcon(statusIcon, this.getOperationIcon(suggestion));
+		status.createSpan({
+			cls: "editorialist-suggestion__label-text",
+			text: this.toSentenceCase(visualState),
+		});
+		metaPrimary.createDiv({
+			cls: "editorialist-suggestion__position",
+			text: `${index + 1} of ${total}`,
 		});
 
+		const hasReviewerMenu = this.needsReviewerMenu(suggestion);
+		const actions = meta.createDiv({ cls: "editorialist-suggestion__actions" });
+		this.renderControlButton(
+			actions,
+			this.getSourceLabel(suggestion),
+			() => {
+				this.toggleReviewerMenu(suggestion);
+			},
+			{
+				disabled: !hasReviewerMenu,
+				icon: "user",
+				trailingIcon: hasReviewerMenu ? (this.reviewerMenuSuggestionId === suggestion.id ? "chevron-up" : "chevron-down") : undefined,
+				tooltip: this.getSourceLabel(suggestion),
+			},
+		);
+		this.renderControlButton(
+			actions,
+			"",
+			() => {
+				this.toggleJumpMenu(suggestion.id);
+			},
+			{
+				disabled: !this.hasAnyJumpTarget(suggestion.id),
+				icon: "navigation",
+				iconOnly: true,
+				active: this.jumpMenuSuggestionId === suggestion.id,
+				tooltip: this.jumpMenuSuggestionId === suggestion.id ? "Hide jump options" : "Show jump options",
+			},
+		);
+
 		card.createDiv({ cls: "editorialist-suggestion__identity-spacer" });
+		card.createDiv({
+			cls: "editorialist-suggestion__contributor",
+			text: formatContributorIdentityLabel(suggestion.contributor),
+		});
 
 		this.renderSuggestionCopy(card, suggestion);
 
@@ -218,26 +278,6 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-suggestion__reason-text",
 			text: this.getSuggestionReason(suggestion),
 		});
-
-		const actions = card.createDiv({ cls: "editorialist-suggestion__actions" });
-		this.renderButton(
-			actions,
-			this.reviewerMenuSuggestionId === suggestion.id
-				? `Reviewer: ${suggestion.contributor.displayName} ▴`
-				: `Reviewer: ${suggestion.contributor.displayName} ▾`,
-			() => {
-				this.toggleReviewerMenu(suggestion);
-			},
-			{ disabled: !this.needsReviewerMenu(suggestion) },
-		);
-		this.renderButton(
-			actions,
-			this.jumpMenuSuggestionId === suggestion.id ? "Jump ▴" : "Jump ▾",
-			() => {
-				this.toggleJumpMenu(suggestion.id);
-			},
-			{ disabled: !this.hasAnyJumpTarget(suggestion.id), icon: "navigation" },
-		);
 
 		if (this.reviewerMenuSuggestionId === suggestion.id) {
 			this.renderReviewerMenu(card, suggestion);
@@ -264,48 +304,41 @@ export class ReviewPanel extends ItemView {
 		const picker = parent.createDiv({ cls: "editorialist-reviewer-picker" });
 		picker.createDiv({
 			cls: "editorialist-reviewer-picker__label",
-			text: this.getReviewerMenuLabel(suggestion),
+			text: this.getSourceLabel(suggestion),
 		});
 
 		const profiles = this.plugin.getSortedReviewerProfiles();
+		const actionControl = picker.createDiv({ cls: "editorialist-reviewer-picker__control" });
+		const actionDropdown = new DropdownComponent(actionControl);
+		actionDropdown.addOption("", "Choose action");
 		if (profiles.length > 0) {
+			actionDropdown.addOption("assign", "Assign existing");
+		}
+		actionDropdown.addOption("create", "Create new");
+		actionDropdown.addOption("unresolved", "Leave unresolved");
+		if (this.plugin.canSaveReviewerAlias(suggestion.id)) {
+			actionDropdown.addOption("save_alias", "Save raw name as alias");
+		}
+		actionDropdown.setValue(this.reviewerMenuAction ?? "");
+		actionDropdown.onChange((value) => {
+			void this.handleReviewerMenuAction(suggestion, value);
+		});
+
+		if (this.reviewerMenuAction === "assign" && profiles.length > 0) {
 			const dropdownContainer = picker.createDiv({ cls: "editorialist-reviewer-picker__control" });
 			const dropdown = new DropdownComponent(dropdownContainer);
 			profiles.forEach((profile) => {
-				dropdown.addOption(profile.id, profile.displayName);
+				dropdown.addOption(profile.id, formatContributorIdentityLabel(profile));
 			});
 			dropdown.setValue(this.reviewerPickerValue ?? profiles[0]?.id ?? "");
 			dropdown.onChange((value) => {
-				this.reviewerPickerValue = value;
-			});
-		}
-
-		const actions = picker.createDiv({ cls: "editorialist-reviewer-picker__actions" });
-		if (profiles.length > 0) {
-			this.renderButton(actions, "Assign selected", () => {
+				this.reviewerPickerValue = value || null;
 				if (this.reviewerPickerValue) {
 					void this.plugin.useSuggestedReviewer(suggestion.id, this.reviewerPickerValue);
 				}
 				this.closeReviewerMenu();
 			});
 		}
-		this.renderButton(actions, "Create new", () => {
-			void this.plugin.createReviewerFromSuggestion(suggestion.id);
-			this.closeReviewerMenu();
-		});
-		this.renderButton(actions, "Leave unresolved", () => {
-			this.plugin.leaveReviewerUnresolved(suggestion.id);
-			this.closeReviewerMenu();
-		});
-		if (this.plugin.canSaveReviewerAlias(suggestion.id)) {
-			this.renderButton(actions, "Save raw name as alias", () => {
-				void this.plugin.saveReviewerAliasForSuggestion(suggestion.id);
-				this.closeReviewerMenu();
-			});
-		}
-		this.renderButton(actions, "Close", () => {
-			this.closeReviewerMenu();
-		});
 	}
 
 	private renderJumpMenu(parent: HTMLElement, suggestion: ReviewSuggestion): void {
@@ -316,38 +349,50 @@ export class ReviewPanel extends ItemView {
 		});
 
 		const actions = menu.createDiv({ cls: "editorialist-reviewer-picker__actions" });
-		this.renderButton(
+		this.renderControlButton(
 			actions,
-			"Target",
+			"",
 			() => {
 				void this.plugin.jumpToSuggestionTarget(suggestion.id);
 				this.closeJumpMenu();
 			},
-			{ disabled: !this.plugin.canJumpToSuggestionTarget(suggestion.id), icon: "crosshair" },
+			{
+				disabled: !this.plugin.canJumpToSuggestionTarget(suggestion.id),
+				icon: "crosshair",
+				iconOnly: true,
+				tooltip: "Jump to target",
+			},
 		);
-		this.renderButton(
+		this.renderControlButton(
 			actions,
-			"Source",
+			"",
 			() => {
 				void this.plugin.jumpToSuggestionSource(suggestion.id);
 				this.closeJumpMenu();
 			},
-			{ disabled: !this.plugin.canJumpToSuggestionSource(suggestion.id), icon: "file-text" },
+			{
+				disabled: !this.plugin.canJumpToSuggestionSource(suggestion.id),
+				icon: "file-text",
+				iconOnly: true,
+				tooltip: "Jump to source",
+			},
 		);
 		if (isMoveSuggestion(suggestion)) {
-			this.renderButton(
+			this.renderControlButton(
 				actions,
-				"Anchor",
+				"",
 				() => {
 					void this.plugin.jumpToSuggestionAnchor(suggestion.id);
 					this.closeJumpMenu();
 				},
-				{ disabled: !this.plugin.canJumpToSuggestionAnchor(suggestion.id), icon: "link" },
+				{
+					disabled: !this.plugin.canJumpToSuggestionAnchor(suggestion.id),
+					icon: "link",
+					iconOnly: true,
+					tooltip: "Jump to anchor",
+				},
 			);
 		}
-		this.renderButton(actions, "Close", () => {
-			this.closeJumpMenu();
-		}, { icon: "x" });
 	}
 
 	private toggleReviewerMenu(suggestion: ReviewSuggestion): void {
@@ -361,12 +406,14 @@ export class ReviewPanel extends ItemView {
 			suggestion.contributor.suggestedReviewerIds[0] ??
 			this.plugin.getSortedReviewerProfiles()[0]?.id ??
 			null;
+		this.reviewerMenuAction = null;
 		this.jumpMenuSuggestionId = null;
 		this.render();
 	}
 
 	private closeReviewerMenu(): void {
 		this.reviewerMenuSuggestionId = null;
+		this.reviewerMenuAction = null;
 		this.reviewerPickerValue = null;
 		this.render();
 	}
@@ -375,6 +422,7 @@ export class ReviewPanel extends ItemView {
 		this.jumpMenuSuggestionId = this.jumpMenuSuggestionId === suggestionId ? null : suggestionId;
 		if (this.jumpMenuSuggestionId) {
 			this.reviewerMenuSuggestionId = null;
+			this.reviewerMenuAction = null;
 			this.reviewerPickerValue = null;
 		}
 		this.render();
@@ -400,17 +448,6 @@ export class ReviewPanel extends ItemView {
 			this.plugin.canJumpToSuggestionSource(suggestionId) ||
 			this.plugin.canJumpToSuggestionAnchor(suggestionId)
 		);
-	}
-
-	private getReviewerMenuLabel(suggestion: ReviewSuggestion): string {
-		if (suggestion.contributor.resolutionStatus === "suggested") {
-			const suggestedProfile = this.plugin.getReviewerProfile(suggestion.contributor.suggestedReviewerIds[0]);
-			return suggestedProfile
-				? `Reviewer: ${suggestedProfile.displayName}`
-				: `Reviewer: ${suggestion.contributor.displayName}`;
-		}
-
-		return `Reviewer: ${suggestion.contributor.displayName}`;
 	}
 
 	private getSuggestionReason(suggestion: ReviewSuggestion): string {
@@ -485,24 +522,80 @@ export class ReviewPanel extends ItemView {
 		return null;
 	}
 
-	private renderButton(
+	private async handleReviewerMenuAction(suggestion: ReviewSuggestion, value: string): Promise<void> {
+		if (value === "assign") {
+			this.reviewerMenuAction = "assign";
+			this.render();
+			return;
+		}
+
+		if (value === "create") {
+			await this.plugin.createReviewerFromSuggestion(suggestion.id);
+			this.closeReviewerMenu();
+			return;
+		}
+
+		if (value === "unresolved") {
+			this.plugin.leaveReviewerUnresolved(suggestion.id);
+			this.closeReviewerMenu();
+			return;
+		}
+
+		if (value === "save_alias") {
+			await this.plugin.saveReviewerAliasForSuggestion(suggestion.id);
+			this.closeReviewerMenu();
+			return;
+		}
+
+		this.reviewerMenuAction = null;
+		this.render();
+	}
+
+	private renderControlButton(
 		parent: HTMLElement,
 		label: string,
 		onClick: () => void,
 		options?: {
+			active?: boolean;
 			disabled?: boolean;
 			icon?: string;
+			iconOnly?: boolean;
+			tooltip?: string;
+			trailingIcon?: string;
 		},
 	): void {
-		const button = new ButtonComponent(parent).setButtonText(label);
-		button.setDisabled(Boolean(options?.disabled));
-		button.buttonEl.addClass("editorialist-button");
-		if (options?.icon) {
-			const icon = button.buttonEl.createSpan({ cls: "editorialist-button__icon" });
-			button.buttonEl.prepend(icon);
-			setIcon(icon, options.icon);
+		const button = parent.createEl("button", {
+			cls: "editorialist-suggestion__control",
+			attr: {
+				type: "button",
+				title: options?.tooltip ?? label,
+				"aria-label": options?.tooltip ?? label,
+			},
+		});
+		if (options?.iconOnly) {
+			button.addClass("editorialist-suggestion__control--icon-only");
 		}
-		this.bindImmediateAction(button.buttonEl, onClick);
+		if (options?.active) {
+			button.addClass("is-active");
+		}
+		if (options?.disabled) {
+			button.disabled = true;
+		}
+		if (options?.icon) {
+			const leadingIcon = button.createSpan({ cls: "editorialist-suggestion__control-icon" });
+			setIcon(leadingIcon, options.icon);
+		}
+		if (!options?.iconOnly) {
+			button.createSpan({
+				cls: "editorialist-suggestion__control-label",
+				text: label,
+			});
+		}
+		if (options?.trailingIcon) {
+			const trailingIcon = button.createSpan({ cls: "editorialist-suggestion__control-chevron" });
+			setIcon(trailingIcon, options.trailingIcon);
+		}
+		this.bindImmediateAction(button, onClick);
 	}
 
 	private bindImmediateAction(element: HTMLElement, onClick: () => void): void {
@@ -529,18 +622,6 @@ export class ReviewPanel extends ItemView {
 
 			onClick();
 		});
-	}
-
-	private formatContributorKind(kind: ReviewSuggestion["contributor"]["kind"]): string {
-		if (kind === "beta-reader") {
-			return "Beta reader";
-		}
-
-		if (kind === "ai") {
-			return "AI";
-		}
-
-		return kind.charAt(0).toUpperCase() + kind.slice(1);
 	}
 
 	private getFilteredSuggestions(suggestions: ReviewSuggestion[]): ReviewSuggestion[] {
@@ -590,5 +671,24 @@ export class ReviewPanel extends ItemView {
 
 	private toSentenceCase(value: string): string {
 		return value.charAt(0).toUpperCase() + value.slice(1);
+	}
+
+	private getOperationIcon(suggestion: ReviewSuggestion): string {
+		switch (suggestion.operation) {
+			case "edit":
+				return "pencil";
+			case "cut":
+				return "scissors";
+			case "condense":
+				return "minimize-2";
+			case "move":
+				return "arrow-right-left";
+			default:
+				return "circle";
+		}
+	}
+
+	private getSourceLabel(suggestion: ReviewSuggestion): string {
+		return `Source: ${formatContributorIdentityLabel(suggestion.contributor)}`;
 	}
 }

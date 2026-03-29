@@ -8,8 +8,10 @@ export interface PrepareReviewFormatModalOptions {
 
 export const REVIEW_TEMPLATE_BLOCK = [
 	"```" + REVIEW_BLOCK_FENCE,
-	"Reviewer: Editorialist",
-	"ReviewerType: editor",
+	"Reviewer: GPT-5.3",
+	"ReviewerType: ai-editor",
+	"Provider: OpenAI",
+	"Model: GPT-5.3",
 	"",
 	"=== EDIT ===",
 	"SceneId: scn_xxxxxxxx",
@@ -75,8 +77,8 @@ export class PrepareReviewFormatModal extends Modal {
 		shell.createDiv({
 			cls: "editorialist-review-format-modal__microcopy",
 			text: this.options.hasSelectedText
-				? "Paste into your AI and return an Editorialist review block. The current selection will be added as a passage."
-				: "Paste into your AI and return an Editorialist review block.",
+				? "Paste into your AI and return an Editorialist review block with canonical contributor identity. The current selection will be added as a passage."
+				: "Paste into your AI and return an Editorialist review block with canonical contributor identity.",
 		});
 
 		const example = shell.createDiv({ cls: "editorialist-review-format-modal__example" });

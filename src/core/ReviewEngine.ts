@@ -1,4 +1,5 @@
 import type { ReviewSession, ReviewSuggestion } from "../models/ReviewSuggestion";
+import { getLegacyContributorSignatureKind } from "./ContributorIdentity";
 import { getSuggestionSignatureParts } from "./OperationSupport";
 import type { MatchEngine } from "./MatchEngine";
 import type { SuggestionParser } from "./SuggestionParser";
@@ -122,7 +123,7 @@ export class ReviewEngine {
 			suggestion.operation,
 			suggestion.executionMode,
 			suggestion.contributor.displayName,
-			suggestion.contributor.kind,
+			getLegacyContributorSignatureKind(suggestion.contributor),
 			...getSuggestionSignatureParts(suggestion),
 			suggestion.why ?? "",
 		].join("\u0000");

@@ -1,24 +1,24 @@
-import type { ReviewContributor, ReviewContributorKind } from "../models/ReviewSuggestion";
+import {
+	deriveContributorIdentitySeed,
+	normalizeContributorValue,
+	reviewerTypeToKind,
+} from "../core/ContributorIdentity";
+import type { ReviewContributor } from "../models/ReviewSuggestion";
 import type {
 	ParsedReviewerReference,
 	ReviewerProfile,
 	ReviewerResolutionStatus,
 	ReviewerStats,
+	ReviewerType,
 } from "../models/ReviewerProfile";
 
 export class ReviewerDirectory {
 	private profiles: ReviewerProfile[] = [];
+	private didChange = false;
 
 	setProfiles(profiles: ReviewerProfile[]): void {
-		this.profiles = profiles.map((profile) => ({
-			...profile,
-			aliases: [...profile.aliases],
-			isStarred: profile.isStarred ?? false,
-			stats: {
-				...this.createEmptyStats(),
-				...profile.stats,
-			},
-		}));
+		this.didChange = false;
+		this.profiles = profiles.map((profile) => this.normalizeProfile(profile));
 	}
 
 	getProfiles(): ReviewerProfile[] {
@@ -26,6 +26,12 @@ export class ReviewerDirectory {
 			...profile,
 			aliases: [...profile.aliases],
 		}));
+	}
+
+	consumeDidChange(): boolean {
+		const didChange = this.didChange;
+		this.didChange = false;
+		return didChange;
 	}
 
 	getProfileById(id: string): ReviewerProfile | null {
@@ -43,75 +49,74 @@ export class ReviewerDirectory {
 	}
 
 	resolveContributor(raw: ParsedReviewerReference): ReviewContributor {
-		const parsedKind = this.parseReviewerKind(raw.rawType);
-		const fallbackName = raw.rawName?.trim() || "Unknown reviewer";
+		const seed = deriveContributorIdentitySeed(raw);
 		const rawName = raw.rawName?.trim();
 		const exactIdMatch = rawName
 			? this.findUniqueProfile((profile) => this.normalizeValue(profile.id) === this.normalizeValue(rawName), raw)
 			: null;
 		if (exactIdMatch) {
-			return this.toContributor(exactIdMatch, raw, "exact");
+			return this.toContributor(this.mergeProfileIdentity(exactIdMatch, seed), raw, "exact");
 		}
 
-		const displayMatch = rawName
+		const providerModelMatch = seed.kind === "ai" && seed.model
 			? this.findUniqueProfile(
-					(profile) => this.normalizeValue(profile.displayName) === this.normalizeValue(rawName),
+					(profile) =>
+						profile.kind === "ai" &&
+						this.normalizeValue(profile.model ?? profile.displayName) === this.normalizeValue(seed.model as string) &&
+						(!seed.provider ||
+							!profile.provider ||
+							this.normalizeValue(profile.provider) === this.normalizeValue(seed.provider)),
+					raw,
+				)
+			: null;
+		if (providerModelMatch) {
+			return this.toContributor(this.mergeProfileIdentity(providerModelMatch, seed), raw, "exact");
+		}
+
+		const displayMatch = seed.displayName
+			? this.findUniqueProfile(
+					(profile) => this.normalizeValue(profile.displayName) === this.normalizeValue(seed.displayName),
 					raw,
 				)
 			: null;
 		if (displayMatch) {
-			return this.toContributor(displayMatch, raw, "exact");
+			return this.toContributor(this.mergeProfileIdentity(displayMatch, seed), raw, "exact");
 		}
 
-		const aliasMatch = rawName
+		const aliasMatch = seed.aliasCandidates.length > 0
 			? this.findUniqueProfile(
-					(profile) => profile.aliases.some((alias) => this.normalizeValue(alias) === this.normalizeValue(rawName)),
+					(profile) =>
+						seed.aliasCandidates.some((candidate) =>
+							profile.aliases.some((alias) => this.normalizeValue(alias) === this.normalizeValue(candidate)),
+						),
 					raw,
 				)
 			: null;
 		if (aliasMatch) {
-			return this.toContributor(aliasMatch, raw, "alias");
+			return this.toContributor(this.mergeProfileIdentity(aliasMatch, seed), raw, "alias");
 		}
 
-		const suggestedProfiles = this.findSuggestedProfiles(raw);
-		const resolutionStatus: ReviewerResolutionStatus = raw.rawName
-			? suggestedProfiles.length > 0
-				? "suggested"
-				: "new"
-			: "unresolved";
+		if (seed.displayName.startsWith("Unknown ")) {
+			return {
+				id: raw.rawName ? `parsed-${this.slugify(raw.rawName)}` : "parsed-unknown-reviewer",
+				displayName: seed.displayName,
+				kind: seed.kind,
+				reviewerType: seed.reviewerType,
+				provider: seed.provider,
+				model: seed.model,
+				reviewerId: undefined,
+				resolutionStatus: "unresolved",
+				suggestedReviewerIds: [],
+				raw,
+			};
+		}
 
-		return {
-			id: raw.rawName ? `parsed-${this.slugify(raw.rawName)}` : "parsed-unknown-reviewer",
-			displayName: fallbackName,
-			kind: parsedKind,
-			provider: raw.rawProvider?.trim() || undefined,
-			model: raw.rawModel?.trim() || undefined,
-			reviewerId: undefined,
-			resolutionStatus,
-			suggestedReviewerIds: suggestedProfiles.map((profile) => profile.id),
-			raw,
-		};
+		const profile = this.createProfileFromSeed(seed);
+		return this.toContributor(profile, raw, "new");
 	}
 
 	createProfileFromParsedReviewer(raw: ParsedReviewerReference): ReviewerProfile {
-		const now = Date.now();
-		const displayName = raw.rawName?.trim() || "Unknown reviewer";
-		const profile: ReviewerProfile = {
-			id: this.createStableId(displayName),
-			displayName,
-			shortLabel: undefined,
-			kind: this.parseReviewerKind(raw.rawType),
-			aliases: [],
-			provider: raw.rawProvider?.trim() || undefined,
-			model: raw.rawModel?.trim() || undefined,
-			isStarred: false,
-			stats: this.createEmptyStats(),
-			createdAt: now,
-			updatedAt: now,
-		};
-
-		this.profiles = [...this.profiles, profile];
-		return profile;
+		return this.createProfileFromSeed(deriveContributorIdentitySeed(raw));
 	}
 
 	addAlias(reviewerId: string, alias: string): ReviewerProfile | null {
@@ -128,6 +133,7 @@ export class ReviewerDirectory {
 		const aliasExists = profile.aliases.some((item) => this.normalizeValue(item) === this.normalizeValue(normalizedAlias));
 		if (!aliasExists) {
 			profile.aliases = [...profile.aliases, normalizedAlias];
+			this.didChange = true;
 		}
 		profile.updatedAt = Date.now();
 		return profile;
@@ -141,6 +147,7 @@ export class ReviewerDirectory {
 
 		profile.isStarred = !profile.isStarred;
 		profile.updatedAt = Date.now();
+		this.didChange = true;
 		return profile;
 	}
 
@@ -155,6 +162,7 @@ export class ReviewerDirectory {
 			...stats,
 		};
 		profile.updatedAt = Date.now();
+		this.didChange = true;
 		return profile;
 	}
 
@@ -163,11 +171,7 @@ export class ReviewerDirectory {
 	}
 
 	normalizeValue(value: string): string {
-		return value
-			.toLowerCase()
-			.trim()
-			.replace(/[._,;:()[\]{}"'`-]+/g, " ")
-			.replace(/\s+/g, " ");
+		return normalizeContributorValue(value);
 	}
 
 	private toContributor(
@@ -179,6 +183,7 @@ export class ReviewerDirectory {
 			id: profile.id,
 			displayName: profile.displayName,
 			kind: profile.kind,
+			reviewerType: profile.reviewerType,
 			provider: profile.provider,
 			model: profile.model,
 			reviewerId: profile.id,
@@ -196,63 +201,156 @@ export class ReviewerDirectory {
 		return matches.length === 1 ? matches[0] ?? null : null;
 	}
 
-	private findSuggestedProfiles(raw: ParsedReviewerReference): ReviewerProfile[] {
-		const rawName = raw.rawName?.trim();
-		if (!rawName) {
-			return [];
+	private isCompatibleProfile(profile: ReviewerProfile, raw: ParsedReviewerReference): boolean {
+		const seed = deriveContributorIdentitySeed(raw);
+		if (profile.kind !== seed.kind) {
+			return false;
 		}
 
-		const normalizedRawName = this.normalizeValue(rawName);
-		const rawTokens = normalizedRawName.split(" ").filter(Boolean);
-		if (rawTokens.length === 0) {
-			return [];
-		}
-
-		return this.profiles.filter((profile) => {
-			if (!this.isCompatibleProfile(profile, raw)) {
+		if (profile.reviewerType !== seed.reviewerType) {
+			const profileKind = reviewerTypeToKind(profile.reviewerType);
+			const seedKind = reviewerTypeToKind(seed.reviewerType);
+			if (profileKind !== seedKind) {
 				return false;
 			}
+		}
 
-			const normalizedDisplayName = this.normalizeValue(profile.displayName);
-			const displayTokens = normalizedDisplayName.split(" ").filter(Boolean);
-			const firstTokenMatches = displayTokens[0] === rawTokens[0];
-			const containsRaw = normalizedDisplayName.includes(normalizedRawName) || normalizedRawName.includes(normalizedDisplayName);
-			return firstTokenMatches || containsRaw;
-		});
-	}
-
-	private isCompatibleProfile(profile: ReviewerProfile, raw: ParsedReviewerReference): boolean {
-		const rawKind = this.parseReviewerKind(raw.rawType);
-		if (raw.rawType && profile.kind !== rawKind) {
+		if (seed.provider && profile.provider && this.normalizeValue(profile.provider) !== this.normalizeValue(seed.provider)) {
 			return false;
 		}
 
-		if (raw.rawProvider && profile.provider && this.normalizeValue(profile.provider) !== this.normalizeValue(raw.rawProvider)) {
-			return false;
-		}
-
-		if (raw.rawModel && profile.model && this.normalizeValue(profile.model) !== this.normalizeValue(raw.rawModel)) {
+		if (seed.model && profile.model && this.normalizeValue(profile.model) !== this.normalizeValue(seed.model)) {
 			return false;
 		}
 
 		return true;
 	}
 
-	private parseReviewerKind(value?: string): ReviewContributorKind {
-		const normalized = value?.trim().toLowerCase();
-		if (normalized === "editor" || normalized === "ai" || normalized === "author") {
-			return normalized;
-		}
+	private createProfileFromSeed(seed: ReturnType<typeof deriveContributorIdentitySeed>): ReviewerProfile {
+		const now = Date.now();
+		const profile: ReviewerProfile = {
+			id: this.createStableId(seed.displayName, seed.kind, seed.provider, seed.model),
+			displayName: seed.displayName,
+			kind: seed.kind,
+			reviewerType: seed.reviewerType,
+			aliases: [...seed.aliasCandidates],
+			provider: seed.provider,
+			model: seed.model,
+			isStarred: false,
+			stats: this.createEmptyStats(),
+			createdAt: now,
+			updatedAt: now,
+		};
 
-		if (normalized === "betareader" || normalized === "beta-reader" || normalized === "beta reader") {
-			return "beta-reader";
-		}
-
-		return "author";
+		this.profiles = [...this.profiles, profile];
+		this.didChange = true;
+		return profile;
 	}
 
-	private createStableId(displayName: string): string {
-		const baseId = `reviewer-${this.slugify(displayName)}`;
+	private mergeProfileIdentity(
+		profile: ReviewerProfile,
+		seed: ReturnType<typeof deriveContributorIdentitySeed>,
+	): ReviewerProfile {
+		let didUpdate = false;
+		const nextAliases = [...profile.aliases];
+		for (const alias of seed.aliasCandidates) {
+			if (nextAliases.some((item) => this.normalizeValue(item) === this.normalizeValue(alias))) {
+				continue;
+			}
+
+			nextAliases.push(alias);
+			didUpdate = true;
+		}
+
+		const nextProvider = profile.provider ?? seed.provider;
+		if (nextProvider !== profile.provider) {
+			didUpdate = true;
+		}
+
+		const nextModel = profile.model ?? seed.model;
+		if (nextModel !== profile.model) {
+			didUpdate = true;
+		}
+
+		const nextReviewerType = this.chooseReviewerType(profile.reviewerType, seed.reviewerType);
+		if (nextReviewerType !== profile.reviewerType) {
+			didUpdate = true;
+		}
+
+		if (!didUpdate) {
+			return profile;
+		}
+
+		profile.aliases = nextAliases;
+		profile.provider = nextProvider;
+		profile.model = nextModel;
+		profile.reviewerType = nextReviewerType;
+		profile.updatedAt = Date.now();
+		this.didChange = true;
+		return profile;
+	}
+
+	private normalizeProfile(profile: ReviewerProfile): ReviewerProfile {
+		const seed = deriveContributorIdentitySeed({
+			rawModel: profile.kind === "ai" ? profile.model ?? profile.displayName : undefined,
+			rawName: profile.displayName,
+			rawProvider: profile.provider,
+			rawType: (profile as Partial<ReviewerProfile> & { kind?: string; reviewerType?: string }).reviewerType
+				?? (profile as Partial<ReviewerProfile> & { kind?: string }).kind,
+		});
+		const aliases = [...new Set([...(profile.aliases ?? []), ...seed.aliasCandidates])]
+			.filter((alias) => this.normalizeValue(alias) !== this.normalizeValue(seed.displayName));
+		const normalized: ReviewerProfile = {
+			id: profile.id,
+			displayName: seed.displayName,
+			kind: seed.kind,
+			reviewerType: seed.reviewerType,
+			aliases,
+			provider: seed.provider,
+			model: seed.model,
+			isStarred: profile.isStarred ?? false,
+			stats: {
+				...this.createEmptyStats(),
+				...profile.stats,
+			},
+			createdAt: profile.createdAt ?? Date.now(),
+			updatedAt: profile.updatedAt ?? profile.createdAt ?? Date.now(),
+		};
+
+		if (JSON.stringify(normalized) !== JSON.stringify({
+			...profile,
+			aliases: [...(profile.aliases ?? [])],
+			isStarred: profile.isStarred ?? false,
+			stats: {
+				...this.createEmptyStats(),
+				...profile.stats,
+			},
+		})) {
+			this.didChange = true;
+		}
+
+		return normalized;
+	}
+
+	private chooseReviewerType(current: ReviewerType, incoming: ReviewerType): ReviewerType {
+		if (current === incoming) {
+			return current;
+		}
+
+		if (current === "editor" && incoming !== "editor") {
+			return incoming;
+		}
+
+		if (current === "ai-editor" && incoming !== "ai-editor") {
+			return incoming;
+		}
+
+		return current;
+	}
+
+	private createStableId(displayName: string, kind: ReviewerProfile["kind"], provider?: string, model?: string): string {
+		const baseSource = kind === "ai" ? `${provider ?? "ai"}-${model ?? displayName}` : displayName;
+		const baseId = `contributor-${kind}-${this.slugify(baseSource)}`;
 		if (!this.profiles.some((profile) => profile.id === baseId)) {
 			return baseId;
 		}

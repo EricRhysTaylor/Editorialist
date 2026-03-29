@@ -1,4 +1,9 @@
-import type { ParsedReviewerReference, ReviewerResolutionStatus } from "./ReviewerProfile";
+import type {
+	ContributorKind,
+	ParsedReviewerReference,
+	ReviewerResolutionStatus,
+	ReviewerType,
+} from "./ReviewerProfile";
 
 export type ReviewOperationType = "edit" | "move" | "cut" | "condense" | "insert" | "split" | "merge" | "advisory";
 
@@ -8,8 +13,6 @@ export type ReviewStatus = "pending" | "accepted" | "rejected" | "unresolved";
 
 export type MatchType = "exact" | "multiple" | "none" | "text_changed" | "already_applied";
 
-export type ReviewContributorKind = "author" | "editor" | "beta-reader" | "ai";
-
 export type ReviewPlacement = "before" | "after";
 
 export type ReviewExecutionMode = "direct" | "advisory";
@@ -17,7 +20,8 @@ export type ReviewExecutionMode = "direct" | "advisory";
 export interface ReviewContributor {
 	id: string;
 	displayName: string;
-	kind: ReviewContributorKind;
+	kind: ContributorKind;
+	reviewerType: ReviewerType;
 	provider?: string;
 	model?: string;
 	reviewerId?: string;

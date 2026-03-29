@@ -1,8 +1,13 @@
 import { ButtonComponent, Notice, PluginSettingTab, setIcon, type App } from "obsidian";
+import {
+	formatContributorIdentityLabel,
+	formatContributorProviderModel,
+} from "../core/ContributorIdentity";
 import type { SceneReviewRecord } from "../models/ReviewerProfile";
 import type EditorialistPlugin from "../main";
 
 export class EditorialistSettingTab extends PluginSettingTab {
+	private static readonly SETTINGS_DOCS_URL = "https://github.com/EricRhysTaylor/Editorialist#readme";
 	private activeBookOnly = true;
 	private activeTab: "core" | "reviewer" = "core";
 
@@ -62,14 +67,25 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			cls: "editorialist-settings__hero-intro-badge-text",
 			text: "Core · Editorial review",
 		});
+		const badgeLink = badge.createEl("a", {
+			href: EditorialistSettingTab.SETTINGS_DOCS_URL,
+			cls: "editorialist-settings__hero-intro-badge-link",
+			attr: {
+				"aria-label": "Open Editorialist documentation",
+				target: "_blank",
+				rel: "noopener",
+			},
+		});
+		setIcon(badgeLink, "external-link");
 
-		hero.createDiv({
+		const titleRow = hero.createDiv({ cls: "editorialist-settings__hero-intro-title-row" });
+		titleRow.createDiv({
 			cls: "editorialist-settings__hero-intro-title",
-			text: "Keep revision passes organized and safe.",
+			text: "Keep your edits organized and easy to manage.",
 		});
 		hero.createDiv({
 			cls: "editorialist-settings__hero-intro-subtitle",
-			text: "Editorialist keeps a durable record of imported sweeps, scene-level progress, and contributor activity so you can review in context and back up the metadata that powers the workflow.",
+			text: "Editorialist tracks your revision notes across scenes, shows what’s been reviewed, and keeps contributor history so you can pick up where you left off. You can also export this data to keep a backup.",
 		});
 
 		const features = hero.createDiv({ cls: "editorialist-settings__hero-features" });
@@ -78,9 +94,9 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			text: "Core highlights:",
 		});
 		const featureList = features.createDiv({ cls: "editorialist-settings__hero-features-list" });
-		this.createHeroFeature(featureList, "table-properties", "Scene inventory — track every note that still carries imported Editorialist review blocks.");
-		this.createHeroFeature(featureList, "list-todo", "Review in context — resume scene notes directly from Core without hunting through the vault.");
-		this.createHeroFeature(featureList, "database-backup", "Metadata backup — export contributor, sweep, and scene-review records without exporting manuscript text.");
+		this.createHeroFeature(featureList, "table-properties", "Scene inventory — see every scene that still has revision notes and track progress at a glance.");
+		this.createHeroFeature(featureList, "list-todo", "Review in context — jump straight into any scene and continue editing without searching.");
+		this.createHeroFeature(featureList, "database-backup", "Backup your data — export contributor history and revision activity without touching your manuscript.");
 	}
 
 	private renderHero(
@@ -90,18 +106,9 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const hero = parent.createDiv({
 			cls: "editorialist-settings__hero editorialist-settings__panel",
 		});
-		const header = hero.createDiv({ cls: "editorialist-settings__hero-header" });
-		const iconRow = header.createDiv({ cls: "editorialist-settings__hero-icons" });
-		this.createHeaderIcon(iconRow, "list-todo");
-		this.createHeaderIcon(iconRow, "users");
-		this.createHeaderIcon(iconRow, "database-backup");
-
-		const headerText = header.createDiv({ cls: "editorialist-settings__hero-text" });
-		headerText.createDiv({
-			cls: "editorialist-settings__hero-title",
-			text: "Editorial progress",
-		});
-		headerText.createDiv({
+		const titleRow = this.createSectionTitleRow(hero, "pie-chart", "Editorial progress");
+		titleRow.addClass("editorialist-settings__section-title-row--hero");
+		hero.createDiv({
 			cls: "editorialist-settings__hero-subtitle",
 			text: "Keep the active queue, completed sweeps, and long-term review metadata in one calm operational view.",
 		});
@@ -138,7 +145,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			parent,
 			"Review activity",
 			"Imported sweeps and manuscript decisions across Editorialist.",
-			["activity", "clock-3", "badge-check"],
+			"activity",
 		);
 		const cards = body.createDiv({ cls: "editorialist-settings__stats" });
 
@@ -157,7 +164,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			parent,
 			"Scene inventory",
 			"Every scene note that currently carries Editorialist revision notes or has been cleaned and retained in the metadata log.",
-			["table-properties", "book-open", "sparkles"],
+			"table-properties",
 		);
 
 		const toolbar = body.createDiv({ cls: "editorialist-settings__inventory-toolbar" });
@@ -258,7 +265,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			parent,
 			"Reviewer directory",
 			"People and AI systems that have contributed editorial suggestions.",
-			["users", "bot", "star"],
+			"users",
 		);
 
 		const list = body.createDiv({ cls: "editorialist-settings__contributors" });
@@ -294,13 +301,20 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				cls: "editorialist-settings__contributor-meta",
 				text: this.formatContributorMeta(profile),
 			});
+			const providerModel = formatContributorProviderModel(profile);
+			if (providerModel) {
+				card.createDiv({
+					cls: "editorialist-settings__contributor-meta",
+					text: providerModel,
+				});
+			}
 			card.createDiv({
 				cls: "editorialist-settings__contributor-stats",
 				text: this.formatContributorStats(profile),
 			});
 			card.createDiv({
 				cls: "editorialist-settings__contributor-aliases",
-				text: `${profile.aliases.length} aliases`,
+				text: profile.aliases.length > 0 ? `Aliases: ${profile.aliases.join(" · ")}` : "Aliases: none",
 			});
 		}
 	}
@@ -310,7 +324,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			parent,
 			"Admin export",
 			"Back up contributor, sweep, and scene-review metadata without exporting manuscript text.",
-			["database-backup", "file-json", "shield-check"],
+			"database-backup",
 		);
 		const card = body.createDiv({ cls: "editorialist-settings__maintenance-card" });
 		card.createDiv({
@@ -337,7 +351,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			parent,
 			"Maintenance",
 			"Keep Editorialist records tidy without touching accepted manuscript edits.",
-			["wrench", "archive-x", "shield-check"],
+			"wrench",
 		);
 		const actionCard = body.createDiv({
 			cls: "editorialist-settings__maintenance-card",
@@ -389,27 +403,35 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		parent: HTMLElement,
 		title: string,
 		description: string,
-		icons: [string, string, string],
+		icon: string,
 	): HTMLElement {
 		const section = parent.createDiv({
 			cls: "editorialist-settings__section editorialist-settings__panel",
 		});
 		const header = section.createDiv({ cls: "editorialist-settings__section-header" });
-		const iconRow = header.createDiv({ cls: "editorialist-settings__section-icons" });
-		for (const icon of icons) {
-			this.createHeaderIcon(iconRow, icon);
-		}
-
+		this.createSectionTitleRow(header, icon, title);
 		const heading = header.createDiv({ cls: "editorialist-settings__section-heading" });
-		heading.createDiv({ cls: "editorialist-settings__section-title", text: title });
 		heading.createDiv({ cls: "editorialist-settings__section-description", text: description });
 
 		return section.createDiv({ cls: "editorialist-settings__section-body" });
 	}
 
-	private createHeaderIcon(parent: HTMLElement, icon: string): void {
-		const badge = parent.createSpan({ cls: "editorialist-settings__icon-badge" });
-		setIcon(badge, icon);
+	private createSectionTitleRow(parent: HTMLElement, icon: string, title: string): HTMLElement {
+		const row = parent.createDiv({ cls: "editorialist-settings__section-title-row" });
+		const iconEl = row.createSpan({ cls: "editorialist-settings__section-title-icon" });
+		setIcon(iconEl, icon);
+		row.createSpan({ cls: "editorialist-settings__section-title", text: title });
+		const link = row.createEl("a", {
+			href: EditorialistSettingTab.SETTINGS_DOCS_URL,
+			cls: "editorialist-settings__section-title-link",
+			attr: {
+				"aria-label": `Open documentation for ${title}`,
+				target: "_blank",
+				rel: "noopener",
+			},
+		});
+		setIcon(link, "external-link");
+		return row;
 	}
 
 	private createHeroFeature(parent: HTMLElement, icon: string, text: string): void {
@@ -455,15 +477,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	}
 
 	private formatContributorMeta(profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number]): string {
-		const parts = [this.toSentenceCase(profile.kind)];
-		if (profile.provider) {
-			parts.push(profile.provider);
-		}
-		if (profile.model) {
-			parts.push(profile.model);
-		}
-
-		return parts.join(" · ");
+		return formatContributorIdentityLabel(profile);
 	}
 
 	private formatContributorStats(profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number]): string {
@@ -499,17 +513,5 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			hour: "numeric",
 			minute: "2-digit",
 		});
-	}
-
-	private toSentenceCase(value: string): string {
-		if (value === "beta-reader") {
-			return "Beta reader";
-		}
-
-		if (value === "ai") {
-			return "AI";
-		}
-
-		return value.charAt(0).toUpperCase() + value.slice(1);
 	}
 }

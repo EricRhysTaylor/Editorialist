@@ -1,7 +1,24 @@
 import type { ReviewSweepRegistryEntry } from "./ReviewImport";
-import type { ReviewContributorKind, ReviewOperationType } from "./ReviewSuggestion";
+import type { ReviewOperationType } from "./ReviewSuggestion";
 
 export type ReviewerResolutionStatus = "exact" | "alias" | "suggested" | "unresolved" | "new";
+export type ContributorKind = "human" | "ai";
+export type HumanReviewerType =
+	| "author"
+	| "beta-reader"
+	| "editor"
+	| "developmental-editor"
+	| "line-editor"
+	| "copy-editor"
+	| "publisher-editor"
+	| "agent"
+	| "sensitivity-reader";
+export type AiReviewerType =
+	| "ai-editor"
+	| "ai-developmental-editor"
+	| "ai-line-editor"
+	| "ai-copy-editor";
+export type ReviewerType = HumanReviewerType | AiReviewerType;
 
 export interface ReviewerStats {
 	totalSuggestions: number;
@@ -13,11 +30,11 @@ export interface ReviewerStats {
 	acceptedMoves?: number;
 }
 
-export interface ReviewerProfile {
+export interface ContributorProfile {
 	id: string;
 	displayName: string;
-	shortLabel?: string;
-	kind: ReviewContributorKind;
+	kind: ContributorKind;
+	reviewerType: ReviewerType;
 	aliases: string[];
 	provider?: string;
 	model?: string;
@@ -27,19 +44,25 @@ export interface ReviewerProfile {
 	updatedAt: number;
 }
 
-export interface ParsedReviewerReference {
+export type ReviewerProfile = ContributorProfile;
+
+export interface ParsedContributorReference {
 	rawName?: string;
 	rawType?: string;
 	rawProvider?: string;
 	rawModel?: string;
 }
 
-export interface ReviewerResolution {
+export type ParsedReviewerReference = ParsedContributorReference;
+
+export interface ContributorResolution {
 	reviewerId?: string;
 	resolutionStatus: ReviewerResolutionStatus;
 	suggestedReviewerIds: string[];
-	raw: ParsedReviewerReference;
+	raw: ParsedContributorReference;
 }
+
+export type ReviewerResolution = ContributorResolution;
 
 export interface ReviewerSignalRecord {
 	key: string;
@@ -71,7 +94,7 @@ export interface SceneReviewRecord {
 }
 
 export interface EditorialistPluginData {
-	reviewerProfiles: ReviewerProfile[];
+	reviewerProfiles: ContributorProfile[];
 	reviewerSignalIndex: Record<string, ReviewerSignalRecord>;
 	reviewDecisionIndex: Record<string, PersistedReviewDecisionRecord>;
 	sceneReviewIndex: Record<string, SceneReviewRecord>;

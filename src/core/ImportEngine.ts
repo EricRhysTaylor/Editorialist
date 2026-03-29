@@ -26,7 +26,7 @@ interface ReviewMetadata {
 	model?: string;
 	provider?: string;
 	reviewer: string;
-	reviewerType: string;
+	reviewerType: ReviewSuggestion["contributor"]["reviewerType"];
 }
 
 interface InspectBatchOptions {
@@ -765,10 +765,10 @@ export class ImportEngine {
 		const raw = firstSuggestion?.contributor.raw;
 
 		return {
-			reviewer: raw?.rawName?.trim() || firstSuggestion?.contributor.displayName || "Editorialist",
-			reviewerType: raw?.rawType?.trim() || firstSuggestion?.contributor.kind || "editor",
-			provider: raw?.rawProvider?.trim() || firstSuggestion?.contributor.provider,
-			model: raw?.rawModel?.trim() || firstSuggestion?.contributor.model,
+			reviewer: firstSuggestion?.contributor.displayName || raw?.rawName?.trim() || "Unknown contributor",
+			reviewerType: firstSuggestion?.contributor.reviewerType ?? "author",
+			provider: firstSuggestion?.contributor.provider ?? raw?.rawProvider?.trim(),
+			model: firstSuggestion?.contributor.model ?? raw?.rawModel?.trim(),
 		};
 	}
 

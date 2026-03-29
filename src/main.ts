@@ -1,6 +1,10 @@
 import type { EditorView } from "@codemirror/view";
 import { MarkdownView, normalizePath, Notice, Plugin, TFile, type App } from "obsidian";
 import { registerCommands } from "./commands/Commands";
+import {
+	deriveContributorIdentitySeed,
+	getLegacyContributorSignatureKind,
+} from "./core/ContributorIdentity";
 import { ImportEngine } from "./core/ImportEngine";
 import { MatchEngine } from "./core/MatchEngine";
 import {
@@ -98,6 +102,7 @@ export default class EditorialistPlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		await this.loadPluginData();
+		await this.persistContributorProfilesIfNeeded();
 		await this.refreshRadialTimelineBookScope();
 		this.importEngine = new ImportEngine(this.app, this.parser, this.matchEngine);
 		this.registerEditorExtension(createReviewDecorationsExtension());
@@ -167,6 +172,7 @@ export default class EditorialistPlugin extends Plugin {
 			previousSession?.notePath === context.filePath ? previousSession : null,
 		);
 		const hydratedSession = this.applyPersistedReviewDecisionsToSession(session);
+		await this.persistContributorProfilesIfNeeded();
 
 		if (!hydratedSession.hasReviewBlock) {
 			this.activeHighlightRange = null;
@@ -221,7 +227,7 @@ export default class EditorialistPlugin extends Plugin {
 				await this.importReviewBatchToActiveNote(rawText, startReview);
 			},
 			onInspectBatch: async (rawText) =>
-				this.importEngine.inspectBatch(rawText, { activeNotePath: context?.filePath }),
+				this.inspectReviewBatch(rawText, { activeNotePath: context?.filePath }),
 			onLoadClipboardBatch: async () => this.loadClipboardReviewBatch(),
 			onOpenReviewPanel: async () => {
 				await this.openReviewPanel();
@@ -677,34 +683,18 @@ export default class EditorialistPlugin extends Plugin {
 			};
 		}
 
-		const processedCount = session.suggestions.filter((suggestion) => {
-			const state = this.getSuggestionPresentationState(suggestion);
-			return state === "accepted" || state === "rejected" || state === "resolved";
-		}).length;
-		const unprocessedCount = session.suggestions.filter((suggestion) => {
-			const state = this.getSuggestionPresentationState(suggestion);
-			return state === "pending" || state === "unresolved" || state === "later";
-		}).length;
-		const rejectedCount = session.suggestions.filter((suggestion) => suggestion.status === "rejected").length;
-		const parts = [
-			`${session.suggestions.length} suggestions`,
-			`${processedCount} processed`,
-			`${unprocessedCount} unprocessed`,
-		];
-		if (rejectedCount > 0) {
-			parts.push(`${rejectedCount} rejected`);
-		}
+		const parts = [`${session.suggestions.length} suggestions`];
 		const guidedSweep = this.getGuidedSweep();
 		if (guidedSweep?.notePaths.length) {
-			parts.push(`${guidedSweep.notePaths.length} scenes`);
+			parts.push(`${guidedSweep.notePaths.length} scene${guidedSweep.notePaths.length === 1 ? "" : "s"}`);
 			if (guidedSweep.notePaths.length > 1) {
-				parts.push(`scene ${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`);
+				parts.push(`${guidedSweep.currentNoteIndex + 1}/${guidedSweep.notePaths.length}`);
 			}
 		} else {
 			const batchId = this.getCurrentBatchId();
 			const entry = this.getSweepRegistryEntry(batchId ?? undefined);
 			if (entry?.importedNotePaths.length) {
-				parts.push(`${entry.importedNotePaths.length} scenes`);
+				parts.push(`${entry.importedNotePaths.length} scene${entry.importedNotePaths.length === 1 ? "" : "s"}`);
 			}
 		}
 
@@ -1105,6 +1095,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		const refreshedSession = this.reviewEngine.buildSession(context.filePath, context.text, session);
 		const hydratedSession = this.applyPersistedReviewDecisionsToSession(refreshedSession);
+		void this.persistContributorProfilesIfNeeded();
 		if (!hydratedSession.hasReviewBlock) {
 			this.activeHighlightRange = null;
 			this.activeHighlightTone = "active";
@@ -1201,6 +1192,7 @@ export default class EditorialistPlugin extends Plugin {
 			id: profile.id,
 			displayName: profile.displayName,
 			kind: profile.kind,
+			reviewerType: profile.reviewerType,
 			provider: profile.provider,
 			model: profile.model,
 			reviewerId: profile.id,
@@ -1214,12 +1206,14 @@ export default class EditorialistPlugin extends Plugin {
 		raw: ParsedReviewerReference,
 		suggestedReviewerIds: string[],
 	): ReviewSuggestion["contributor"] {
+		const seed = deriveContributorIdentitySeed(raw);
 		return {
 			id: raw.rawName ? `parsed-${this.reviewerDirectory.normalizeValue(raw.rawName).replace(/\s+/g, "-")}` : "parsed-unknown-reviewer",
-			displayName: raw.rawName?.trim() || "Unknown reviewer",
-			kind: this.parseReviewerKind(raw.rawType),
-			provider: raw.rawProvider?.trim() || undefined,
-			model: raw.rawModel?.trim() || undefined,
+			displayName: seed.displayName,
+			kind: seed.kind,
+			reviewerType: seed.reviewerType,
+			provider: seed.provider,
+			model: seed.model,
 			reviewerId: undefined,
 			resolutionStatus: "unresolved",
 			suggestedReviewerIds,
@@ -1362,19 +1356,6 @@ export default class EditorialistPlugin extends Plugin {
 			(left.rawProvider ?? "").trim() === (right.rawProvider ?? "").trim() &&
 			(left.rawModel ?? "").trim() === (right.rawModel ?? "").trim()
 		);
-	}
-
-	private parseReviewerKind(value?: string): ReviewSuggestion["contributor"]["kind"] {
-		const normalized = value?.trim().toLowerCase();
-		if (normalized === "editor" || normalized === "ai" || normalized === "author") {
-			return normalized;
-		}
-
-		if (normalized === "betareader" || normalized === "beta-reader" || normalized === "beta reader") {
-			return "beta-reader";
-		}
-
-		return "author";
 	}
 
 	private getReviewSession(): ReviewSession | null {
@@ -1803,7 +1784,7 @@ export default class EditorialistPlugin extends Plugin {
 			suggestion.operation,
 			suggestion.executionMode,
 			suggestion.contributor.displayName,
-			suggestion.contributor.kind,
+			getLegacyContributorSignatureKind(suggestion.contributor),
 			...getSuggestionSignatureParts(suggestion),
 			suggestion.why ?? "",
 		].join("::");
@@ -2139,13 +2120,14 @@ export default class EditorialistPlugin extends Plugin {
 	async exportEditorialistMetadata(): Promise<string> {
 		await this.syncOperationalMetadata();
 		const payload: EditorialistMetadataExport = {
-			schemaVersion: "1.0.0",
+			schemaVersion: "2.0.0",
 			exportedAt: Date.now(),
 			contributors: this.getSortedReviewerProfiles().map((profile) => ({
 				createdAt: profile.createdAt,
 				displayName: profile.displayName,
 				id: profile.id,
 				kind: profile.kind,
+				reviewerType: profile.reviewerType,
 				aliases: [...profile.aliases],
 				isStarred: profile.isStarred,
 				model: profile.model,
@@ -2260,6 +2242,7 @@ export default class EditorialistPlugin extends Plugin {
 			const batch = await this.importEngine.inspectBatch(normalizedText, {
 				activeNotePath: context?.filePath,
 			});
+			await this.persistContributorProfilesIfNeeded();
 			if (batch.summary.totalSuggestions === 0) {
 				return null;
 			}
@@ -2327,9 +2310,7 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		const batch = await this.importEngine.inspectBatch(rawText, {
-			activeNotePath: context.filePath,
-		});
+		const batch = await this.inspectReviewBatch(rawText, { activeNotePath: context.filePath });
 		const duplicateSweep = this.findDuplicateSweep(batch);
 		if (duplicateSweep) {
 			const choice = await openEditorialistChoiceModal(this.app, {
@@ -2552,6 +2533,23 @@ export default class EditorialistPlugin extends Plugin {
 			new RegExp(`^\\\`\\\`\\\`${REVIEW_BLOCK_FENCE}\\s*$`, "m"),
 			(match) => `${match}\nBatchId: ${batchId}\nImportedBy: Editorialist`,
 		);
+	}
+
+	private async inspectReviewBatch(
+		rawText: string,
+		options?: Parameters<ImportEngine["inspectBatch"]>[1],
+	): Promise<ReviewImportBatch> {
+		const batch = await this.importEngine.inspectBatch(rawText, options);
+		await this.persistContributorProfilesIfNeeded();
+		return batch;
+	}
+
+	private async persistContributorProfilesIfNeeded(): Promise<void> {
+		if (!this.reviewerDirectory.consumeDidChange()) {
+			return;
+		}
+
+		await this.savePluginData();
 	}
 
 	async cleanupCurrentReviewBatch(): Promise<void> {
