@@ -318,7 +318,7 @@ export class EditorialistModal extends Modal {
 			text: `${batch.summary.totalMatchedScenes} matched scenes • ${batch.summary.totalSuggestions} entries • ${batch.summary.totalUnresolvedScenes} unresolved scenes • ${batch.summary.totalMismatches} mismatches`,
 		});
 		summary.createDiv({
-			text: `${batch.summary.totalResolvedScenes} ready • ${batch.summary.totalExactMatches} exact • ${batch.summary.totalAdvisoryOnly} advisory • ${batch.summary.totalUnresolvedMatches} unresolved or multiple`,
+			text: `${batch.summary.totalResolvedScenes} ready • ${batch.summary.totalExactMatches} exact • ${batch.summary.totalDeclaredRoutes} declared • ${batch.summary.totalInferredRoutes} inferred • ${batch.summary.totalAdvisoryOnly} advisory • ${batch.summary.totalUnresolvedMatches} unresolved or multiple`,
 		});
 
 		const list = parent.createDiv({ cls: "editorialist-control-modal__list" });
@@ -326,11 +326,14 @@ export class EditorialistModal extends Modal {
 			const card = list.createDiv({ cls: "editorialist-control-modal__group" });
 			card.createDiv({
 				cls: "editorialist-control-modal__group-title",
-				text: `${group.sceneId ?? "No scene"} → ${group.fileName}`,
+				text: group.sceneId ? `${group.sceneId} → ${group.fileName}` : group.fileName,
 			});
 			card.createDiv({
 				cls: "editorialist-control-modal__group-meta",
-				text: `${group.suggestions.length} entries • ${group.exactCount} exact • ${group.advisoryCount} advisory • ${group.mismatchCount} mismatched • ${group.unresolvedCount} unresolved`,
+				text:
+					group.inferredCount > 0 && group.declaredCount === 0 && group.exactInferredCount === group.suggestions.length
+						? `${group.exactInferredCount} exact inferred matches`
+						: `${group.suggestions.length} entries • ${group.declaredCount} declared • ${group.inferredCount} inferred • ${group.exactCount} exact • ${group.advisoryCount} advisory • ${group.mismatchCount} mismatched • ${group.unresolvedCount} unresolved`,
 			});
 			card.createDiv({
 				cls: "editorialist-control-modal__group-path",
@@ -340,7 +343,7 @@ export class EditorialistModal extends Modal {
 			for (const result of group.suggestions) {
 				card.createDiv({
 					cls: "editorialist-control-modal__item",
-					text: `${this.toSentenceCase(result.suggestion.operation)} • ${this.toSentenceCase(result.routeStatus)} • ${this.toSentenceCase(result.verificationStatus)}: ${result.verificationReason}`,
+					text: `${this.toSentenceCase(result.suggestion.operation)} • ${this.getRouteSourceLabel(result.routeStrategy)} • ${this.toSentenceCase(result.verificationStatus)}: ${result.verificationReason}`,
 				});
 			}
 		}
@@ -358,7 +361,7 @@ export class EditorialistModal extends Modal {
 		for (const result of unresolved) {
 			unresolvedCard.createDiv({
 				cls: "editorialist-control-modal__item",
-				text: `${result.suggestion.routing?.sceneId ?? result.suggestion.id} • ${result.routeReason}`,
+				text: `${result.suggestion.routing?.sceneId ?? result.suggestion.id} • ${this.getRouteSourceLabel(result.routeStrategy)} • ${result.routeReason}`,
 			});
 		}
 	}
@@ -724,5 +727,24 @@ export class EditorialistModal extends Modal {
 
 	private toSentenceCase(value: string): string {
 		return value.replace(/_/g, " ").replace(/^\w/, (character) => character.toUpperCase());
+	}
+
+	private getRouteSourceLabel(value: ReviewImportBatch["results"][number]["routeStrategy"]): string {
+		switch (value) {
+			case "declared_scene_id":
+				return "Declared SceneId";
+			case "declared_path":
+				return "Declared Path";
+			case "declared_note":
+				return "Declared Note";
+			case "declared_scene":
+				return "Declared Scene";
+			case "inferred_exact":
+				return "Inferred exact";
+			case "inferred_normalized":
+				return "Inferred normalized";
+			case "unresolved":
+				return "Unresolved";
+		}
 	}
 }

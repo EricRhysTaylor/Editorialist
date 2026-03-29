@@ -72,6 +72,7 @@ export default class EditorialistPlugin extends Plugin {
 	private readonly matchEngine = new MatchEngine();
 	private readonly reviewEngine = new ReviewEngine(this.parser, this.matchEngine);
 	private importEngine!: ImportEngine;
+	private isGuidedSweepTransitioning = false;
 
 	private activeHighlightRange: OffsetRange | null = null;
 	private activeHighlightTone: "active" | "applied" = "active";
@@ -107,6 +108,9 @@ export default class EditorialistPlugin extends Plugin {
 
 		this.registerEvent(
 			this.app.workspace.on("active-leaf-change", () => {
+				if (this.isGuidedSweepTransitioning) {
+					return;
+				}
 				this.resyncSessionForActiveNote();
 				this.syncActiveEditorDecorations();
 			}),
@@ -114,6 +118,9 @@ export default class EditorialistPlugin extends Plugin {
 
 		this.registerEvent(
 			this.app.workspace.on("file-open", () => {
+				if (this.isGuidedSweepTransitioning) {
+					return;
+				}
 				this.resyncSessionForActiveNote();
 				this.syncActiveEditorDecorations();
 			}),
@@ -133,10 +140,13 @@ export default class EditorialistPlugin extends Plugin {
 		this.app.workspace.detachLeavesOfType(REVIEW_PANEL_VIEW_TYPE);
 	}
 
-	async parseCurrentNote(): Promise<void> {
+	async parseCurrentNote(options?: { suppressNotice?: boolean }): Promise<void> {
+		const suppressNotice = options?.suppressNotice ?? false;
 		const context = this.getActiveNoteContext();
 		if (!context) {
-			new Notice("No active markdown note to review.");
+			if (!suppressNotice) {
+				new Notice("No active markdown note to review.");
+			}
 			return;
 		}
 
@@ -155,7 +165,9 @@ export default class EditorialistPlugin extends Plugin {
 			this.deferredSuggestionIds.clear();
 			this.lastAppliedChange = null;
 			this.store.clearSession();
-			new Notice(`No ${getReviewBlockFenceLabel()} found in this note.`);
+			if (!suppressNotice) {
+				new Notice(`No ${getReviewBlockFenceLabel()} found in this note.`);
+			}
 			return;
 		}
 
@@ -165,11 +177,13 @@ export default class EditorialistPlugin extends Plugin {
 		await this.syncReviewerSignalsForSession(session);
 		await this.openReviewPanel();
 		this.revealSelectedSuggestion();
-		new Notice(
-			session.suggestions.length > 0
-				? `Parsed ${session.suggestions.length} review suggestion${session.suggestions.length === 1 ? "" : "s"}.`
-				: "Review block found, but no valid review entries were parsed.",
-		);
+		if (!suppressNotice) {
+			new Notice(
+				session.suggestions.length > 0
+					? `Parsed ${session.suggestions.length} review suggestion${session.suggestions.length === 1 ? "" : "s"}.`
+					: "Review block found, but no valid review entries were parsed.",
+			);
+		}
 	}
 
 	async openPrepareReviewFormatModal(): Promise<void> {
@@ -195,13 +209,14 @@ export default class EditorialistPlugin extends Plugin {
 			onImportRawToActiveNote: async (rawText, startReview) => {
 				await this.importReviewBatchToActiveNote(rawText, startReview);
 			},
-			onInspectBatch: async (rawText) => this.importEngine.inspectBatch(rawText),
+			onInspectBatch: async (rawText) =>
+				this.importEngine.inspectBatch(rawText, { activeNotePath: context?.filePath }),
 			onLoadClipboardBatch: async () => this.loadClipboardReviewBatch(),
 			onOpenReviewPanel: async () => {
 				await this.openReviewPanel();
 			},
 			onStartReviewInCurrentNote: async () => {
-				await this.parseCurrentNote();
+				await this.parseCurrentNote({ suppressNotice: true });
 			},
 		}).open();
 	}
@@ -357,8 +372,6 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next", id);
-
 		const applyPlan = createSuggestionApplyPlan(context.text, suggestion);
 		if (!applyPlan) {
 			new Notice(`The ${suggestion.operation} suggestion could not be applied safely.`);
@@ -378,19 +391,19 @@ export default class EditorialistPlugin extends Plugin {
 		this.deferredSuggestionIds.delete(suggestion.id);
 		this.refreshSessionAfterAcceptedEdit(session, suggestion.id);
 		await this.syncReviewerSignalsForSession(this.store.getSession());
+		this.store.selectSuggestion(id);
+		this.activeHighlightRange = {
+			start: applyPlan.from,
+			end: appliedEnd,
+		};
+		this.activeHighlightTone = "applied";
 		this.lastAppliedChange = {
 			start: applyPlan.from,
 			end: appliedEnd,
 			notePath: context.filePath,
 			suggestionId: suggestion.id,
 		};
-		if (nextSuggestionId) {
-			this.store.selectSuggestion(nextSuggestionId);
-			await this.revealSelectedSuggestion();
-			return;
-		}
-
-		await this.advanceGuidedSweepToNextScene();
+		this.syncActiveEditorDecorations();
 	}
 
 	async rejectSuggestion(id: string): Promise<void> {
@@ -1589,7 +1602,10 @@ export default class EditorialistPlugin extends Plugin {
 				return null;
 			}
 
-			const batch = await this.importEngine.inspectBatch(normalizedText);
+			const context = this.getActiveNoteContext();
+			const batch = await this.importEngine.inspectBatch(normalizedText, {
+				activeNotePath: context?.filePath,
+			});
 			if (batch.summary.totalSuggestions === 0) {
 				return null;
 			}
@@ -1607,8 +1623,8 @@ export default class EditorialistPlugin extends Plugin {
 		const duplicateSweep = this.findDuplicateSweep(batch);
 		if (duplicateSweep) {
 			const choice = await openEditorialistChoiceModal(this.app, {
-				title: "Existing review batch found",
-				description: "This Editorialist batch appears to match an existing imported sweep.",
+				title: "Possible existing review batch detected",
+				description: "This review batch appears to match an existing imported sweep. Open it, import again, or cancel.",
 				choices: [
 					{ label: "Open existing sweep", value: "open" },
 					{ label: "Import anyway", value: "import" },
@@ -1631,9 +1647,11 @@ export default class EditorialistPlugin extends Plugin {
 
 		await this.recordImportedBatch(batch, importedGroups, startReview ? "in_progress" : "imported");
 
-		new Notice(
-			`Imported ${importedGroups.reduce((count, group) => count + group.suggestions.length, 0)} suggestions into ${importedGroups.length} note${importedGroups.length === 1 ? "" : "s"}.`,
-		);
+		if (!startReview) {
+			new Notice(
+				`Imported ${importedGroups.reduce((count, group) => count + group.suggestions.length, 0)} suggestions into ${importedGroups.length} note${importedGroups.length === 1 ? "" : "s"}.`,
+			);
+		}
 
 		if (!startReview) {
 			return;
@@ -1655,12 +1673,14 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		const batch = await this.importEngine.inspectBatch(rawText);
+		const batch = await this.importEngine.inspectBatch(rawText, {
+			activeNotePath: context.filePath,
+		});
 		const duplicateSweep = this.findDuplicateSweep(batch);
 		if (duplicateSweep) {
 			const choice = await openEditorialistChoiceModal(this.app, {
-				title: "Existing review batch found",
-				description: "This Editorialist batch appears to match an existing imported sweep.",
+				title: "Possible existing review batch detected",
+				description: "This review batch appears to match an existing imported sweep. Open it, import again, or cancel.",
 				choices: [
 					{ label: "Open existing sweep", value: "open" },
 					{ label: "Import anyway", value: "import" },
@@ -1689,13 +1709,16 @@ export default class EditorialistPlugin extends Plugin {
 			sceneId: undefined,
 			suggestions: batch.results,
 			exactCount: batch.summary.totalExactMatches,
+			declaredCount: batch.summary.totalDeclaredRoutes,
+			inferredCount: batch.summary.totalInferredRoutes,
+			exactInferredCount: batch.results.filter(
+				(result) => result.routeStrategy === "inferred_exact" && result.verificationStatus === "exact",
+			).length,
 			advisoryCount: batch.summary.totalAdvisoryOnly,
 			unresolvedCount: batch.summary.totalUnresolvedMatches,
 			mismatchCount: batch.summary.totalMismatches,
 			isReady: true,
 		}], startReview ? "in_progress" : "imported");
-
-		new Notice("Imported review block into the active note.");
 
 		if (startReview) {
 			this.store.setGuidedSweep({
@@ -1704,8 +1727,11 @@ export default class EditorialistPlugin extends Plugin {
 				notePaths: [context.filePath],
 				startedAt: Date.now(),
 			});
-			await this.parseCurrentNote();
+			await this.parseCurrentNote({ suppressNotice: true });
+			return;
 		}
+
+		new Notice("Imported review block into the active note.");
 	}
 
 	private findDuplicateSweep(batch: ReviewImportBatch): ReviewSweepRegistryEntry | null {
@@ -1850,9 +1876,15 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		const leaf = this.app.workspace.getMostRecentLeaf() ?? this.app.workspace.getLeaf(true);
-		await leaf.openFile(file);
-		await this.parseCurrentNote();
+		this.isGuidedSweepTransitioning = true;
+		try {
+			const leaf = this.app.workspace.getMostRecentLeaf() ?? this.app.workspace.getLeaf(true);
+			await leaf.openFile(file);
+			await this.parseCurrentNote({ suppressNotice: true });
+		} finally {
+			this.isGuidedSweepTransitioning = false;
+			this.syncActiveEditorDecorations();
+		}
 	}
 
 	private addImportedBlockMetadata(blockText: string, batchId: string): string {

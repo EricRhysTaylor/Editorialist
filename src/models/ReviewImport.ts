@@ -1,6 +1,14 @@
 import type { ReviewSuggestion } from "./ReviewSuggestion";
 
 export type ReviewRouteStatus = "resolved" | "mismatch" | "unresolved";
+export type ReviewRouteStrategy =
+	| "declared_scene_id"
+	| "declared_path"
+	| "declared_note"
+	| "declared_scene"
+	| "inferred_exact"
+	| "inferred_normalized"
+	| "unresolved";
 
 export type ReviewVerificationStatus =
 	| "exact"
@@ -16,6 +24,7 @@ export interface ReviewImportSuggestionResult {
 	resolvedPath?: string;
 	resolvedNoteTitle?: string;
 	routeStatus: ReviewRouteStatus;
+	routeStrategy: ReviewRouteStrategy;
 	routeReason: string;
 	verificationStatus: ReviewVerificationStatus;
 	verificationReason: string;
@@ -27,6 +36,9 @@ export interface ReviewImportNoteGroup {
 	sceneId?: string;
 	suggestions: ReviewImportSuggestionResult[];
 	exactCount: number;
+	declaredCount: number;
+	inferredCount: number;
+	exactInferredCount: number;
 	advisoryCount: number;
 	unresolvedCount: number;
 	mismatchCount: number;
@@ -40,6 +52,8 @@ export interface ReviewImportSummary {
 	totalUnresolvedScenes: number;
 	totalMismatches: number;
 	totalExactMatches: number;
+	totalDeclaredRoutes: number;
+	totalInferredRoutes: number;
 	totalAdvisoryOnly: number;
 	totalUnresolvedMatches: number;
 }

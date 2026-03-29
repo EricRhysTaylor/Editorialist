@@ -28,7 +28,6 @@ export function createReviewToolbarElement(
 	const toolbar = overlay.createDiv({ cls: "editorialist-toolbar" });
 	markAsNonEditorSurface(toolbar);
 	toolbar.setAttribute("role", "toolbar");
-	toolbar.setAttribute("aria-label", "Editorialist review toolbar");
 
 	const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
 	markAsNonEditorSurface(meta);
@@ -52,6 +51,9 @@ export function createReviewToolbarElement(
 	buildButton(actions, "Previous", "arrow-left", () => {
 		void plugin.selectPreviousSuggestion();
 	}, !state.canPrevious);
+	buildButton(actions, "Next", "arrow-right", () => {
+		void plugin.selectNextSuggestion();
+	}, !state.canNext);
 	buildButton(actions, "Apply", "check", () => {
 		void plugin.acceptSelectedSuggestion();
 	}, !state.canApply, true);
@@ -61,9 +63,6 @@ export function createReviewToolbarElement(
 	buildButton(actions, "Reject", "x", () => {
 		void plugin.rejectSelectedSuggestion();
 	}, !state.canReject);
-	buildButton(actions, "Next", "arrow-right", () => {
-		void plugin.selectNextSuggestion();
-	}, !state.canNext);
 
 	return overlay;
 }

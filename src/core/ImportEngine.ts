@@ -6,13 +6,20 @@ import {
 import { normalizeImportedReviewText, REVIEW_BLOCK_FENCE } from "./ReviewBlockFormat";
 import type { MatchEngine } from "./MatchEngine";
 import type { SuggestionParser } from "./SuggestionParser";
-import type { ReviewImportBatch, ReviewImportNoteGroup, ReviewImportSuggestionResult, ReviewImportSummary } from "../models/ReviewImport";
-import type { ParsedReviewDocument, ReviewSuggestion } from "../models/ReviewSuggestion";
+import type {
+	ReviewImportBatch,
+	ReviewImportNoteGroup,
+	ReviewImportSuggestionResult,
+	ReviewImportSummary,
+	ReviewRouteStrategy,
+} from "../models/ReviewImport";
+import type { ParsedReviewDocument, ReviewSuggestion, SupportedReviewOperationType } from "../models/ReviewSuggestion";
 
 interface ResolvedFileMatch {
 	file?: TFile;
 	reason: string;
 	status: "resolved" | "mismatch" | "unresolved";
+	strategy: ReviewRouteStrategy;
 }
 
 interface ReviewMetadata {
@@ -20,6 +27,15 @@ interface ReviewMetadata {
 	provider?: string;
 	reviewer: string;
 	reviewerType: string;
+}
+
+interface InspectBatchOptions {
+	activeNotePath?: string;
+}
+
+interface TextMatchCounts {
+	exactCount: number;
+	normalizedCount: number;
 }
 
 export class ImportEngine {
@@ -34,15 +50,18 @@ export class ImportEngine {
 		return this.parser.parse(normalizedText ?? rawText);
 	}
 
-	async inspectBatch(rawText: string): Promise<ReviewImportBatch> {
+	async inspectBatch(rawText: string, options?: InspectBatchOptions): Promise<ReviewImportBatch> {
 		const normalizedBatchText = normalizeImportedReviewText(rawText) ?? rawText.trim();
 		const contentHash = this.createContentHash(normalizedBatchText);
 		const createdAt = Date.now();
 		const parsedDocument = this.parseBatch(rawText);
 		const results: ReviewImportSuggestionResult[] = [];
+		const markdownFiles = this.app.vault.getMarkdownFiles();
+		const scopeFiles = this.getActiveBookScopeFiles(options?.activeNotePath, markdownFiles);
+		const noteTextCache = new Map<string, string>();
 
 		for (const suggestion of parsedDocument.suggestions) {
-			results.push(await this.inspectSuggestion(suggestion));
+			results.push(await this.inspectSuggestion(suggestion, markdownFiles, scopeFiles, noteTextCache));
 		}
 
 		const groups = this.buildGroups(results);
@@ -82,20 +101,31 @@ export class ImportEngine {
 		return importedGroups;
 	}
 
-	private async inspectSuggestion(suggestion: ReviewSuggestion): Promise<ReviewImportSuggestionResult> {
-		const resolvedFileMatch = this.resolveFileForSuggestion(suggestion);
+	private async inspectSuggestion(
+		suggestion: ReviewSuggestion,
+		markdownFiles: TFile[],
+		scopeFiles: TFile[],
+		noteTextCache: Map<string, string>,
+	): Promise<ReviewImportSuggestionResult> {
+		const resolvedFileMatch = await this.resolveFileForSuggestion(
+			suggestion,
+			markdownFiles,
+			scopeFiles,
+			noteTextCache,
+		);
 
 		if (!resolvedFileMatch.file) {
 			return {
 				suggestion,
 				routeStatus: resolvedFileMatch.status,
+				routeStrategy: resolvedFileMatch.strategy,
 				routeReason: resolvedFileMatch.reason,
 				verificationStatus: "note_unresolved",
 				verificationReason: "Target note is unresolved.",
 			};
 		}
 
-		const noteText = await this.app.vault.cachedRead(resolvedFileMatch.file);
+		const noteText = await this.readNoteText(resolvedFileMatch.file, noteTextCache);
 		const matchedSuggestion = this.matchEngine.matchSuggestion(noteText, suggestion);
 		const verification = this.classifyVerification(matchedSuggestion);
 
@@ -104,15 +134,20 @@ export class ImportEngine {
 			resolvedPath: resolvedFileMatch.file.path,
 			resolvedNoteTitle: resolvedFileMatch.file.basename,
 			routeStatus: resolvedFileMatch.status,
+			routeStrategy: resolvedFileMatch.strategy,
 			routeReason: resolvedFileMatch.reason,
 			verificationStatus: verification.status,
 			verificationReason: verification.reason,
 		};
 	}
 
-	private resolveFileForSuggestion(suggestion: ReviewSuggestion): ResolvedFileMatch {
+	private async resolveFileForSuggestion(
+		suggestion: ReviewSuggestion,
+		markdownFiles: TFile[],
+		scopeFiles: TFile[],
+		noteTextCache: Map<string, string>,
+	): Promise<ResolvedFileMatch> {
 		const routing = suggestion.routing;
-		const markdownFiles = this.app.vault.getMarkdownFiles();
 		const sceneId = routing?.sceneId?.trim();
 
 		if (sceneId) {
@@ -120,6 +155,7 @@ export class ImportEngine {
 			if (sceneMatches.length !== 1) {
 				return {
 					status: "unresolved",
+					strategy: "declared_scene_id",
 					reason:
 						sceneMatches.length > 1
 							? `Multiple notes match SceneId ${sceneId}.`
@@ -131,6 +167,7 @@ export class ImportEngine {
 			if (!resolvedFile) {
 				return {
 					status: "unresolved",
+					strategy: "declared_scene_id",
 					reason: `No note matches SceneId ${sceneId}.`,
 				};
 			}
@@ -139,6 +176,7 @@ export class ImportEngine {
 				return {
 					file: resolvedFile,
 					status: "mismatch",
+					strategy: "declared_scene_id",
 					reason: mismatchReason,
 				};
 			}
@@ -146,6 +184,7 @@ export class ImportEngine {
 			return {
 				file: resolvedFile,
 				status: "resolved",
+				strategy: "declared_scene_id",
 				reason: `Resolved via SceneId ${sceneId}.`,
 			};
 		}
@@ -155,6 +194,7 @@ export class ImportEngine {
 			return {
 				file: pathMatch,
 				status: "resolved",
+				strategy: "declared_path",
 				reason: "Resolved via Path hint.",
 			};
 		}
@@ -164,6 +204,7 @@ export class ImportEngine {
 			return {
 				file: noteMatch,
 				status: "resolved",
+				strategy: "declared_note",
 				reason: "Resolved via Note hint.",
 			};
 		}
@@ -173,14 +214,42 @@ export class ImportEngine {
 			return {
 				file: sceneMatch,
 				status: "resolved",
+				strategy: "declared_scene",
 				reason: "Resolved via Scene hint.",
 			};
 		}
 
+		const inferredMatch = await this.inferFileForSuggestion(suggestion, scopeFiles, noteTextCache);
+		if (inferredMatch) {
+			return inferredMatch;
+		}
+
 		return {
 			status: "unresolved",
-			reason: "No SceneId, Path, Note, or Scene hint could be resolved.",
+			strategy: "unresolved",
+			reason:
+				scopeFiles.length > 0
+					? "No SceneId, Path, Note, or safe inferred scene match could be resolved."
+					: "No SceneId, Path, or Note hint could be resolved, and no active-book scene scope was available for inferred matching.",
 		};
+	}
+
+	private getActiveBookScopeFiles(activeNotePath: string | undefined, markdownFiles: TFile[]): TFile[] {
+		if (!activeNotePath) {
+			return [];
+		}
+
+		const normalizedActivePath = normalizePath(activeNotePath);
+		const lastSlashIndex = normalizedActivePath.lastIndexOf("/");
+		if (lastSlashIndex === -1) {
+			return markdownFiles.filter((file) => !file.path.includes("/"));
+		}
+
+		const scopeRoot = normalizedActivePath.slice(0, lastSlashIndex);
+		const scopePrefix = `${scopeRoot}/`;
+		return markdownFiles.filter(
+			(file) => normalizePath(file.path) === normalizedActivePath || normalizePath(file.path).startsWith(scopePrefix),
+		);
 	}
 
 	private matchesSceneId(file: TFile, sceneId: string): boolean {
@@ -246,6 +315,192 @@ export class ImportEngine {
 		);
 
 		return matches.length === 1 ? (matches[0] ?? null) : null;
+	}
+
+	private async inferFileForSuggestion(
+		suggestion: ReviewSuggestion,
+		scopeFiles: TFile[],
+		noteTextCache: Map<string, string>,
+	): Promise<ResolvedFileMatch | null> {
+		if (scopeFiles.length === 0) {
+			return null;
+		}
+
+		const inferredText = this.getInferredRoutingText(suggestion);
+		if (!inferredText?.trim()) {
+			return {
+				status: "unresolved",
+				strategy: "unresolved",
+				reason:
+					suggestion.operation === "move"
+						? "Move suggestion could not be inferred safely from target and anchor text."
+						: "No routing hint or inferable source text was available.",
+			};
+		}
+
+		const exactMatches = await this.findExactInferenceMatches(suggestion, scopeFiles, noteTextCache);
+		if (exactMatches.length === 1) {
+			const resolvedFile = exactMatches[0];
+			if (!resolvedFile) {
+				return null;
+			}
+			return {
+				file: resolvedFile,
+				status: "resolved",
+				strategy: "inferred_exact",
+				reason: `Resolved via exact inferred text match in ${resolvedFile.basename}.`,
+			};
+		}
+
+		if (exactMatches.length > 1) {
+			return {
+				status: "unresolved",
+				strategy: "inferred_exact",
+				reason: `Multiple scene notes in the active book contain the exact ${this.getInferredTargetLabel(suggestion.operation)} text.`,
+			};
+		}
+
+		const normalizedMatches = await this.findNormalizedInferenceMatches(suggestion, scopeFiles, noteTextCache);
+		if (normalizedMatches.length === 1) {
+			const normalizedFile = normalizedMatches[0];
+			if (!normalizedFile) {
+				return null;
+			}
+			return {
+				status: "unresolved",
+				strategy: "inferred_normalized",
+				reason: `Normalized text suggests ${normalizedFile.basename}, but the exact text was not found safely.`,
+			};
+		}
+
+		if (normalizedMatches.length > 1) {
+			return {
+				status: "unresolved",
+				strategy: "inferred_normalized",
+				reason: `Normalized text matches multiple scene notes in the active book.`,
+			};
+		}
+
+		return null;
+	}
+
+	private getInferredRoutingText(suggestion: ReviewSuggestion): string | null {
+		switch (suggestion.operation) {
+			case "edit":
+				return suggestion.payload.original;
+			case "cut":
+				return suggestion.payload.target;
+			case "condense":
+				return suggestion.payload.target;
+			case "move":
+				return suggestion.payload.target;
+			default:
+				return null;
+		}
+	}
+
+	private getInferredTargetLabel(operation: SupportedReviewOperationType): string {
+		switch (operation) {
+			case "edit":
+				return "original";
+			case "cut":
+			case "condense":
+				return "target";
+			case "move":
+				return "target and anchor";
+		}
+	}
+
+	private async findExactInferenceMatches(
+		suggestion: ReviewSuggestion,
+		scopeFiles: TFile[],
+		noteTextCache: Map<string, string>,
+	): Promise<TFile[]> {
+		const matches: TFile[] = [];
+
+		for (const file of scopeFiles) {
+			const noteText = await this.readNoteText(file, noteTextCache);
+			const counts = this.getSuggestionMatchCounts(noteText, suggestion);
+			if (this.isSafeExactInferenceMatch(suggestion, counts)) {
+				matches.push(file);
+			}
+		}
+
+		return matches;
+	}
+
+	private async findNormalizedInferenceMatches(
+		suggestion: ReviewSuggestion,
+		scopeFiles: TFile[],
+		noteTextCache: Map<string, string>,
+	): Promise<TFile[]> {
+		const matches: TFile[] = [];
+
+		for (const file of scopeFiles) {
+			const noteText = await this.readNoteText(file, noteTextCache);
+			if (this.hasNormalizedInferenceMatch(noteText, suggestion)) {
+				matches.push(file);
+			}
+		}
+
+		return matches;
+	}
+
+	private getSuggestionMatchCounts(noteText: string, suggestion: ReviewSuggestion): TextMatchCounts {
+		switch (suggestion.operation) {
+			case "edit":
+				return {
+					exactCount: this.findAllExactMatches(noteText, suggestion.payload.original).length,
+					normalizedCount: this.findAllNormalizedMatches(noteText, suggestion.payload.original),
+				};
+			case "cut":
+				return {
+					exactCount: this.findAllExactMatches(noteText, suggestion.payload.target).length,
+					normalizedCount: this.findAllNormalizedMatches(noteText, suggestion.payload.target),
+				};
+			case "condense":
+				return {
+					exactCount: this.findAllExactMatches(noteText, suggestion.payload.target).length,
+					normalizedCount: this.findAllNormalizedMatches(noteText, suggestion.payload.target),
+				};
+			case "move": {
+				const targetExactCount = this.findAllExactMatches(noteText, suggestion.payload.target).length;
+				const anchorExactCount = this.findAllExactMatches(noteText, suggestion.payload.anchor).length;
+				const targetNormalizedCount = this.findAllNormalizedMatches(noteText, suggestion.payload.target);
+				const anchorNormalizedCount = this.findAllNormalizedMatches(noteText, suggestion.payload.anchor);
+				return {
+					exactCount: targetExactCount === 1 && anchorExactCount === 1 ? 1 : 0,
+					normalizedCount: targetNormalizedCount === 1 && anchorNormalizedCount === 1 ? 1 : 0,
+				};
+			}
+		}
+	}
+
+	private isSafeExactInferenceMatch(
+		suggestion: ReviewSuggestion,
+		matchCounts: TextMatchCounts,
+	): boolean {
+		if (suggestion.operation === "move") {
+			return matchCounts.exactCount === 1;
+		}
+
+		return matchCounts.exactCount === 1;
+	}
+
+	private hasNormalizedInferenceMatch(noteText: string, suggestion: ReviewSuggestion): boolean {
+		const counts = this.getSuggestionMatchCounts(noteText, suggestion);
+		return counts.exactCount === 0 && counts.normalizedCount === 1;
+	}
+
+	private async readNoteText(file: TFile, noteTextCache: Map<string, string>): Promise<string> {
+		const cached = noteTextCache.get(file.path);
+		if (cached !== undefined) {
+			return cached;
+		}
+
+		const noteText = await this.app.vault.cachedRead(file);
+		noteTextCache.set(file.path, noteText);
+		return noteText;
 	}
 
 	private classifyVerification(suggestion: ReviewSuggestion): { reason: string; status: ReviewImportSuggestionResult["verificationStatus"] } {
@@ -317,6 +572,11 @@ export class ImportEngine {
 			.map(([filePath, suggestionResults]) => {
 				const first = suggestionResults[0];
 				const exactCount = suggestionResults.filter((result) => result.verificationStatus === "exact").length;
+				const declaredCount = suggestionResults.filter((result) => result.routeStrategy.startsWith("declared_")).length;
+				const inferredCount = suggestionResults.filter((result) => result.routeStrategy === "inferred_exact").length;
+				const exactInferredCount = suggestionResults.filter(
+					(result) => result.routeStrategy === "inferred_exact" && result.verificationStatus === "exact",
+				).length;
 				const advisoryCount = suggestionResults.filter((result) => result.verificationStatus === "advisory").length;
 				const unresolvedCount = suggestionResults.filter(
 					(result) =>
@@ -332,6 +592,9 @@ export class ImportEngine {
 					sceneId: first?.suggestion.routing?.sceneId,
 					suggestions: suggestionResults,
 					exactCount,
+					declaredCount,
+					inferredCount,
+					exactInferredCount,
 					advisoryCount,
 					unresolvedCount,
 					mismatchCount,
@@ -352,6 +615,8 @@ export class ImportEngine {
 			).size,
 			totalMismatches: results.filter((result) => result.routeStatus === "mismatch").length,
 			totalExactMatches: results.filter((result) => result.verificationStatus === "exact").length,
+			totalDeclaredRoutes: results.filter((result) => result.routeStrategy.startsWith("declared_")).length,
+			totalInferredRoutes: results.filter((result) => result.routeStrategy === "inferred_exact").length,
 			totalAdvisoryOnly: results.filter((result) => result.verificationStatus === "advisory").length,
 			totalUnresolvedMatches: results.filter(
 				(result) =>
@@ -452,5 +717,47 @@ export class ImportEngine {
 		}
 
 		return (hash >>> 0).toString(16).padStart(8, "0");
+	}
+
+	private findAllExactMatches(noteText: string, text: string): number[] {
+		if (!text) {
+			return [];
+		}
+
+		const matches: number[] = [];
+		let searchFrom = 0;
+
+		while (searchFrom < noteText.length) {
+			const index = noteText.indexOf(text, searchFrom);
+			if (index === -1) {
+				break;
+			}
+
+			matches.push(index);
+			searchFrom = index + text.length;
+		}
+
+		return matches;
+	}
+
+	private findAllNormalizedMatches(noteText: string, text: string): number {
+		const normalizedText = this.matchEngine.normalizeText(noteText);
+		const normalizedTarget = this.matchEngine.normalizeText(text);
+		if (!normalizedText || !normalizedTarget) {
+			return 0;
+		}
+
+		let count = 0;
+		let searchFrom = 0;
+		while (searchFrom < normalizedText.length) {
+			const index = normalizedText.indexOf(normalizedTarget, searchFrom);
+			if (index === -1) {
+				break;
+			}
+			count += 1;
+			searchFrom = index + normalizedTarget.length;
+		}
+
+		return count;
 	}
 }
