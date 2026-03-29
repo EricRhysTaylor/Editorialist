@@ -134,6 +134,37 @@
 	font-size: var(--font-ui-small);
 }
 
+.editorialist-panel__command-shortcut {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	margin: 0 0.2rem 0 0.1rem;
+	vertical-align: middle;
+}
+
+.editorialist-panel__command-shortcut kbd {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 1.35rem;
+	height: 1.35rem;
+	padding: 0 0.35rem;
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 84%, transparent);
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--background-secondary) 88%, var(--background-primary) 12%);
+	box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--background-modifier-border) 70%, transparent);
+	font-family: var(--font-ui);
+	font-size: 0.78rem;
+	font-weight: 700;
+	line-height: 1;
+	color: var(--text-normal);
+}
+
+.editorialist-panel__command-name {
+	font-weight: 700;
+	color: var(--text-normal);
+}
+
 .editorialist-panel__summary {
 	margin-top: 0.15rem;
 	font-size: var(--font-ui-small);
@@ -445,13 +476,13 @@
 .editorialist-suggestion__copy {
 	display: flex;
 	flex-direction: column;
-	gap: 0.3rem;
+	gap: 1rem;
 	font-size: var(--font-ui-small);
 }
 
 .editorialist-suggestion__copy strong {
 	display: block;
-	margin-bottom: 0.35rem;
+	margin-bottom: 0.18rem;
 	font-family: var(--font-monospace);
 	font-size: var(--font-ui-smaller);
 	letter-spacing: 0.02em;
@@ -473,43 +504,21 @@
 	color: color-mix(in srgb, var(--color-green) 58%, var(--text-normal));
 }
 
+.editorialist-suggestion__copy-block--why .editorialist-suggestion__copy-body,
+.editorialist-suggestion__copy-block--why strong {
+	color: var(--text-muted);
+	opacity: 0.82;
+}
+
 .editorialist-suggestion__copy-body {
 	font-family: var(--font-monospace);
 	line-height: 1.5;
 }
 
-.editorialist-suggestion__why {
-	color: var(--text-muted);
-	font-size: var(--font-ui-small);
-	opacity: 0.82;
-}
-
-.editorialist-suggestion__why strong {
-	display: block;
-	margin-bottom: 0.35rem;
-	font-family: var(--font-monospace);
-	font-size: var(--font-ui-smaller);
-	letter-spacing: 0.02em;
-	text-transform: uppercase;
-	color: color-mix(in srgb, var(--text-muted) 72%, var(--text-normal));
-}
-
-.editorialist-suggestion__why > div {
-	font-family: var(--font-monospace);
-	font-size: inherit;
-	line-height: 1.5;
-}
-
 .editorialist-suggestion--accepted .editorialist-suggestion__copy strong,
 .editorialist-suggestion--accepted .editorialist-suggestion__copy-body,
-.editorialist-suggestion--accepted .editorialist-suggestion__why,
-.editorialist-suggestion--accepted .editorialist-suggestion__why strong,
-.editorialist-suggestion--accepted .editorialist-suggestion__why > div,
 .editorialist-suggestion--resolved .editorialist-suggestion__copy strong,
 .editorialist-suggestion--resolved .editorialist-suggestion__copy-body,
-.editorialist-suggestion--resolved .editorialist-suggestion__why,
-.editorialist-suggestion--resolved .editorialist-suggestion__why strong,
-.editorialist-suggestion--resolved .editorialist-suggestion__why > div,
 .editorialist-suggestion--resolved .editorialist-suggestion__meta,
 .editorialist-suggestion--resolved .editorialist-suggestion__contributor,
 .editorialist-suggestion--resolved .editorialist-suggestion__reviewer-raw,
@@ -529,6 +538,7 @@
 	align-items: center;
 	gap: 0.45rem;
 	margin-top: 0.65rem;
+	margin-left: 0.55rem;
 	padding: 0;
 	border-radius: 0;
 	background: none;
@@ -917,7 +927,7 @@
 .editorialist-control-modal__header-text {
 	display: flex;
 	flex-direction: column;
-	gap: 0.2rem;
+	gap: 0.28rem;
 }
 
 .editorialist-control-modal__title {
@@ -931,17 +941,13 @@
 	color: var(--text-muted);
 }
 
-.editorialist-control-modal__header-status {
-	display: flex;
-	flex-direction: column;
-	margin-top: 0.25rem;
-}
-
-.editorialist-control-modal__status-line {
+.editorialist-control-modal__description {
 	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	line-height: 1.45;
+	max-width: 60ch;
 }
 
-.editorialist-control-modal__status-line--muted,
 .editorialist-control-modal__card-copy {
 	color: var(--text-muted);
 }
@@ -983,10 +989,17 @@
 .editorialist-control-modal__group-meta,
 .editorialist-control-modal__group-path,
 .editorialist-control-modal__item,
+.editorialist-control-modal__example-description,
 .editorialist-control-modal__footer,
 .editorialist-control-modal__summary {
 	font-size: var(--font-ui-small);
 	color: var(--text-muted);
+}
+
+.editorialist-control-modal__example-description {
+	margin-top: 0.15rem;
+	line-height: 1.45;
+	max-width: 64ch;
 }
 
 .editorialist-control-modal__detection-grid {

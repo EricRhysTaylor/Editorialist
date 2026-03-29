@@ -1,5 +1,4 @@
 import { ButtonComponent, DropdownComponent, ItemView, setIcon, type WorkspaceLeaf } from "obsidian";
-import { REVIEW_BLOCK_FENCE } from "../core/ReviewBlockFormat";
 import { getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isMoveSuggestion } from "../core/OperationSupport";
 import type { ReviewSuggestion } from "../models/ReviewSuggestion";
 import type EditorialistPlugin from "../main";
@@ -52,10 +51,17 @@ export class ReviewPanel extends ItemView {
 		titleRow.createEl("h2", { text: "Editorialist review" });
 
 		if (!session) {
-			header.createDiv({
-				cls: "editorialist-panel__empty",
-				text: `Run “Parse review blocks” on a note that contains an ${REVIEW_BLOCK_FENCE} fenced block.`,
+			const empty = header.createDiv({ cls: "editorialist-panel__empty" });
+			empty.appendText("Run ");
+			const shortcut = empty.createSpan({ cls: "editorialist-panel__command-shortcut" });
+			shortcut.createEl("kbd", { text: "⌘" });
+			shortcut.createEl("kbd", { text: "P" });
+			empty.appendText(" ");
+			empty.createSpan({
+				cls: "editorialist-panel__command-name",
+				text: "Editorialist begin",
 			});
+			empty.appendText(" to get started with a streamlined editing workflow.");
 			return;
 		}
 
@@ -190,12 +196,6 @@ export class ReviewPanel extends ItemView {
 
 		this.renderSuggestionCopy(card, suggestion);
 
-		if (suggestion.why) {
-			const why = card.createDiv({ cls: "editorialist-suggestion__why" });
-			why.createEl("strong", { text: "WHY" });
-			why.createDiv({ text: suggestion.why });
-		}
-
 		const reason = card.createDiv({
 			cls: `editorialist-suggestion__reason editorialist-suggestion__reason--${this.getSuggestionReasonTone(suggestion)}`,
 		});
@@ -242,6 +242,9 @@ export class ReviewPanel extends ItemView {
 		getSuggestionCopyBlocks(suggestion).forEach((block) => {
 			this.renderCopyBlock(copy, block.label, block.body);
 		});
+		if (suggestion.why) {
+			this.renderCopyBlock(copy, "WHY", suggestion.why);
+		}
 	}
 
 	private renderReviewerMenu(parent: HTMLElement, suggestion: ReviewSuggestion): void {

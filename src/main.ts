@@ -74,6 +74,7 @@ export default class EditorialistPlugin extends Plugin {
 	private readonly reviewEngine = new ReviewEngine(this.parser, this.matchEngine);
 	private importEngine!: ImportEngine;
 	private isGuidedSweepTransitioning = false;
+	private radialTimelineActiveBookLabel: string | null = null;
 	private radialTimelineActiveBookSourceFolder: string | null = null;
 
 	private activeHighlightRange: OffsetRange | null = null;
@@ -1732,6 +1733,7 @@ export default class EditorialistPlugin extends Plugin {
 		try {
 			const radialDataPath = normalizePath(`${this.app.vault.configDir}/plugins/radial-timeline/data.json`);
 			if (!(await this.app.vault.adapter.exists(radialDataPath))) {
+				this.radialTimelineActiveBookLabel = null;
 				this.radialTimelineActiveBookSourceFolder = null;
 				return;
 			}
@@ -1739,13 +1741,16 @@ export default class EditorialistPlugin extends Plugin {
 			const raw = await this.app.vault.adapter.read(radialDataPath);
 			const parsed = JSON.parse(raw) as {
 				activeBookId?: string;
-				books?: Array<{ id?: string; sourceFolder?: string }>;
+				books?: Array<{ id?: string; name?: string; title?: string; sourceFolder?: string }>;
 			};
 			const books = Array.isArray(parsed.books) ? parsed.books : [];
 			const activeBook = books.find((book) => book.id === parsed.activeBookId) ?? books[0];
 			const sourceFolder = activeBook?.sourceFolder?.trim();
+			const activeBookLabel = activeBook?.title?.trim() || activeBook?.name?.trim() || activeBook?.id?.trim() || null;
+			this.radialTimelineActiveBookLabel = activeBookLabel;
 			this.radialTimelineActiveBookSourceFolder = sourceFolder ? normalizePath(sourceFolder) : null;
 		} catch {
+			this.radialTimelineActiveBookLabel = null;
 			this.radialTimelineActiveBookSourceFolder = null;
 		}
 	}
@@ -1763,14 +1768,15 @@ export default class EditorialistPlugin extends Plugin {
 	private getReviewPanelWarnings(notePath: string): string[] {
 		const warnings: string[] = [];
 		if (!this.isSceneClassNote(notePath)) {
-			warnings.push("Warning: current note is not class: scene.");
+			warnings.push("Warning: current note is not a scene.");
 		}
 
 		if (
 			this.radialTimelineActiveBookSourceFolder &&
 			!this.isPathInFolderScope(notePath, this.radialTimelineActiveBookSourceFolder)
 		) {
-			warnings.push("Warning: current note is outside the active book.");
+			const activeBookLabel = this.radialTimelineActiveBookLabel ?? "the active book";
+			warnings.push(`Warning: current note is outside the active book, ${activeBookLabel}.`);
 		}
 
 		if (/(^|\/)(exports?|archives?|drafts?|revisions?)(\/|$)/i.test(notePath)) {

@@ -111,18 +111,9 @@ export class EditorialistModal extends Modal {
 			text: "Editorialist",
 		});
 		text.createDiv({
-			cls: "editorialist-control-modal__subtitle",
-			text: "Import, prepare, and start editorial review",
+			cls: "editorialist-control-modal__description",
+			text: "Import, prepare, and start editorial review using formatted revision notes. Paste from your clipboard, continue in this note, or copy instructions for your AI and return with results.",
 		});
-
-		const statusText = this.getClipboardStatusText();
-		if (statusText) {
-			const status = text.createDiv({ cls: "editorialist-control-modal__header-status" });
-			status.createDiv({
-				cls: "editorialist-control-modal__status-line editorialist-control-modal__status-line--muted",
-				text: statusText,
-			});
-		}
 	}
 
 	private renderPrimaryState(parent: HTMLElement): void {
@@ -150,14 +141,7 @@ export class EditorialistModal extends Modal {
 
 	private renderClipboardState(parent: HTMLElement, clipboardBatch: ClipboardReviewBatch): void {
 		const card = parent.createDiv({ cls: "editorialist-control-modal__card" });
-		card.createDiv({
-			cls: "editorialist-control-modal__card-title",
-			text: "Clipboard ready",
-		});
-		card.createDiv({
-			cls: "editorialist-control-modal__card-copy",
-			text: "Review batch detected.",
-		});
+		this.renderSelectionSummary(card, clipboardBatch.batch);
 
 		this.renderDetectionGrid(card, clipboardBatch.batch);
 		this.renderSecondaryActions(card, [
@@ -177,14 +161,7 @@ export class EditorialistModal extends Modal {
 
 	private renderCurrentNoteState(parent: HTMLElement): void {
 		const card = parent.createDiv({ cls: "editorialist-control-modal__card" });
-		card.createDiv({
-			cls: "editorialist-control-modal__card-title",
-			text: "Current note ready",
-		});
-		card.createDiv({
-			cls: "editorialist-control-modal__card-copy",
-			text: this.options.activeNoteLabel ?? "Review block found",
-		});
+		this.renderSelectionSummary(card);
 
 		this.renderDetectionGrid(card);
 		this.renderSecondaryActions(card, [
@@ -209,14 +186,7 @@ export class EditorialistModal extends Modal {
 
 	private renderEmptyState(parent: HTMLElement): void {
 		const card = parent.createDiv({ cls: "editorialist-control-modal__card" });
-		card.createDiv({
-			cls: "editorialist-control-modal__card-title",
-			text: "Get started",
-		});
-		card.createDiv({
-			cls: "editorialist-control-modal__card-copy",
-			text: "Copy the template or paste a review batch.",
-		});
+		this.renderSelectionSummary(card);
 
 		this.renderDetectionGrid(card);
 		this.renderSecondaryActions(card, [
@@ -376,7 +346,7 @@ export class EditorialistModal extends Modal {
 
 		const actions = header.createDiv({ cls: "editorialist-control-modal__example-actions" });
 		const copy = new ButtonComponent(actions)
-			.setButtonText("Copy template")
+			.setButtonText("Copy format instructions")
 			.onClick(() => {
 				void this.runAction(async () => {
 					await this.options.onCopyTemplate();
@@ -398,13 +368,14 @@ export class EditorialistModal extends Modal {
 			return;
 		}
 
+		example.createDiv({
+			cls: "editorialist-control-modal__example-description",
+			text: "This instructs your LLM to prepare the editorial notes into a structured format that Editorialist will understand and act upon. Return only this fenced block. No extra text.",
+		});
+
 		example.createEl("pre", {
 			cls: "editorialist-control-modal__example-block",
 			text: REVIEW_TEMPLATE_BLOCK,
-		});
-		example.createDiv({
-			cls: "editorialist-control-modal__footer",
-			text: "Return only this fenced block. No extra text.",
 		});
 	}
 
@@ -416,7 +387,6 @@ export class EditorialistModal extends Modal {
 			});
 			card.setAttribute("role", "button");
 			card.tabIndex = item.disabled || this.isWorking ? -1 : 0;
-			card.setAttribute("aria-label", item.actionLabel ?? item.label);
 			if (!item.disabled && !this.isWorking) {
 				card.addEventListener("click", () => {
 					void this.runAction(() => this.handleDetectionAction(item.id));
@@ -445,6 +415,19 @@ export class EditorialistModal extends Modal {
 				});
 			}
 		}
+	}
+
+	private renderSelectionSummary(parent: HTMLElement, batch?: ReviewImportBatch): void {
+		const items = this.getDetectionItems(batch);
+		const availableCount = items.filter((item) => item.tone === "success" && !item.disabled).length;
+		parent.createDiv({
+			cls: "editorialist-control-modal__card-title",
+			text: "Please make your selection",
+		});
+		parent.createDiv({
+			cls: "editorialist-control-modal__card-copy",
+			text: availableCount === 2 ? "2 options available" : "1 of 2 options available",
+		});
 	}
 
 	private renderSecondaryActions(
@@ -545,18 +528,6 @@ export class EditorialistModal extends Modal {
 		return this.getClipboardTone();
 	}
 
-	private getClipboardStatusText(): string {
-		if (this.clipboardState === "ready") {
-			return "Clipboard ready";
-		}
-
-		if (this.clipboardState === "empty") {
-			return "";
-		}
-
-		return "Checking clipboard";
-	}
-
 	private getDetectionItems(batch?: ReviewImportBatch): DetectionItem[] {
 		const clipboardDescription =
 			this.clipboardState === "ready"
@@ -573,7 +544,7 @@ export class EditorialistModal extends Modal {
 					emphasized: true,
 					icon: "file-text",
 					id: "current-note",
-					label: "Current note",
+					label: this.options.activeNoteLabel ? `Current note: ${this.options.activeNoteLabel}` : "Current note",
 					description: "Review block found",
 					tone: "success",
 				},
