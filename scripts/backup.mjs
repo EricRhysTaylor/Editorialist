@@ -1,8 +1,14 @@
 import { execSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
 const messageInput = args.filter((arg) => arg !== "--dry-run").join(" ").trim();
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(scriptDir, "..");
+const backupStampPath = path.join(repoRoot, ".git", "editorialist-last-backup.json");
 
 function safe(command) {
 	try {
@@ -44,6 +50,26 @@ function createMessage() {
 	return `backup: ${new Date().toISOString().replace("T", " ").replace(/\..+/, "")}`;
 }
 
+function writeBackupStamp(branch) {
+	if (dryRun) {
+		return;
+	}
+
+	mkdirSync(path.dirname(backupStampPath), { recursive: true });
+	writeFileSync(
+		backupStampPath,
+		JSON.stringify(
+			{
+				branch,
+				backedUpAt: new Date().toISOString(),
+			},
+			null,
+			2,
+		),
+		"utf8",
+	);
+}
+
 try {
 	ensureGitReady();
 
@@ -59,6 +85,7 @@ try {
 	run("git add .");
 	run(`git commit -m "${message}"`);
 	run(`git push origin ${branch}`);
+	writeBackupStamp(branch);
 
 	console.log(`\n[backup] Done. ${dryRun ? `Would push to ${branch}.` : `Pushed to ${branch}.`}`);
 } catch (error) {
