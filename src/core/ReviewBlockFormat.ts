@@ -22,6 +22,11 @@ export interface RemoveImportedReviewBlocksResult {
 	text: string;
 }
 
+export interface StripReviewBlocksResult {
+	removedCount: number;
+	text: string;
+}
+
 export function createReviewBlockPattern(): RegExp {
 	return new RegExp(
 		`(?:^|\\n)\`\`\`${REVIEW_BLOCK_FENCE}[^\\S\\r\\n]*\\r?\\n([\\s\\S]*?)\\r?\\n\`\`\``,
@@ -140,6 +145,26 @@ export function removeImportedReviewBlocks(noteText: string, batchId?: string): 
 
 	return {
 		batchIds: [...new Set(blocks.map((block) => block.batchId).filter((value): value is string => Boolean(value)))],
+		removedCount: blocks.length,
+		text: normalizeRemovedReviewSpacing(nextText),
+	};
+}
+
+export function stripAllReviewBlocks(noteText: string): StripReviewBlocksResult {
+	const blocks = extractReviewBlocks(noteText).sort((left, right) => right.startOffset - left.startOffset);
+	if (blocks.length === 0) {
+		return {
+			removedCount: 0,
+			text: noteText,
+		};
+	}
+
+	let nextText = noteText;
+	for (const block of blocks) {
+		nextText = nextText.slice(0, block.startOffset) + nextText.slice(block.endOffset);
+	}
+
+	return {
 		removedCount: blocks.length,
 		text: normalizeRemovedReviewSpacing(nextText),
 	};

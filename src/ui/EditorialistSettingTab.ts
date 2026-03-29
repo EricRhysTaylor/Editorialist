@@ -8,6 +8,8 @@ import type EditorialistPlugin from "../main";
 
 export class EditorialistSettingTab extends PluginSettingTab {
 	private static readonly SETTINGS_DOCS_URL = "https://github.com/EricRhysTaylor/Editorialist#readme";
+	private static readonly RADIAL_TIMELINE_INSTALL_URL = "obsidian://show-plugin?id=radial-timeline";
+	private static readonly RADIAL_TIMELINE_REPOSITORY_URL = "https://github.com/EricRhysTaylor/Obsidian-Manuscript-Timeline";
 	private activeBookOnly = true;
 	private activeTab: "core" | "reviewer" = "core";
 
@@ -46,6 +48,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 		const inventory = this.plugin.getSceneReviewRecords({ activeBookOnly: this.activeBookOnly });
 		this.renderCoreHero(coreContent);
+		this.renderRadialTimelineCard(coreContent);
 		this.renderHero(coreContent, summary);
 		this.renderActivitySection(coreContent, summary);
 		this.renderInventorySection(coreContent, inventory, activeBook.label);
@@ -53,6 +56,36 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 		this.renderContributorsSection(reviewerContent);
 		this.renderMetadataSection(reviewerContent);
+	}
+
+	private getInventoryVocabulary(activeBook: { label: string | null; sourceFolder: string | null }): {
+		hasStructuredRtContext: boolean;
+		pluralLabel: string;
+		pluralLabelLower: string;
+		scopeLabel: string;
+		singularLabel: string;
+		singularLabelLower: string;
+	} {
+		const hasStructuredRtContext = Boolean(activeBook.sourceFolder && activeBook.label);
+		if (hasStructuredRtContext) {
+			return {
+				hasStructuredRtContext,
+				singularLabel: "Scene",
+				singularLabelLower: "scene",
+				pluralLabel: "Scenes",
+				pluralLabelLower: "scenes",
+				scopeLabel: "book",
+			};
+		}
+
+		return {
+			hasStructuredRtContext,
+			singularLabel: "Note",
+			singularLabelLower: "note",
+			pluralLabel: "Notes",
+			pluralLabelLower: "notes",
+			scopeLabel: "vault",
+		};
 	}
 
 	private renderCoreHero(parent: HTMLElement): void {
@@ -81,11 +114,11 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const titleRow = hero.createDiv({ cls: "editorialist-settings__hero-intro-title-row" });
 		titleRow.createDiv({
 			cls: "editorialist-settings__hero-intro-title",
-			text: "Keep your edits organized and easy to manage.",
+			text: "Structured editorial review in Obsidian",
 		});
 		hero.createDiv({
 			cls: "editorialist-settings__hero-intro-subtitle",
-			text: "Editorialist tracks your revision notes across scenes, shows what’s been reviewed, and keeps contributor history so you can pick up where you left off. You can also export this data to keep a backup.",
+			text: "Editorialist is a revision workspace for authors who want structured, in-context editing inside Obsidian. It brings together feedback from human editors, beta readers, and AI into one review flow, so you can compare suggestions against the manuscript before making a decision. That means fewer scattered notes, less copy-and-paste friction, and a much clearer path through revision. Every change stays under author control until accepted. It works with any vault note out of the box, whether you are revising a single chapter or managing a full manuscript.",
 		});
 
 		const features = hero.createDiv({ cls: "editorialist-settings__hero-features" });
@@ -97,6 +130,76 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		this.createHeroFeature(featureList, "table-properties", "Scene inventory — see every scene that still has revision notes and track progress at a glance.");
 		this.createHeroFeature(featureList, "list-todo", "Review in context — jump straight into any scene and continue editing without searching.");
 		this.createHeroFeature(featureList, "database-backup", "Backup your data — export contributor history and revision activity without touching your manuscript.");
+	}
+
+	private renderRadialTimelineCard(parent: HTMLElement): void {
+		const card = parent.createDiv({
+			cls: "editorialist-settings__rt-card editorialist-settings__panel",
+		});
+		const backgroundIcon = card.createDiv({ cls: "editorialist-settings__rt-card-bg-icon" });
+		setIcon(backgroundIcon, "shell");
+
+		const row = card.createDiv({ cls: "editorialist-settings__rt-card-row" });
+		const content = row.createDiv({ cls: "editorialist-settings__rt-card-content" });
+		const badge = content.createSpan({ cls: "editorialist-settings__hero-intro-badge" });
+		const badgeIcon = badge.createSpan({ cls: "editorialist-settings__hero-intro-badge-icon" });
+		setIcon(badgeIcon, "shell");
+		badge.createSpan({
+			cls: "editorialist-settings__hero-intro-badge-text",
+			text: "Radial Timeline integration",
+		});
+		content.createDiv({
+			cls: "editorialist-settings__rt-card-title",
+			text: "Work with scenes",
+		});
+		content.createDiv({
+			cls: "editorialist-settings__rt-card-body",
+			text: "Editorialist works with any notes, but it becomes much more powerful when your manuscript is structured into scenes.",
+		});
+
+		const list = content.createEl("ul", { cls: "editorialist-settings__rt-card-list" });
+		[
+			"organize scenes and books",
+			"run guided editorial passes",
+			"track story structure alongside revisions",
+		].forEach((item) => {
+			list.createEl("li", { text: item });
+		});
+
+		const actions = row.createDiv({ cls: "editorialist-settings__rt-card-actions" });
+		const installLink = actions.createEl("a", {
+			href: EditorialistSettingTab.RADIAL_TIMELINE_INSTALL_URL,
+			cls: "editorialist-settings__action-button editorialist-settings__action-button--primary",
+			attr: {
+				"aria-label": "Install the Radial Timeline community plugin",
+				target: "_blank",
+				rel: "noopener",
+			},
+		});
+		const installIcon = installLink.createSpan({ cls: "editorialist-settings__action-button-icon" });
+		setIcon(installIcon, "download");
+		installLink.createSpan({
+			cls: "editorialist-settings__action-button-label",
+			text: "Install Radial Timeline",
+		});
+
+		const fallbackLink = actions.createEl("a", {
+			href: EditorialistSettingTab.RADIAL_TIMELINE_REPOSITORY_URL,
+			cls: "editorialist-settings__rt-card-fallback-link",
+			text: "Open plugin page",
+			attr: {
+				"aria-label": "Open the Radial Timeline plugin page",
+				target: "_blank",
+				rel: "noopener",
+			},
+		});
+		const fallbackIcon = fallbackLink.createSpan({ cls: "editorialist-settings__rt-card-fallback-icon" });
+		setIcon(fallbackIcon, "external-link");
+
+		card.createDiv({
+			cls: "editorialist-settings__rt-card-hint",
+			text: 'Find it in Community Plugins -> search "Radial Timeline"',
+		});
 	}
 
 	private renderHero(
@@ -160,31 +263,47 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		inventory: SceneReviewRecord[],
 		activeBookLabel: string | null,
 	): void {
+		const activeBook = this.plugin.getActiveBookScopeInfo();
+		const vocabulary = this.getInventoryVocabulary(activeBook);
 		const body = this.createSection(
 			parent,
-			"Scene inventory",
-			"Every scene note that currently carries Editorialist revision notes or has been cleaned and retained in the metadata log.",
+			`${vocabulary.singularLabel} inventory`,
+			`Every ${vocabulary.singularLabelLower} that currently carries Editorialist revision notes or has been cleaned and retained in the metadata log.`,
 			"table-properties",
 		);
 
+		if (!vocabulary.hasStructuredRtContext) {
+			const helper = body.createDiv({
+				cls: "editorialist-settings__inventory-context-note",
+			});
+			helper.createDiv({
+				cls: "editorialist-settings__inventory-context-title",
+				text: "Using note-level inventory",
+			});
+			helper.createDiv({
+				cls: "editorialist-settings__inventory-context-body",
+				text: "No active Radial Timeline book context is available right now, so Editorialist is tracking review activity by note. If RT book metadata becomes available later, this inventory will tighten back to scene-aware language automatically.",
+			});
+		}
+
 		const toolbar = body.createDiv({ cls: "editorialist-settings__inventory-toolbar" });
 		const actions = toolbar.createDiv({ cls: "editorialist-settings__inventory-actions" });
-		this.createActionButton(actions, "brush-cleaning", "Clean all notes", async () => {
+		this.createActionButton(actions, "brush-cleaning", `Clean all ${vocabulary.pluralLabelLower}`, async () => {
 			const removed = await this.plugin.cleanupAllSceneReviewNotes(this.activeBookOnly);
 			this.display();
 			new Notice(
 				removed > 0
-					? `Cleaned ${removed} imported review block${removed === 1 ? "" : "s"} across scene notes.`
+					? `Cleaned ${removed} imported review block${removed === 1 ? "" : "s"} across ${vocabulary.pluralLabelLower}.`
 					: "No imported review blocks were found to clean.",
 			);
 		});
-		this.createActionButton(actions, "archive-x", "Clean completed notes", async () => {
+		this.createActionButton(actions, "archive-x", `Clean completed ${vocabulary.pluralLabelLower}`, async () => {
 			const removed = await this.plugin.cleanupCompletedSceneReviewNotes(this.activeBookOnly);
 			this.display();
 			new Notice(
 				removed > 0
-					? `Cleaned ${removed} imported review block${removed === 1 ? "" : "s"} from completed scene notes.`
-					: "No completed scene notes were ready for cleanup.",
+					? `Cleaned ${removed} imported review block${removed === 1 ? "" : "s"} from completed ${vocabulary.pluralLabelLower}.`
+					: `No completed ${vocabulary.pluralLabelLower} were ready for cleanup.`,
 			);
 		});
 
@@ -192,7 +311,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			const filterButton = this.createActionButton(
 				actions,
 				"book-open",
-				this.activeBookOnly ? `Active book: ${activeBookLabel}` : "All books",
+				this.activeBookOnly ? `Active ${vocabulary.scopeLabel}: ${activeBookLabel}` : `All ${vocabulary.scopeLabel}s`,
 				async () => {
 					this.activeBookOnly = !this.activeBookOnly;
 					this.display();
@@ -208,8 +327,8 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			body.createDiv({
 				cls: "editorialist-settings__empty",
 				text: this.activeBookOnly && activeBookLabel
-					? `No Editorialist scene records found in ${activeBookLabel}.`
-					: "No Editorialist scene records yet.",
+					? `No Editorialist ${vocabulary.singularLabelLower} records found in ${activeBookLabel}.`
+					: `No Editorialist ${vocabulary.singularLabelLower} records yet.`,
 			});
 			return;
 		}
@@ -218,7 +337,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const table = tableWrap.createEl("table", { cls: "editorialist-settings__inventory-table" });
 		const head = table.createTHead().insertRow();
 		[
-			"Scene",
+			vocabulary.singularLabel,
 			"Book / path",
 			"Batches",
 			"Pending",
@@ -247,13 +366,20 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 			const actionsCell = row.createEl("td");
 			const actionGroup = actionsCell.createDiv({ cls: "editorialist-settings__inventory-row-actions" });
-			this.createActionButton(actionGroup, "file-text", "Open scene", async () => {
+			this.createActionButton(actionGroup, "file-text", `Open ${vocabulary.singularLabelLower}`, async () => {
 				await this.plugin.openSceneNote(record.notePath);
 			});
-			this.createActionButton(actionGroup, "play", record.status === "not_started" ? "Start review" : "Resume review", async () => {
+			this.createActionButton(
+				actionGroup,
+				"play",
+				record.status === "not_started"
+					? `Start ${vocabulary.singularLabelLower} review`
+					: `Resume ${vocabulary.singularLabelLower} review`,
+				async () => {
 				await this.plugin.startOrResumeReviewForNote(record.notePath);
-			});
-			this.createActionButton(actionGroup, "brush-cleaning", "Clean this note", async () => {
+				},
+			);
+			this.createActionButton(actionGroup, "brush-cleaning", `Clean this ${vocabulary.singularLabelLower}`, async () => {
 				await this.plugin.cleanSceneReviewNote(record.notePath);
 				this.display();
 			});
@@ -336,7 +462,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			text: "Creates a versioned JSON file with contributor profiles, aliases, stars, sweep history, and scene inventory records.",
 		});
 		const actions = card.createDiv({ cls: "editorialist-settings__maintenance-actions" });
-		this.createActionButton(actions, "download", "Export JSON", async () => {
+		this.createActionButton(actions, "download", "Export backup", async () => {
 			const path = await this.plugin.exportEditorialistMetadata();
 			new Notice(`Exported Editorialist metadata to ${path}.`);
 		});

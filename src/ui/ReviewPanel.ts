@@ -28,7 +28,7 @@ export class ReviewPanel extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Editorialist review";
+		return "Editorial review";
 	}
 
 	getIcon(): string {
@@ -52,7 +52,7 @@ export class ReviewPanel extends ItemView {
 		const titleRow = header.createDiv({ cls: "editorialist-panel__title-row" });
 		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__title-icon" });
 		setIcon(titleIcon, "list-todo");
-		titleRow.createEl("h2", { text: "Editorialist review" });
+		titleRow.createEl("h2", { text: "Editorial review" });
 		const settingsButton = titleRow.createEl("button", {
 			cls: "editorialist-panel__settings-button",
 			attr: {
@@ -78,7 +78,7 @@ export class ReviewPanel extends ItemView {
 				cls: "editorialist-panel__command-name",
 				text: "Editorialist begin",
 			});
-			empty.appendText(" to get started with a streamlined editing workflow.");
+			empty.appendText(" to import formatted revision notes or continue in this note.");
 			return;
 		}
 
@@ -91,7 +91,7 @@ export class ReviewPanel extends ItemView {
 			const warningBox = header.createDiv({ cls: "editorialist-panel__warnings" });
 			warningBox.createDiv({
 				cls: "editorialist-panel__warnings-title",
-				text: "Warnings",
+				text: "Attention",
 			});
 			const warningList = warningBox.createDiv({ cls: "editorialist-panel__warnings-list" });
 			headerDetails.warnings.forEach((warning) => {
@@ -108,7 +108,7 @@ export class ReviewPanel extends ItemView {
 		if (session.suggestions.length === 0) {
 			this.contentEl.createDiv({
 				cls: "editorialist-panel__empty",
-				text: "Review block found, but no valid review entries were parsed.",
+				text: "Formatted revision notes found, but no valid entries were parsed.",
 			});
 			return;
 		}
@@ -157,13 +157,13 @@ export class ReviewPanel extends ItemView {
 	private renderFilters(): void {
 		const controls = this.contentEl.createDiv({ cls: "editorialist-panel__filters" });
 		const filterLabel = controls.createDiv({ cls: "editorialist-panel__filter-label" });
-		filterLabel.setText("Reviewer filter");
+		filterLabel.setText("Contributor filter");
 
 		const filterControls = controls.createDiv({ cls: "editorialist-panel__filter-controls" });
 		const inlineGroup = filterControls.createDiv({ cls: "editorialist-panel__filter-inline-group" });
 		const dropdownContainer = inlineGroup.createDiv({ cls: "editorialist-panel__filter-control" });
 		const dropdown = new DropdownComponent(dropdownContainer);
-		dropdown.addOption("", "All reviewers");
+		dropdown.addOption("", "All contributors");
 		this.plugin.getSortedReviewerProfiles().forEach((profile) => {
 			dropdown.addOption(profile.id, formatContributorIdentityLabel(profile));
 		});
@@ -689,6 +689,6 @@ export class ReviewPanel extends ItemView {
 	}
 
 	private getSourceLabel(suggestion: ReviewSuggestion): string {
-		return `Source: ${formatContributorIdentityLabel(suggestion.contributor)}`;
+		return `Contributor: ${formatContributorIdentityLabel(suggestion.contributor)}`;
 	}
 }

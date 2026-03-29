@@ -3,7 +3,7 @@ import {
 	getSuggestionPrimaryTarget,
 	isMoveSuggestion,
 } from "./OperationSupport";
-import { normalizeImportedReviewText, REVIEW_BLOCK_FENCE } from "./ReviewBlockFormat";
+import { normalizeImportedReviewText, REVIEW_BLOCK_FENCE, stripAllReviewBlocks } from "./ReviewBlockFormat";
 import type { MatchEngine } from "./MatchEngine";
 import type { SuggestionParser } from "./SuggestionParser";
 import type {
@@ -567,8 +567,9 @@ export class ImportEngine {
 		}
 
 		const noteText = await this.app.vault.cachedRead(file);
-		noteTextCache.set(file.path, noteText);
-		return noteText;
+		const matchableText = stripAllReviewBlocks(noteText).text;
+		noteTextCache.set(file.path, matchableText);
+		return matchableText;
 	}
 
 	private classifyVerification(suggestion: ReviewSuggestion): { reason: string; status: ReviewImportSuggestionResult["verificationStatus"] } {

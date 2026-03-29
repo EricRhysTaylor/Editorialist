@@ -112,7 +112,7 @@ export class EditorialistModal extends Modal {
 		});
 		text.createDiv({
 			cls: "editorialist-control-modal__description",
-			text: "Import, prepare, and start editorial review using formatted revision notes. Paste from your clipboard, continue in this note, or copy instructions for your AI and return with results.",
+			text: "Import formatted revision notes, continue in this note, or copy formatting instructions for your AI.",
 		});
 	}
 
@@ -120,8 +120,8 @@ export class EditorialistModal extends Modal {
 		if (this.getModalState() === "checking") {
 			this.renderMessageCard(
 				parent,
-				"Checking clipboard and current note for review content.",
-				`Looking for an ${getReviewBlockFenceLabel()} in the clipboard or current note.`,
+				"Checking clipboard and current note.",
+				`Looking for ${getReviewBlockFenceLabel()} formatted revision notes.`,
 			);
 			return;
 		}
@@ -147,7 +147,7 @@ export class EditorialistModal extends Modal {
 		this.renderSecondaryActions(card, [
 			{
 				icon: "clipboard",
-				label: this.showManualPaste ? "Hide manual paste" : "Paste review batch manually",
+				label: this.showManualPaste ? "Hide pasted notes" : "Paste formatted revision notes",
 				onClick: async () => {
 					this.showManualPaste = !this.showManualPaste;
 					if (this.showManualPaste && !this.manualText.trim()) {
@@ -167,7 +167,7 @@ export class EditorialistModal extends Modal {
 		this.renderSecondaryActions(card, [
 			{
 				icon: "clipboard",
-				label: this.showManualPaste ? "Hide manual paste" : "Paste review batch manually",
+				label: this.showManualPaste ? "Hide pasted notes" : "Paste formatted revision notes",
 				onClick: async () => {
 					this.showManualPaste = !this.showManualPaste;
 					this.render();
@@ -175,7 +175,7 @@ export class EditorialistModal extends Modal {
 			},
 			{
 				icon: "navigation",
-				label: "Open review panel",
+				label: "Open panel",
 				onClick: async () => {
 					await this.options.onOpenReviewPanel();
 					this.close();
@@ -192,7 +192,7 @@ export class EditorialistModal extends Modal {
 		this.renderSecondaryActions(card, [
 			{
 				icon: "clipboard",
-				label: this.showManualPaste ? "Hide manual paste" : "Paste review batch manually",
+				label: this.showManualPaste ? "Hide pasted notes" : "Paste formatted revision notes",
 				onClick: async () => {
 					this.showManualPaste = !this.showManualPaste;
 					this.render();
@@ -205,17 +205,17 @@ export class EditorialistModal extends Modal {
 		const section = parent.createDiv({ cls: "editorialist-control-modal__manual" });
 		section.createDiv({
 			cls: "editorialist-control-modal__section-title",
-			text: "Paste review batch",
+			text: "Paste formatted revision notes",
 		});
 		section.createDiv({
 			cls: "editorialist-control-modal__section-copy",
-			text: "Paste a full Editorialist review batch.",
+			text: "Paste formatted revision notes here.",
 		});
 
 		const inputContainer = section.createDiv({ cls: "editorialist-control-modal__input" });
 		const textArea = new TextAreaComponent(inputContainer);
 		textArea.inputEl.addClass("editorialist-control-modal__textarea");
-		textArea.setPlaceholder("Paste a full editorialist-review batch here");
+		textArea.setPlaceholder("Paste formatted revision notes here");
 		textArea.setValue(this.manualText);
 		textArea.onChange((value) => {
 			this.manualText = value;
@@ -223,7 +223,7 @@ export class EditorialistModal extends Modal {
 		});
 
 		const actions = section.createDiv({ cls: "editorialist-control-modal__actions" });
-		this.buildButton(actions, "Review assignments", async () => {
+		this.buildButton(actions, "Preview destinations", async () => {
 			const batch = await this.ensureManualBatch();
 			if (!batch) {
 				return;
@@ -236,7 +236,7 @@ export class EditorialistModal extends Modal {
 			disabled: !this.manualText.trim(),
 			icon: "navigation",
 		});
-		this.buildButton(actions, "Import to matching scenes", async () => {
+		this.buildButton(actions, this.getImportActionLabel(this.manualBatch), async () => {
 			const batch = await this.ensureManualBatch();
 			if (!batch) {
 				return;
@@ -260,7 +260,7 @@ export class EditorialistModal extends Modal {
 			disabled: !this.manualText.trim(),
 			icon: "download",
 		});
-		this.buildButton(actions, "Import to active note", async () => {
+		this.buildButton(actions, "Import into this note", async () => {
 			if (!this.manualText.trim()) {
 				return;
 			}
@@ -283,12 +283,13 @@ export class EditorialistModal extends Modal {
 	}
 
 	private renderAssignments(parent: HTMLElement, batch: ReviewImportBatch): void {
+		const destinationPlural = this.getDestinationNoun(batch, true);
 		const summary = parent.createDiv({ cls: "editorialist-control-modal__summary" });
 		summary.createDiv({
-			text: `${batch.summary.totalMatchedScenes} matched scenes • ${batch.summary.totalSuggestions} entries • ${batch.summary.totalUnresolvedScenes} unresolved scenes • ${batch.summary.totalMismatches} mismatches`,
+			text: `${batch.summary.totalMatchedScenes} matched ${destinationPlural} • ${batch.summary.totalSuggestions} formatted revision notes • ${batch.summary.totalUnresolvedScenes} unresolved ${destinationPlural} • ${batch.summary.totalMismatches} mismatches`,
 		});
 		summary.createDiv({
-			text: `${batch.summary.totalResolvedScenes} ready • ${batch.summary.totalExactMatches} exact • ${batch.summary.totalDeclaredRoutes} declared • ${batch.summary.totalInferredRoutes} inferred • ${batch.summary.totalAdvisoryOnly} advisory • ${batch.summary.totalUnresolvedMatches} unresolved or multiple`,
+			text: `${batch.summary.totalResolvedScenes} ready • ${batch.summary.totalExactMatches} exact • ${batch.summary.totalAdvisoryOnly} advisory • ${batch.summary.totalUnresolvedMatches} need attention`,
 		});
 
 		const list = parent.createDiv({ cls: "editorialist-control-modal__list" });
@@ -302,8 +303,8 @@ export class EditorialistModal extends Modal {
 				cls: "editorialist-control-modal__group-meta",
 				text:
 					group.inferredCount > 0 && group.declaredCount === 0 && group.exactInferredCount === group.suggestions.length
-						? `${group.exactInferredCount} exact inferred matches`
-						: `${group.suggestions.length} entries • ${group.declaredCount} declared • ${group.inferredCount} inferred • ${group.exactCount} exact • ${group.advisoryCount} advisory • ${group.mismatchCount} mismatched • ${group.unresolvedCount} unresolved`,
+						? `${group.exactInferredCount} exact match${group.exactInferredCount === 1 ? "" : "es"}`
+						: `${group.suggestions.length} formatted revision notes • ${group.exactCount} exact • ${group.advisoryCount} advisory • ${group.mismatchCount} mismatched • ${group.unresolvedCount} unresolved`,
 			});
 			card.createDiv({
 				cls: "editorialist-control-modal__group-path",
@@ -326,7 +327,7 @@ export class EditorialistModal extends Modal {
 		const unresolvedCard = list.createDiv({ cls: "editorialist-control-modal__group" });
 		unresolvedCard.createDiv({
 			cls: "editorialist-control-modal__group-title",
-			text: "Unresolved scenes",
+			text: `Unresolved ${destinationPlural}`,
 		});
 		for (const result of unresolved) {
 			unresolvedCard.createDiv({
@@ -341,12 +342,12 @@ export class EditorialistModal extends Modal {
 		const header = example.createDiv({ cls: "editorialist-control-modal__example-header" });
 		header.createDiv({
 			cls: "editorialist-control-modal__section-title",
-			text: "Example format",
+			text: "Formatting instructions",
 		});
 
 		const actions = header.createDiv({ cls: "editorialist-control-modal__example-actions" });
 		const copy = new ButtonComponent(actions)
-			.setButtonText("Copy format instructions")
+			.setButtonText("Copy formatting instructions")
 			.onClick(() => {
 				void this.runAction(async () => {
 					await this.options.onCopyTemplate();
@@ -357,7 +358,7 @@ export class EditorialistModal extends Modal {
 
 		const toggle = new ButtonComponent(actions)
 			.setIcon(this.showExample ? "chevron-up" : "chevron-down")
-			.setTooltip(this.showExample ? "Contract example format" : "Expand example format")
+			.setTooltip(this.showExample ? "Hide formatting instructions" : "Show formatting instructions")
 			.onClick(() => {
 				this.showExample = !this.showExample;
 				this.render();
@@ -370,7 +371,7 @@ export class EditorialistModal extends Modal {
 
 		example.createDiv({
 			cls: "editorialist-control-modal__example-description",
-			text: "This instructs your LLM to prepare the editorial notes into a structured format that Editorialist will understand and act upon. Return only this fenced block. No extra text.",
+			text: "Use these formatting instructions with your AI. Return only the fenced block. No extra text.",
 		});
 
 		example.createEl("pre", {
@@ -426,7 +427,7 @@ export class EditorialistModal extends Modal {
 		});
 		parent.createDiv({
 			cls: "editorialist-control-modal__card-copy",
-			text: availableCount === 2 ? "2 options available" : "1 of 2 options available",
+			text: availableCount === 2 ? "2 options available" : "1 option available",
 		});
 	}
 
@@ -461,14 +462,14 @@ export class EditorialistModal extends Modal {
 		try {
 			const batch = await this.options.onInspectBatch(rawText);
 			if (!this.hasDetectedSuggestions(batch)) {
-				new Notice(`No Editorialist review content found in the pasted text.`);
+				new Notice("No formatted revision notes found in the pasted text.");
 				return null;
 			}
 
 			this.manualBatch = batch;
 			return batch;
 		} catch {
-			new Notice("Could not inspect the pasted review batch.");
+			new Notice("Could not inspect the pasted notes.");
 			return null;
 		}
 	}
@@ -533,11 +534,13 @@ export class EditorialistModal extends Modal {
 	}
 
 	private getDetectionItems(batch?: ReviewImportBatch): DetectionItem[] {
+		const activeBatch = this.clipboardBatch?.batch ?? batch;
+		const localNoteBatch = activeBatch ? this.isLocalNoteBatch(activeBatch) : false;
 		const clipboardDescription =
 			this.clipboardState === "ready"
-				? "Review batch detected"
+				? "Formatted revision notes found"
 				: this.clipboardState === "empty"
-					? "No review content"
+					? "No formatted revision notes"
 					: "Checking clipboard";
 
 		if (this.options.currentNoteHasReviewBlock) {
@@ -549,14 +552,14 @@ export class EditorialistModal extends Modal {
 					icon: "file-text",
 					id: "current-note",
 					label: this.options.activeNoteLabel ? `Current note: ${this.options.activeNoteLabel}` : "Current note",
-					description: "Review block found",
+					description: "Formatted revision notes found",
 					tone: "success",
 				},
 				{
-					actionLabel: this.clipboardState === "ready" ? "Import clipboard review batch" : "Paste review batch manually",
+					actionLabel: this.clipboardState === "ready" ? "Preview clipboard notes" : "Paste formatted revision notes",
 					actionHint:
 						this.clipboardState === "ready"
-							? "→ Import review"
+							? "→ Preview notes"
 							: "→ Paste review",
 					emphasized: false,
 					icon: "clipboard",
@@ -569,62 +572,69 @@ export class EditorialistModal extends Modal {
 		}
 
 		if (this.clipboardBatch || batch) {
-			const activeBatch = this.clipboardBatch?.batch ?? batch;
 			const readyGroups = activeBatch ? this.hasImportReadyGroup(activeBatch) : false;
 			const hasSceneMatches = activeBatch ? this.hasAnySceneMatch(activeBatch) : false;
 
 			return [
 				{
-					actionLabel: "Clipboard review batch detected",
-					actionHint: "→ Review source",
+					actionLabel: "Preview clipboard notes",
+					actionHint: "→ Preview notes",
 					emphasized: !readyGroups,
 					icon: "clipboard",
 					id: "clipboard",
 					label: "Clipboard",
-					description: "Review batch detected",
+					description: "Formatted revision notes found",
 					tone: "success",
 				},
 				{
-					actionLabel: readyGroups ? "Import matching scenes from the active book" : "No matching scenes found",
+					actionLabel: localNoteBatch
+						? "Import into the current note"
+						: readyGroups
+							? "Import into matching scenes"
+							: "No matching scenes found",
 					actionHint: readyGroups
 						? "→ Import review"
 						: hasSceneMatches
 							? "→ Review matches"
 							: "→ No valid destination",
-					disabled: !readyGroups && !hasSceneMatches,
-					emphasized: readyGroups,
-					icon: readyGroups ? "map-pinned" : "triangle-alert",
+					disabled: localNoteBatch ? false : !readyGroups && !hasSceneMatches,
+					emphasized: localNoteBatch || readyGroups,
+					icon: localNoteBatch ? "file-text" : readyGroups ? "map-pinned" : "triangle-alert",
 					id: "active-book",
-					label: "Active book scenes",
-					description: readyGroups
-						? `${activeBatch?.summary.totalResolvedScenes ?? 0} matched scene${(activeBatch?.summary.totalResolvedScenes ?? 0) === 1 ? "" : "s"} ready`
+					label: localNoteBatch
+						? (this.options.activeNoteLabel ? `Current note: ${this.options.activeNoteLabel}` : "Current note")
+						: "Matching scenes",
+					description: localNoteBatch
+						? "Ready for this note"
+						: readyGroups
+							? `${activeBatch?.summary.totalResolvedScenes ?? 0} matched scene${(activeBatch?.summary.totalResolvedScenes ?? 0) === 1 ? "" : "s"} ready`
 						: hasSceneMatches
 							? "Only ambiguous or unresolved scene matches found"
 							: "No matching scene text found",
-					tone: readyGroups ? "success" : "danger",
+					tone: localNoteBatch || readyGroups ? "success" : "danger",
 				},
 			];
 		}
 
 		return [
 			{
-				actionLabel: "Copy review template",
-				actionHint: "→ Copy template",
+				actionLabel: "Copy formatting instructions",
+				actionHint: "→ Copy instructions",
 				emphasized: true,
 				icon: "copy",
 				id: "template",
-				label: "Copy template",
-				description: "Get the review format",
+				label: "Copy instructions",
+				description: "Get formatting instructions",
 				tone: "success",
 			},
 			{
-				actionLabel: "Paste review batch manually",
+				actionLabel: "Paste formatted revision notes",
 				actionHint: "→ Paste review",
 				emphasized: false,
 				icon: "clipboard",
 				id: "clipboard",
 				label: "Clipboard",
-				description: "No review content",
+				description: "No formatted revision notes",
 				tone: "danger",
 			},
 		];
@@ -663,6 +673,12 @@ export class EditorialistModal extends Modal {
 				return;
 			}
 
+			if (this.isLocalNoteBatch(this.clipboardBatch.batch)) {
+				await this.options.onImportRawToActiveNote(this.clipboardBatch.rawText, true);
+				this.close();
+				return;
+			}
+
 			if (!this.hasImportReadyGroup(this.clipboardBatch.batch)) {
 				if (this.hasAnySceneMatch(this.clipboardBatch.batch)) {
 					this.showAssignments = true;
@@ -670,7 +686,7 @@ export class EditorialistModal extends Modal {
 					return;
 				}
 
-				new Notice("No matching scene text was found in the active book.");
+				new Notice("No matching scene text was found in the active notes.");
 				return;
 			}
 
@@ -746,19 +762,32 @@ export class EditorialistModal extends Modal {
 	private getRouteSourceLabel(value: ReviewImportBatch["results"][number]["routeStrategy"]): string {
 		switch (value) {
 			case "declared_scene_id":
-				return "Declared SceneId";
+				return "SceneId";
 			case "declared_path":
-				return "Declared Path";
+				return "Path hint";
 			case "declared_note":
-				return "Declared Note";
+				return "Note hint";
 			case "declared_scene":
-				return "Declared Scene";
+				return "Scene hint";
 			case "inferred_exact":
-				return "Inferred exact";
+				return "Exact text";
 			case "inferred_normalized":
-				return "Inferred normalized";
+				return "Normalized text";
 			case "unresolved":
-				return "Unresolved";
+				return "Needs attention";
 		}
+	}
+
+	private getDestinationNoun(batch: ReviewImportBatch, plural: boolean): string {
+		const noun = this.isLocalNoteBatch(batch) ? "note" : "scene";
+		return plural ? `${noun}s` : noun;
+	}
+
+	private getImportActionLabel(batch: ReviewImportBatch | null): string {
+		if (batch && this.isLocalNoteBatch(batch)) {
+			return "Import into this note";
+		}
+
+		return "Import into matching scenes";
 	}
 }
