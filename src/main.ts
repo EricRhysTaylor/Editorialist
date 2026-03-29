@@ -42,6 +42,7 @@ import { ReviewRegistryService } from "./services/ReviewRegistryService";
 import { ReviewWorkflowService } from "./services/ReviewWorkflowService";
 import { EditorialistModal, type ClipboardReviewBatch } from "./ui/EditorialistModal";
 import { openEditorialistChoiceModal } from "./ui/EditorialistChoiceModal";
+import { openContributorReassignmentModal, type ContributorReassignmentMode } from "./ui/ContributorReassignmentModal";
 import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
 import { EditorialistSettingTab } from "./ui/EditorialistSettingTab";
 import { createReviewDecorationsExtension, syncReviewDecorations } from "./ui/Decorations";
@@ -829,6 +830,89 @@ export default class EditorialistPlugin extends Plugin {
 		this.refreshReviewPanel();
 	}
 
+	async openContributorManagementFlow(reviewerId: string): Promise<boolean> {
+		const profile = this.reviewerDirectory.getProfileById(reviewerId);
+		if (!profile) {
+			new Notice("Contributor not found.");
+			return false;
+		}
+
+		const action = await openEditorialistChoiceModal(this.app, {
+			title: "Manage contributor",
+			description: `Choose how to update ${profile.displayName}.`,
+			choices: [
+				{ label: "Reassign contributor", value: "reassign" },
+				{ label: "Merge into another contributor", value: "merge" },
+			],
+		});
+		if (!action) {
+			return false;
+		}
+
+		return this.reassignContributorById(reviewerId, action);
+	}
+
+	async reassignContributorById(
+		sourceReviewerId: string,
+		mode: ContributorReassignmentMode,
+	): Promise<boolean> {
+		const sourceProfile = this.reviewerDirectory.getProfileById(sourceReviewerId);
+		if (!sourceProfile) {
+			new Notice("Contributor not found.");
+			return false;
+		}
+
+		const targetProfiles = this.reviewerDirectory
+			.getSortedProfiles()
+			.filter((profile) => profile.id !== sourceReviewerId);
+		if (mode === "merge" && targetProfiles.length === 0) {
+			new Notice("Create another contributor before merging.");
+			return false;
+		}
+
+		const result = await openContributorReassignmentModal(this.app, {
+			mode,
+			sourceProfile,
+			targetProfiles,
+		});
+		if (!result) {
+			return false;
+		}
+
+		let targetProfile = result.targetReviewerId
+			? this.reviewerDirectory.getProfileById(result.targetReviewerId)
+			: null;
+		if (!targetProfile && result.createName) {
+			targetProfile = this.reviewerDirectory.ensureProfileFromReassignment(result.createName, sourceProfile);
+		}
+		if (!targetProfile) {
+			new Notice("Target contributor not found.");
+			return false;
+		}
+
+		if (targetProfile.id === sourceReviewerId) {
+			return false;
+		}
+
+		await this.registry.reassignReviewerSignals(sourceReviewerId, targetProfile.id, { persist: false });
+		const mergedProfile = this.reviewerDirectory.mergeProfiles(sourceReviewerId, targetProfile.id);
+		if (!mergedProfile) {
+			new Notice("Could not update contributor records.");
+			return false;
+		}
+
+		this.reassignContributorInActiveSession(sourceReviewerId, mergedProfile);
+		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), { persist: false });
+		await this.savePluginData();
+		this.refreshReviewPanel();
+		new Notice(
+			mode === "merge"
+				? `Merged ${sourceProfile.displayName} into ${mergedProfile.displayName}.`
+				: `Reassigned ${sourceProfile.displayName} to ${mergedProfile.displayName}.`,
+		);
+		return true;
+	}
+
 	async clearCleanedSweepRecords(): Promise<number> {
 		return this.registry.clearCleanedSweepRecords();
 	}
@@ -1389,6 +1473,43 @@ export default class EditorialistPlugin extends Plugin {
 			suggestedReviewerIds: [],
 			raw,
 		};
+	}
+
+	private reassignContributorInActiveSession(sourceReviewerId: string, targetProfile: ReviewerProfile): void {
+		const session = this.store.getSession();
+		if (!session) {
+			return;
+		}
+
+		const nextSuggestions = session.suggestions.map((suggestion) => {
+			const nextSuggestedReviewerIds = suggestion.contributor.suggestedReviewerIds.includes(sourceReviewerId)
+				? [...new Set(suggestion.contributor.suggestedReviewerIds.map((value) => value === sourceReviewerId ? targetProfile.id : value))]
+				: suggestion.contributor.suggestedReviewerIds;
+
+			if (suggestion.contributor.reviewerId !== sourceReviewerId) {
+				if (nextSuggestedReviewerIds === suggestion.contributor.suggestedReviewerIds) {
+					return suggestion;
+				}
+
+				return {
+					...suggestion,
+					contributor: {
+						...suggestion.contributor,
+						suggestedReviewerIds: nextSuggestedReviewerIds,
+					},
+				};
+			}
+
+			return {
+				...suggestion,
+				contributor: {
+					...this.createResolvedContributor(suggestion.contributor.raw, targetProfile, "alias"),
+					suggestedReviewerIds: nextSuggestedReviewerIds,
+				},
+			};
+		});
+
+		this.store.replaceSuggestions(nextSuggestions);
 	}
 
 	private createUnresolvedContributor(

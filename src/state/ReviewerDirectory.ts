@@ -119,6 +119,44 @@ export class ReviewerDirectory {
 		return this.createProfileFromSeed(deriveContributorIdentitySeed(raw));
 	}
 
+	mergeProfiles(sourceReviewerId: string, targetReviewerId: string): ReviewerProfile | null {
+		if (sourceReviewerId === targetReviewerId) {
+			return this.getProfileById(targetReviewerId);
+		}
+
+		const source = this.getProfileById(sourceReviewerId);
+		const target = this.getProfileById(targetReviewerId);
+		if (!source || !target) {
+			return null;
+		}
+
+		const nextAliases = [...target.aliases];
+		for (const alias of [source.displayName, ...source.aliases]) {
+			if (!alias.trim()) {
+				continue;
+			}
+			if (this.normalizeValue(alias) === this.normalizeValue(target.displayName)) {
+				continue;
+			}
+			if (nextAliases.some((item) => this.normalizeValue(item) === this.normalizeValue(alias))) {
+				continue;
+			}
+			nextAliases.push(alias);
+		}
+
+		target.aliases = nextAliases;
+		target.isStarred = Boolean(target.isStarred || source.isStarred);
+		target.provider = target.provider ?? source.provider;
+		target.model = target.model ?? source.model;
+		target.reviewerType = this.chooseReviewerType(target.reviewerType, source.reviewerType);
+		target.stats = this.mergeStats(source.stats, target.stats);
+		target.updatedAt = Date.now();
+
+		this.profiles = this.profiles.filter((profile) => profile.id !== sourceReviewerId);
+		this.didChange = true;
+		return target;
+	}
+
 	addAlias(reviewerId: string, alias: string): ReviewerProfile | null {
 		const normalizedAlias = alias.trim();
 		if (!normalizedAlias) {
@@ -168,6 +206,30 @@ export class ReviewerDirectory {
 
 	getStats(reviewerId: string): ReviewerStats | null {
 		return this.getProfileById(reviewerId)?.stats ?? null;
+	}
+
+	ensureProfileFromReassignment(
+		displayName: string,
+		sourceProfile: ReviewerProfile,
+	): ReviewerProfile {
+		const normalizedName = displayName.trim();
+		if (!normalizedName) {
+			return sourceProfile;
+		}
+
+		const exactProfile = this.profiles.find(
+			(profile) => this.normalizeValue(profile.displayName) === this.normalizeValue(normalizedName),
+		);
+		if (exactProfile) {
+			return exactProfile;
+		}
+
+		return this.createProfileFromParsedReviewer({
+			rawModel: sourceProfile.kind === "ai" ? normalizedName : undefined,
+			rawName: normalizedName,
+			rawProvider: sourceProfile.provider,
+			rawType: sourceProfile.reviewerType,
+		});
 	}
 
 	normalizeValue(value: string): string {
@@ -346,6 +408,27 @@ export class ReviewerDirectory {
 		}
 
 		return current;
+	}
+
+	private mergeStats(source?: ReviewerStats, target?: ReviewerStats): ReviewerStats {
+		const sourceStats = {
+			...this.createEmptyStats(),
+			...source,
+		};
+		const targetStats = {
+			...this.createEmptyStats(),
+			...target,
+		};
+
+		return {
+			totalSuggestions: sourceStats.totalSuggestions + targetStats.totalSuggestions,
+			accepted: sourceStats.accepted + targetStats.accepted,
+			deferred: sourceStats.deferred + targetStats.deferred,
+			rejected: sourceStats.rejected + targetStats.rejected,
+			unresolved: sourceStats.unresolved + targetStats.unresolved,
+			acceptedEdits: (sourceStats.acceptedEdits ?? 0) + (targetStats.acceptedEdits ?? 0),
+			acceptedMoves: (sourceStats.acceptedMoves ?? 0) + (targetStats.acceptedMoves ?? 0),
+		};
 	}
 
 	private createStableId(displayName: string, kind: ReviewerProfile["kind"], provider?: string, model?: string): string {

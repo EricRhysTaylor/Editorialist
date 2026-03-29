@@ -316,6 +316,34 @@ export class ReviewRegistryService {
 		}
 	}
 
+	async reassignReviewerSignals(
+		sourceReviewerId: string,
+		targetReviewerId: string,
+		options?: { persist?: boolean },
+	): Promise<void> {
+		if (!sourceReviewerId || !targetReviewerId || sourceReviewerId === targetReviewerId) {
+			return;
+		}
+
+		let didChange = false;
+		for (const record of Object.values(this.reviewerSignalIndex)) {
+			if (record.reviewerId !== sourceReviewerId) {
+				continue;
+			}
+
+			record.reviewerId = targetReviewerId;
+			didChange = true;
+		}
+
+		if (!didChange) {
+			return;
+		}
+
+		if (options?.persist !== false) {
+			await this.persistData();
+		}
+	}
+
 	async refreshActiveBookScope(): Promise<void> {
 		this.activeBookScope = await readRadialTimelineActiveBookScope(this.app);
 	}

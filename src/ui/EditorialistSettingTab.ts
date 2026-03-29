@@ -1,6 +1,5 @@
 import { ButtonComponent, Notice, PluginSettingTab, setIcon, type App } from "obsidian";
 import {
-	formatContributorProviderModel,
 	formatReviewerTypeLabel,
 } from "../core/ContributorIdentity";
 import type { SceneReviewRecord } from "../models/ReviewerProfile";
@@ -10,6 +9,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private static readonly SETTINGS_DOCS_URL = "https://github.com/EricRhysTaylor/Editorialist#readme";
 	private static readonly RADIAL_TIMELINE_INSTALL_URL = "obsidian://show-plugin?id=radial-timeline";
 	private static readonly RADIAL_TIMELINE_REPOSITORY_URL = "https://github.com/EricRhysTaylor/Obsidian-Manuscript-Timeline";
+	private static readonly RADIAL_TIMELINE_WIKI_URL = "https://github.com/EricRhysTaylor/Obsidian-Manuscript-Timeline/wiki";
 	private activeBookOnly = true;
 	private activeTab: "core" | "reviewer" = "core";
 
@@ -51,11 +51,12 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const inventory = this.plugin.getSceneReviewRecords({ activeBookOnly: this.activeBookOnly });
 		this.renderCoreHero(coreContent);
 		this.renderRadialTimelineCard(coreContent);
-		this.renderHero(coreContent, summary);
+		this.renderHero(coreContent, summary, inventory);
 		this.renderActivitySection(coreContent, summary);
 		this.renderInventorySection(coreContent, inventory, activeBook.label);
 		this.renderMaintenanceSection(coreContent);
 
+		this.renderContributorsHero(reviewerContent);
 		this.renderContributorsSection(reviewerContent);
 		this.renderMetadataSection(reviewerContent);
 	}
@@ -104,7 +105,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 		const badgeLink = badge.createEl("a", {
 			href: EditorialistSettingTab.SETTINGS_DOCS_URL,
-			cls: "editorialist-settings__hero-intro-badge-link",
+			cls: "editorialist-settings__hero-intro-badge-link editorialist-settings__rt-card-badge-link",
 			attr: {
 				"aria-label": "Open Editorialist documentation",
 				target: "_blank",
@@ -134,6 +135,50 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		this.createHeroFeature(featureList, "database-backup", "Backup your data — export contributor history and revision activity without touching your manuscript.");
 	}
 
+	private renderContributorsHero(parent: HTMLElement): void {
+		const hero = parent.createDiv({
+			cls: "editorialist-settings__hero-intro editorialist-settings__panel",
+		});
+		const badgeRow = hero.createDiv({ cls: "editorialist-settings__hero-intro-badge-row" });
+		const badge = badgeRow.createSpan({ cls: "editorialist-settings__hero-intro-badge" });
+		const badgeIcon = badge.createSpan({ cls: "editorialist-settings__hero-intro-badge-icon" });
+		setIcon(badgeIcon, "users");
+		badge.createSpan({
+			cls: "editorialist-settings__hero-intro-badge-text",
+			text: "Contributors · Directory",
+		});
+		const badgeLink = badge.createEl("a", {
+			href: EditorialistSettingTab.SETTINGS_DOCS_URL,
+			cls: "editorialist-settings__hero-intro-badge-link editorialist-settings__rt-card-badge-link",
+			attr: {
+				"aria-label": "Open Editorialist documentation",
+				target: "_blank",
+				rel: "noopener",
+			},
+		});
+		setIcon(badgeLink, "external-link");
+
+		const titleRow = hero.createDiv({ cls: "editorialist-settings__hero-intro-title-row" });
+		titleRow.createDiv({
+			cls: "editorialist-settings__hero-intro-title",
+			text: "Keep contributor history clean and trustworthy",
+		});
+		hero.createDiv({
+			cls: "editorialist-settings__hero-intro-subtitle",
+			text: "Editorialist tracks the people and AI tools that generate revision notes across your manuscript so contributor history stays readable over time. Use the directory to review identities, spot naming drift, and consolidate duplicate contributors without losing stats, aliases, or revision history.",
+		});
+
+		const features = hero.createDiv({ cls: "editorialist-settings__hero-features" });
+		features.createDiv({
+			cls: "editorialist-settings__hero-features-kicker",
+			text: "Contributor highlights:",
+		});
+		const featureList = features.createDiv({ cls: "editorialist-settings__hero-features-list" });
+		this.createHeroFeature(featureList, "users", "Contributor directory — see every editor, reader, and AI source that has added revision notes.");
+		this.createHeroFeature(featureList, "shuffle", "Identity cleanup — reassign or merge contributors when names drift or aliases accumulate.");
+		this.createHeroFeature(featureList, "star", "Trust at a glance — compare contribution volume, acceptance patterns, and starred contributors in one place.");
+	}
+
 	private renderRadialTimelineCard(parent: HTMLElement): void {
 		const card = parent.createDiv({
 			cls: "editorialist-settings__rt-card editorialist-settings__panel",
@@ -143,29 +188,31 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 		const row = card.createDiv({ cls: "editorialist-settings__rt-card-row" });
 		const content = row.createDiv({ cls: "editorialist-settings__rt-card-content" });
-		const badge = content.createSpan({ cls: "editorialist-settings__hero-intro-badge editorialist-settings__rt-card-badge" });
+		const badgeRow = content.createDiv({ cls: "editorialist-settings__hero-intro-badge-row" });
+		const badge = badgeRow.createSpan({ cls: "editorialist-settings__hero-intro-badge editorialist-settings__rt-card-badge" });
 		const badgeIcon = badge.createSpan({ cls: "editorialist-settings__hero-intro-badge-icon" });
 		setIcon(badgeIcon, "shell");
 		badge.createSpan({
 			cls: "editorialist-settings__hero-intro-badge-text",
 			text: "Radial Timeline integration",
 		});
+		const wikiLink = badge.createEl("a", {
+			href: EditorialistSettingTab.RADIAL_TIMELINE_WIKI_URL,
+			cls: "editorialist-settings__hero-intro-badge-link editorialist-settings__rt-card-badge-link",
+			attr: {
+				"aria-label": "Open the Radial Timeline wiki",
+				target: "_blank",
+				rel: "noopener",
+			},
+		});
+		setIcon(wikiLink, "external-link");
 		content.createDiv({
 			cls: "editorialist-settings__rt-card-title",
 			text: "Work with scenes",
 		});
 		content.createDiv({
 			cls: "editorialist-settings__rt-card-body",
-			text: "Editorialist works with any notes, but it becomes even more useful when it is combined with the visual architecture of the Radial Timeline plugin for Obsidian and its scene and book project organization.",
-		});
-
-		const list = content.createEl("ul", { cls: "editorialist-settings__rt-card-list" });
-		[
-			"organize scenes and books",
-			"run guided editorial passes",
-			"track story structure alongside revisions",
-		].forEach((item) => {
-			list.createEl("li", { text: item });
+			text: "Editorialist works with any notes, but it becomes even more useful when combined with the visual architecture of the Radial Timeline plugin for Obsidian and its scene and book project organization.",
 		});
 
 		const actions = row.createDiv({ cls: "editorialist-settings__rt-card-actions" });
@@ -207,6 +254,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private renderHero(
 		parent: HTMLElement,
 		summary: ReturnType<EditorialistPlugin["getReviewActivitySummary"]>,
+		inventory: SceneReviewRecord[],
 	): void {
 		const hero = parent.createDiv({
 			cls: "editorialist-settings__hero editorialist-settings__panel",
@@ -220,10 +268,19 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 		const processedCount = Math.max(0, summary.processed);
 		const completionRatio = summary.totalSuggestions > 0 ? processedCount / summary.totalSuggestions : 0;
+		const trackedScenes = inventory.filter((record) => record.batchCount > 0);
 		const heroBody = hero.createDiv({ cls: "editorialist-settings__hero-body" });
 		const progressCard = heroBody.createDiv({ cls: "editorialist-settings__hero-progress" });
 		const ring = progressCard.createDiv({ cls: "editorialist-settings__hero-ring" });
 		ring.style.setProperty("--editorialist-settings-progress", `${Math.round(completionRatio * 360)}deg`);
+		const sceneGradient = this.buildSceneProgressGradient(trackedScenes);
+		if (sceneGradient) {
+			ring.style.setProperty("--editorialist-settings-scene-gradient", sceneGradient);
+			ring.addClass("has-scene-slices");
+		} else {
+			ring.style.removeProperty("--editorialist-settings-scene-gradient");
+			ring.removeClass("has-scene-slices");
+		}
 		ring.createDiv({ cls: "editorialist-settings__hero-ring-value", text: `${processedCount}/${summary.totalSuggestions}` });
 		progressCard.createDiv({
 			cls: "editorialist-settings__hero-progress-title",
@@ -439,24 +496,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				cls: "editorialist-settings__contributor-role",
 				text: formatReviewerTypeLabel(profile.reviewerType),
 			});
-			const providerModel = formatContributorProviderModel(profile);
-			if (providerModel) {
-				roleLine.createSpan({
-					cls: "editorialist-settings__contributor-source",
-					text: providerModel,
-				});
-			}
-
-			const starButton = new ButtonComponent(identity)
-				.setTooltip(profile.isStarred ? "Unstar contributor" : "Star contributor")
-				.onClick(() => {
-					void this.plugin.toggleReviewerStarById(profile.id).then(() => this.displayAsync(false));
-				});
-			starButton.buttonEl.addClass("editorialist-settings__star-button");
-			if (profile.isStarred) {
-				starButton.buttonEl.addClass("is-starred");
-			}
-			setIcon(starButton.buttonEl, "star");
 
 			card.createDiv({
 				cls: "editorialist-settings__contributor-stats",
@@ -468,6 +507,31 @@ export class EditorialistSettingTab extends PluginSettingTab {
 					text: `Also appears as: ${profile.aliases.join(" · ")}`,
 				});
 			}
+
+			const controls = card.createDiv({ cls: "editorialist-settings__contributor-controls" });
+			const starButton = new ButtonComponent(controls)
+				.setTooltip(profile.isStarred ? "Unstar contributor" : "Star contributor")
+				.onClick(() => {
+					void this.plugin.toggleReviewerStarById(profile.id).then(() => this.displayAsync(false));
+				});
+			starButton.buttonEl.addClass("editorialist-settings__star-button");
+			if (profile.isStarred) {
+				starButton.buttonEl.addClass("is-starred");
+			}
+			setIcon(starButton.buttonEl, "star");
+
+			const manageButton = new ButtonComponent(controls)
+				.setTooltip("Manage contributor")
+				.onClick(() => {
+					void this.plugin.openContributorManagementFlow(profile.id).then((didChange) => {
+						if (didChange) {
+							void this.displayAsync(false);
+						}
+					});
+				});
+			manageButton.buttonEl.addClass("editorialist-settings__star-button");
+			manageButton.buttonEl.addClass("editorialist-settings__contributor-menu-button");
+			setIcon(manageButton.buttonEl, "ellipsis");
 		}
 
 		const fillerCount = (4 - (profiles.length % 4)) % 4;
@@ -665,36 +729,53 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		return parts.join(" • ");
 	}
 
+	private buildSceneProgressGradient(records: SceneReviewRecord[]): string | null {
+		if (records.length === 0) {
+			return null;
+		}
+
+		const sliceAngle = 360 / records.length;
+		const completeColor = "color-mix(in srgb, var(--color-green) 46%, var(--background-primary) 54%)";
+		const incompleteColor = "color-mix(in srgb, var(--background-modifier-border) 72%, transparent)";
+		const segments: string[] = [];
+		let currentAngle = 0;
+
+		for (const record of records) {
+			const sliceStart = currentAngle;
+			const sliceEnd = currentAngle + sliceAngle;
+			const totalSuggestions =
+				record.pendingCount +
+				record.unresolvedCount +
+				record.deferredCount +
+				record.acceptedCount +
+				record.rejectedCount;
+			const processedSuggestions = Math.max(0, totalSuggestions - record.pendingCount - record.unresolvedCount);
+			const processedRatio = totalSuggestions > 0 ? Math.min(1, processedSuggestions / totalSuggestions) : 0;
+			const processedEnd = sliceStart + (sliceAngle * processedRatio);
+
+			if (processedRatio > 0) {
+				segments.push(`${completeColor} ${sliceStart}deg ${processedEnd}deg`);
+			}
+
+			if (processedEnd < sliceEnd) {
+				segments.push(`${incompleteColor} ${processedEnd}deg ${sliceEnd}deg`);
+			}
+
+			currentAngle = sliceEnd;
+		}
+
+		return `conic-gradient(${segments.join(", ")})`;
+	}
+
 	private createContributorAvatar(
 		parent: HTMLElement,
 		profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number],
 	): void {
 		const avatar = parent.createDiv({
-			cls: `editorialist-settings__contributor-avatar${profile.kind === "ai" ? " is-ai" : ""}`,
+			cls: `editorialist-settings__contributor-avatar${profile.kind === "ai" ? " is-ai" : ""}${profile.isStarred ? " is-starred" : ""}`,
 		});
-		if (profile.kind === "ai") {
-			const icon = avatar.createSpan({ cls: "editorialist-settings__contributor-avatar-icon" });
-			setIcon(icon, "bot");
-			return;
-		}
-
-		avatar.createSpan({
-			cls: "editorialist-settings__contributor-avatar-text",
-			text: this.getContributorInitials(profile.displayName),
-		});
-	}
-
-	private getContributorInitials(displayName: string): string {
-		const parts = displayName
-			.split(/\s+/)
-			.map((part) => part.trim())
-			.filter(Boolean)
-			.slice(0, 2);
-		if (parts.length === 0) {
-			return "?";
-		}
-
-		return parts.map((part) => part[0]?.toUpperCase() ?? "").join("");
+		const icon = avatar.createSpan({ cls: "editorialist-settings__contributor-avatar-icon" });
+		setIcon(icon, profile.isStarred ? "user-star" : profile.kind === "ai" ? "cpu" : "user-round");
 	}
 
 }
