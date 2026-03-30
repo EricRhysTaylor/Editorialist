@@ -216,7 +216,7 @@ export class ReviewRegistryService {
 		return {
 			...session,
 			suggestions: session.suggestions.map((suggestion) => {
-				const record = this.reviewDecisionIndex[this.createPersistedReviewDecisionKey(session.notePath, suggestion)];
+				const record = this.getPersistedReviewDecisionRecord(session.notePath, suggestion);
 				if (!record) {
 					return suggestion;
 				}
@@ -235,10 +235,32 @@ export class ReviewRegistryService {
 		status: PersistedReviewDecisionRecord["status"],
 		options?: { persist?: boolean; sessionId?: string; sessionStartedAt?: number },
 	): Promise<void> {
-		const key = this.createPersistedReviewDecisionKey(notePath, suggestion);
-		const existing = this.reviewDecisionIndex[key];
-		if (existing?.status === status) {
+		const keys = this.createPersistedReviewDecisionKeys(notePath, suggestion);
+		const key = keys[0];
+		if (!key) {
 			return;
+		}
+		const existing = keys
+			.map((candidate) => this.reviewDecisionIndex[candidate])
+			.find((record): record is PersistedReviewDecisionRecord => Boolean(record));
+		if (existing?.status === status) {
+			if (existing.key !== key) {
+				delete this.reviewDecisionIndex[existing.key];
+				this.reviewDecisionIndex[key] = {
+					...existing,
+					key,
+				};
+				if (options?.persist !== false) {
+					await this.persistData();
+				}
+			}
+			return;
+		}
+
+		for (const candidate of keys) {
+			if (candidate !== key) {
+				delete this.reviewDecisionIndex[candidate];
+			}
 		}
 
 		this.reviewDecisionIndex[key] = {
@@ -258,12 +280,20 @@ export class ReviewRegistryService {
 		suggestion: ReviewSuggestion,
 		options?: { persist?: boolean },
 	): Promise<void> {
-		const key = this.createPersistedReviewDecisionKey(notePath, suggestion);
-		if (!this.reviewDecisionIndex[key]) {
-			return;
+		const keys = this.createPersistedReviewDecisionKeys(notePath, suggestion);
+		let removed = false;
+		for (const key of keys) {
+			if (!this.reviewDecisionIndex[key]) {
+				continue;
+			}
+
+			delete this.reviewDecisionIndex[key];
+			removed = true;
 		}
 
-		delete this.reviewDecisionIndex[key];
+		if (!removed) {
+			return;
+		}
 		if (options?.persist !== false) {
 			await this.persistData();
 		}
@@ -398,7 +428,7 @@ export class ReviewRegistryService {
 			let lastDecisionAt = 0;
 
 			for (const suggestion of session.suggestions) {
-				const record = this.reviewDecisionIndex[this.createPersistedReviewDecisionKey(file.path, suggestion)];
+				const record = this.getPersistedReviewDecisionRecord(file.path, suggestion);
 				if (record?.updatedAt) {
 					lastDecisionAt = Math.max(lastDecisionAt, record.updatedAt);
 				}
@@ -571,8 +601,19 @@ export class ReviewRegistryService {
 		return findImportedReviewBlocks(noteText)[0]?.batchId ?? null;
 	}
 
-	private createPersistedReviewDecisionKey(notePath: string, suggestion: ReviewSuggestion): string {
-		return [
+	private createPersistedReviewDecisionKeys(notePath: string, suggestion: ReviewSuggestion): string[] {
+		const stableKey = [
+			notePath,
+			suggestion.operation,
+			suggestion.executionMode,
+			suggestion.contributor.raw.rawName ?? "",
+			suggestion.contributor.raw.rawType ?? "",
+			suggestion.contributor.raw.rawProvider ?? "",
+			suggestion.contributor.raw.rawModel ?? "",
+			...getSuggestionSignatureParts(suggestion),
+			suggestion.why ?? "",
+		].join("::");
+		const legacyKey = [
 			notePath,
 			suggestion.operation,
 			suggestion.executionMode,
@@ -581,6 +622,21 @@ export class ReviewRegistryService {
 			...getSuggestionSignatureParts(suggestion),
 			suggestion.why ?? "",
 		].join("::");
+		return stableKey === legacyKey ? [stableKey] : [stableKey, legacyKey];
+	}
+
+	private getPersistedReviewDecisionRecord(
+		notePath: string,
+		suggestion: ReviewSuggestion,
+	): PersistedReviewDecisionRecord | undefined {
+		for (const key of this.createPersistedReviewDecisionKeys(notePath, suggestion)) {
+			const record = this.reviewDecisionIndex[key];
+			if (record) {
+				return record;
+			}
+		}
+
+		return undefined;
 	}
 
 	private createReviewerSignalKey(notePath: string, suggestion: ReviewSuggestion): string {
