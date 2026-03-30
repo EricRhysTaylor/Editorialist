@@ -111,6 +111,14 @@ export function registerCommands(plugin: EditorialistPlugin): void {
 	});
 
 	plugin.addCommand({
+		id: "rewrite-suggestion",
+		name: "Rewrite selected suggestion manually",
+		callback: () => {
+			void plugin.rewriteSelectedSuggestion();
+		},
+	});
+
+	plugin.addCommand({
 		id: "jump-to-target",
 		name: "Jump to target",
 		hotkeys: [withModShift("M")],

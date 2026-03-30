@@ -706,6 +706,12 @@
 	--editorialist-pill-bg: color-mix(in srgb, var(--color-green) 10%, var(--background-secondary));
 }
 
+.editorialist-suggestion__label--rewritten {
+	--editorialist-pill-ink: color-mix(in srgb, var(--interactive-accent) 44%, var(--text-normal));
+	--editorialist-pill-border: color-mix(in srgb, var(--interactive-accent) 22%, var(--background-modifier-border));
+	--editorialist-pill-bg: color-mix(in srgb, var(--interactive-accent) 9%, var(--background-secondary));
+}
+
 .editorialist-suggestion__label--rejected {
 	--editorialist-pill-ink: color-mix(in srgb, var(--color-red) 52%, var(--text-normal));
 	--editorialist-pill-border: color-mix(in srgb, var(--color-red) 24%, var(--background-modifier-border));
@@ -819,6 +825,13 @@
 	color: color-mix(in srgb, var(--color-orange) 76%, var(--text-normal));
 }
 
+.editorialist-suggestion__resolution-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	margin-top: 0.55rem;
+}
+
 .editorialist-suggestion__actions {
 	display: inline-flex;
 	align-items: center;
@@ -833,6 +846,7 @@
 .editorialist-suggestion.is-collapsed .editorialist-suggestion__meta,
 .editorialist-suggestion.is-collapsed .editorialist-suggestion__copy,
 .editorialist-suggestion.is-collapsed .editorialist-suggestion__reason,
+.editorialist-suggestion.is-collapsed .editorialist-suggestion__resolution-actions,
 .editorialist-suggestion.is-collapsed .editorialist-reviewer-picker {
 	display: none;
 }
@@ -845,10 +859,12 @@
 .editorialist-suggestion.is-collapsed:hover .editorialist-suggestion__meta,
 .editorialist-suggestion.is-collapsed:hover .editorialist-suggestion__copy,
 .editorialist-suggestion.is-collapsed:hover .editorialist-suggestion__reason,
+.editorialist-suggestion.is-collapsed:hover .editorialist-suggestion__resolution-actions,
 .editorialist-suggestion.is-collapsed:hover .editorialist-reviewer-picker,
 .editorialist-suggestion.is-collapsed:focus-within .editorialist-suggestion__meta,
 .editorialist-suggestion.is-collapsed:focus-within .editorialist-suggestion__copy,
 .editorialist-suggestion.is-collapsed:focus-within .editorialist-suggestion__reason,
+.editorialist-suggestion.is-collapsed:focus-within .editorialist-suggestion__resolution-actions,
 .editorialist-suggestion.is-collapsed:focus-within .editorialist-reviewer-picker {
 	display: flex;
 }

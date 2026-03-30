@@ -445,6 +445,21 @@ export class ReviewPanel extends ItemView {
 			text: this.getSuggestionReason(suggestion),
 		});
 
+		if (this.plugin.canMarkSuggestionRewritten(suggestion.id)) {
+			const resolutionActions = card.createDiv({ cls: "editorialist-suggestion__resolution-actions" });
+			this.renderControlButton(
+				resolutionActions,
+				"Mark as rewritten",
+				() => {
+					void this.plugin.markSuggestionRewritten(suggestion.id);
+				},
+				{
+					icon: "pen-line",
+					tooltip: "Mark as rewritten",
+				},
+			);
+		}
+
 		if (this.reviewerMenuSuggestionId === suggestion.id) {
 			this.renderReviewerMenu(card, suggestion);
 		}

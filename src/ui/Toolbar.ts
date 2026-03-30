@@ -12,6 +12,7 @@ export interface ReviewToolbarState {
 	canNext: boolean;
 	canPrevious: boolean;
 	canReject: boolean;
+	canRewrite: boolean;
 	canUndoLastAccept: boolean;
 	acceptedCount: number;
 	completionLabel?: string;
@@ -20,6 +21,7 @@ export interface ReviewToolbarState {
 	operationLabel: string;
 	pendingCount: number;
 	rejectedCount: number;
+	rewrittenCount: number;
 	sceneProgressLabel?: string;
 	selectedIndexLabel: string;
 	selectedLabel: string;
@@ -189,6 +191,10 @@ export function createReviewToolbarElement(
 		renderMetaSeparator(meta);
 		renderMetaSegment(meta, `${state.rejectedCount} rejected`, "editorialist-toolbar__meta-segment--negative");
 	}
+	if (state.rewrittenCount > 0) {
+		renderMetaSeparator(meta);
+		renderMetaSegment(meta, `${state.rewrittenCount} rewritten`);
+	}
 
 	const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
 	buildButton(actions, "Previous", "arrow-left", () => {
@@ -220,6 +226,9 @@ export function createReviewToolbarElement(
 	buildButton(actions, "Defer", "clock", () => {
 		plugin.deferSelectedSuggestion();
 	}, !state.canDefer);
+	buildButton(actions, "Rewrite myself", "pen-line", () => {
+		void plugin.rewriteSelectedSuggestion();
+	}, !state.canRewrite);
 	if (state.canUndoLastAccept) {
 		buildButton(actions, "Undo", "rotate-ccw", () => {
 			void plugin.undoLastAppliedSuggestion();

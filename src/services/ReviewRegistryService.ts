@@ -130,7 +130,8 @@ export class ReviewRegistryService {
 					record.unresolvedCount +
 					record.deferredCount +
 					record.acceptedCount +
-					record.rejectedCount;
+					record.rejectedCount +
+					record.rewrittenCount;
 				totals.accepted += record.acceptedCount;
 				totals.deferred += record.deferredCount;
 				totals.pending += record.pendingCount;
@@ -529,17 +530,7 @@ export class ReviewRegistryService {
 	}
 
 	async clearCleanedSweepRecords(): Promise<number> {
-		const nextRegistry = Object.fromEntries(
-			Object.entries(this.sweepRegistry).filter(([, entry]) => entry.status !== "cleaned"),
-		);
-		const removedCount = Object.keys(this.sweepRegistry).length - Object.keys(nextRegistry).length;
-		if (removedCount === 0) {
-			return 0;
-		}
-
-		this.sweepRegistry = nextRegistry;
-		await this.persistData();
-		return removedCount;
+		return 0;
 	}
 
 	buildMetadataExport(reviewerProfiles: ReviewerProfile[]): EditorialistMetadataExport {
@@ -649,7 +640,9 @@ export class ReviewRegistryService {
 			left.key === right.key &&
 			left.reviewerId === right.reviewerId &&
 			left.status === right.status &&
-			left.operation === right.operation
+			left.operation === right.operation &&
+			left.sessionId === right.sessionId &&
+			left.sessionStartedAt === right.sessionStartedAt
 		);
 	}
 

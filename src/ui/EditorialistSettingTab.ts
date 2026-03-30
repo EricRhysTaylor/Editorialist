@@ -441,7 +441,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			});
 			row.createEl("td", {
 				cls: "editorialist-settings__inventory-col-number",
-				text: `${record.acceptedCount}`,
+				text: `${record.acceptedCount + record.rewrittenCount}`,
 			});
 		}
 	}
@@ -588,7 +588,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const body = this.createSection(
 			parent,
 			"Maintenance",
-			"Use Maintenance to keep your vault tidy as revision rounds accumulate. Clean imported review blocks when you want notes to read cleanly again, then reset revision history when you are ready to track a fresh pass from a new starting point. None of these actions modify your manuscript text.",
+			"Use Maintenance to keep your vault tidy while preserving your long-term revision history. A simple workflow is to clean imported review blocks after a scene is done, then leave the history in place so Editorialist can keep tracking how each revision session unfolded over time. None of these actions modify your manuscript text.",
 			"wrench",
 		);
 		body.parentElement?.addClass("editorialist-settings__section--maintenance");
@@ -625,34 +625,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 					: `No completed ${vocabulary.pluralLabelLower} were ready for cleanup.`,
 			);
 		});
-
-		const historyCard = body.createDiv({ cls: "editorialist-settings__maintenance-card" });
-		const actionRow = historyCard.createDiv({
-			cls: "editorialist-settings__maintenance-row",
-		});
-		const actionInfo = actionRow.createDiv({
-			cls: "editorialist-settings__maintenance-info",
-		});
-		actionInfo.createDiv({
-			cls: "editorialist-settings__maintenance-title",
-			text: "Clear cleaned history",
-		});
-		actionInfo.createDiv({
-			cls: "editorialist-settings__maintenance-description",
-			text: "Reset revision history stats to track your latest round of revisions from a new starting point.",
-		});
-
-		const actions = actionRow.createDiv({ cls: "editorialist-settings__maintenance-actions" });
-		const clearButton = this.createActionButton(actions, "trash-2", "Clear cleaned history", async () => {
-			const removedCount = await this.plugin.clearCleanedSweepRecords();
-			void this.displayAsync(false);
-			if (removedCount === 0) {
-				new Notice("No cleaned batch records to clear.");
-				return;
-			}
-			new Notice(`Cleared ${removedCount} cleaned batch record${removedCount === 1 ? "" : "s"}.`);
-		});
-		clearButton.addClass("editorialist-settings__maintenance-button");
 	}
 
 	private createTab(parent: HTMLElement, id: "core" | "reviewer", icon: string, label: string): void {
@@ -761,6 +733,9 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			`${stats.totalSuggestions} contribution${stats.totalSuggestions === 1 ? "" : "s"}`,
 			`${stats.accepted} accepted`,
 		];
+		if (stats.rewritten > 0) {
+			parts.push(`${stats.rewritten} rewritten`);
+		}
 		if (stats.totalSuggestions > 0) {
 			parts.push(`${acceptedRate}% acceptance`);
 		}
@@ -789,7 +764,8 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				record.unresolvedCount +
 				record.deferredCount +
 				record.acceptedCount +
-				record.rejectedCount;
+				record.rejectedCount +
+				record.rewrittenCount;
 			const processedSuggestions = Math.max(0, totalSuggestions - record.pendingCount - record.unresolvedCount);
 			const processedRatio = totalSuggestions > 0 ? Math.min(1, processedSuggestions / totalSuggestions) : 0;
 			const processedEnd = sliceStart + (sliceAngle * processedRatio);

@@ -239,7 +239,9 @@ export default class EditorialistPlugin extends Plugin {
 		this.store.setSession(hydratedSession, preferredSelectionId);
 		this.syncSelectionForSession(hydratedSession, preferredSelectionId);
 		await this.workflow.syncCurrentNote(context.filePath);
-		await this.registry.syncReviewerSignalsForSession(hydratedSession);
+		await this.registry.syncReviewerSignalsForSession(hydratedSession, {
+			...this.getCurrentSessionTrackingContext(),
+		});
 		await this.openReviewPanel();
 		await this.revealSelectedSuggestion();
 		if (!suppressNotice) {
@@ -613,8 +615,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		const session = this.getReviewSession();
 		const suggestion = this.getSuggestionById(id);
-		const sessionId = this.getCurrentBatchId() ?? undefined;
-		const sessionStartedAt = this.getSweepRegistryEntry(sessionId)?.importedAt;
+		const { sessionId, sessionStartedAt } = this.getCurrentSessionTrackingContext();
 		if (session && suggestion) {
 			await this.registry.persistReviewDecision(session.notePath, suggestion, "rejected", {
 				persist: false,
@@ -649,8 +650,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		const session = this.getReviewSession();
 		const suggestion = this.getSuggestionById(id);
-		const sessionId = this.getCurrentBatchId() ?? undefined;
-		const sessionStartedAt = this.getSweepRegistryEntry(sessionId)?.importedAt;
+		const { sessionId, sessionStartedAt } = this.getCurrentSessionTrackingContext();
 		if (session && suggestion) {
 			await this.registry.persistReviewDecision(session.notePath, suggestion, "rewritten", {
 				persist: false,
@@ -722,8 +722,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		await this.registry.clearPersistedReviewDecision(context.filePath, suggestion, { persist: false });
 		this.refreshSessionAfterAcceptedEdit(session, suggestion.id);
-		const sessionId = this.getCurrentBatchId() ?? undefined;
-		const sessionStartedAt = this.getSweepRegistryEntry(sessionId)?.importedAt;
+		const { sessionId, sessionStartedAt } = this.getCurrentSessionTrackingContext();
 		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), {
 			persist: false,
 			sessionId,
@@ -764,8 +763,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		const session = this.getReviewSession();
 		const suggestion = this.getSuggestionById(id);
-		const sessionId = this.getCurrentBatchId() ?? undefined;
-		const sessionStartedAt = this.getSweepRegistryEntry(sessionId)?.importedAt;
+		const { sessionId, sessionStartedAt } = this.getCurrentSessionTrackingContext();
 		if (session && suggestion) {
 			await this.registry.persistReviewDecision(session.notePath, suggestion, "deferred", {
 				persist: false,
@@ -1163,7 +1161,10 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		this.reassignContributorInActiveSession(sourceReviewerId, mergedProfile);
-		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), { persist: false });
+		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), {
+			persist: false,
+			...this.getCurrentSessionTrackingContext(),
+		});
 		await this.savePluginData();
 		this.refreshReviewPanel();
 		new Notice(
@@ -1175,7 +1176,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async clearCleanedSweepRecords(): Promise<number> {
-		return this.registry.clearCleanedSweepRecords();
+		return 0;
 	}
 
 	async useSuggestedReviewer(suggestionId: string, reviewerId?: string): Promise<void> {
@@ -1703,7 +1704,9 @@ export default class EditorialistPlugin extends Plugin {
 		this.store.setSession(hydratedSession, preferredSelectionId);
 		this.syncSelectionForSession(hydratedSession, preferredSelectionId);
 		void this.workflow.syncCurrentNote(context.filePath);
-		void this.registry.syncReviewerSignalsForSession(hydratedSession);
+		void this.registry.syncReviewerSignalsForSession(hydratedSession, {
+			...this.getCurrentSessionTrackingContext(),
+		});
 		this.setDefaultHighlightForSelection();
 	}
 
@@ -1772,7 +1775,9 @@ export default class EditorialistPlugin extends Plugin {
 					: suggestion,
 			),
 		);
-		await this.registry.syncReviewerSignalsForSession(this.store.getSession());
+		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), {
+			...this.getCurrentSessionTrackingContext(),
+		});
 	}
 
 	private createResolvedContributor(
@@ -1884,6 +1889,17 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		return this.workflow.getCurrentBatchId(context.text);
+	}
+
+	private getCurrentSessionTrackingContext(): {
+		sessionId?: string;
+		sessionStartedAt?: number;
+	} {
+		const sessionId = this.getCurrentBatchId() ?? undefined;
+		return {
+			sessionId,
+			sessionStartedAt: sessionId ? this.getSweepRegistryEntry(sessionId)?.importedAt : undefined,
+		};
 	}
 
 	private hasReviewSessionContext(): boolean {
