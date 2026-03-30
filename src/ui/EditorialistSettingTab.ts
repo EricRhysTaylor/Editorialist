@@ -54,7 +54,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		this.renderHero(coreContent, summary, inventory);
 		this.renderActivitySection(coreContent, summary);
 		this.renderInventorySection(coreContent, inventory, activeBook.label);
-		this.renderMaintenanceSection(coreContent);
+		this.renderMaintenanceSection(coreContent, activeBook.label);
 
 		this.renderContributorsHero(reviewerContent);
 		this.renderContributorsSection(reviewerContent);
@@ -132,6 +132,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const featureList = features.createDiv({ cls: "editorialist-settings__hero-features-list" });
 		this.createHeroFeature(featureList, "table-properties", "Scene inventory — see every scene that still has revision notes and track progress at a glance.");
 		this.createHeroFeature(featureList, "list-todo", "Review in context — jump straight into any scene and continue editing without searching.");
+		this.createHeroFeature(featureList, "users", "Contributor tracking — keep revision identities clean, merge aliases, and preserve trustworthy editorial history.");
 		this.createHeroFeature(featureList, "database-backup", "Backup your data — export contributor history and revision activity without touching your manuscript.");
 	}
 
@@ -161,11 +162,11 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const titleRow = hero.createDiv({ cls: "editorialist-settings__hero-intro-title-row" });
 		titleRow.createDiv({
 			cls: "editorialist-settings__hero-intro-title",
-			text: "Keep contributor history clean and trustworthy",
+			text: "Know which edits to trust",
 		});
 		hero.createDiv({
 			cls: "editorialist-settings__hero-intro-subtitle",
-			text: "Editorialist tracks the people and AI tools that generate revision notes across your manuscript so contributor history stays readable over time. Use the directory to review identities, spot naming drift, and consolidate duplicate contributors without losing stats, aliases, or revision history.",
+			text: "Editorialist keeps track of who contributed each revision note so you can see what’s working and what isn’t. Whether feedback comes from a human editor, a beta reader, or AI, you can compare how often suggestions are accepted and decide which voices you want to rely on. Over time, this helps you build a clear sense of which contributors strengthen your writing and which ones to use more selectively.",
 		});
 
 		const features = hero.createDiv({ cls: "editorialist-settings__hero-features" });
@@ -174,9 +175,9 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			text: "Contributor highlights:",
 		});
 		const featureList = features.createDiv({ cls: "editorialist-settings__hero-features-list" });
-		this.createHeroFeature(featureList, "users", "Contributor directory — see every editor, reader, and AI source that has added revision notes.");
-		this.createHeroFeature(featureList, "shuffle", "Identity cleanup — reassign or merge contributors when names drift or aliases accumulate.");
-		this.createHeroFeature(featureList, "star", "Trust at a glance — compare contribution volume, acceptance patterns, and starred contributors in one place.");
+		this.createHeroFeature(featureList, "users", "Contributor directory — see everyone who has helped shape your revisions, from editors to AI tools.");
+		this.createHeroFeature(featureList, "shuffle", "Refine your sources — update or combine names so your contributor history stays clear and accurate.");
+		this.createHeroFeature(featureList, "star", "See what works — compare how often suggestions are accepted to understand which feedback improves your writing.");
 	}
 
 	private renderRadialTimelineCard(parent: HTMLElement): void {
@@ -355,28 +356,9 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			});
 		}
 
-		const toolbar = body.createDiv({ cls: "editorialist-settings__inventory-toolbar" });
-		const actions = toolbar.createDiv({ cls: "editorialist-settings__inventory-actions" });
-		this.createActionButton(actions, "brush-cleaning", `Clean all ${vocabulary.pluralLabelLower}`, async () => {
-			const removed = await this.plugin.cleanupAllSceneReviewNotes(this.activeBookOnly);
-			void this.displayAsync(false);
-			new Notice(
-				removed > 0
-					? `Cleaned ${removed} imported review block${removed === 1 ? "" : "s"} across ${vocabulary.pluralLabelLower}.`
-					: "No imported review blocks were found to clean.",
-			);
-		});
-		this.createActionButton(actions, "archive-x", `Clean completed ${vocabulary.pluralLabelLower}`, async () => {
-			const removed = await this.plugin.cleanupCompletedSceneReviewNotes(this.activeBookOnly);
-			void this.displayAsync(false);
-			new Notice(
-				removed > 0
-					? `Cleaned ${removed} imported review block${removed === 1 ? "" : "s"} from completed ${vocabulary.pluralLabelLower}.`
-					: `No completed ${vocabulary.pluralLabelLower} were ready for cleanup.`,
-			);
-		});
-
 		if (activeBookLabel) {
+			const toolbar = body.createDiv({ cls: "editorialist-settings__inventory-toolbar" });
+			const actions = toolbar.createDiv({ cls: "editorialist-settings__inventory-actions" });
 			const filterButton = this.createActionButton(
 				actions,
 				"book-open",
@@ -433,9 +415,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 					"aria-label": openCount === 0 ? `${record.noteTitle} complete` : `${record.noteTitle} still open`,
 				},
 			});
-			if (openCount === 0) {
-				setIcon(completionIcon, "check");
-			}
+			setIcon(completionIcon, openCount === 0 ? "square-check" : "square");
 
 			row.createEl("td", {
 				cls: "editorialist-settings__inventory-col-scene",
@@ -496,6 +476,12 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				cls: "editorialist-settings__contributor-role",
 				text: formatReviewerTypeLabel(profile.reviewerType),
 			});
+			if (profile.strengths && profile.strengths.length > 0) {
+				text.createDiv({
+					cls: "editorialist-settings__contributor-strengths",
+					text: `Strengths: ${profile.strengths.join(" · ")}`,
+				});
+			}
 
 			card.createDiv({
 				cls: "editorialist-settings__contributor-stats",
@@ -518,7 +504,8 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			if (profile.isStarred) {
 				starButton.buttonEl.addClass("is-starred");
 			}
-			setIcon(starButton.buttonEl, "star");
+			const starIcon = starButton.buttonEl.createSpan({ cls: "editorialist-settings__action-button-icon" });
+			setIcon(starIcon, "star");
 
 			const manageButton = new ButtonComponent(controls)
 				.setTooltip("Manage contributor")
@@ -531,7 +518,8 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				});
 			manageButton.buttonEl.addClass("editorialist-settings__star-button");
 			manageButton.buttonEl.addClass("editorialist-settings__contributor-menu-button");
-			setIcon(manageButton.buttonEl, "ellipsis");
+			const manageIcon = manageButton.buttonEl.createSpan({ cls: "editorialist-settings__action-button-icon" });
+			setIcon(manageIcon, "ellipsis");
 		}
 
 		const fillerCount = (4 - (profiles.length % 4)) % 4;
@@ -573,16 +561,52 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 	}
 
-	private renderMaintenanceSection(parent: HTMLElement): void {
+	private renderMaintenanceSection(parent: HTMLElement, activeBookLabel: string | null): void {
+		const activeBook = this.plugin.getActiveBookScopeInfo();
+		const vocabulary = this.getInventoryVocabulary(activeBook);
 		const body = this.createSection(
 			parent,
 			"Maintenance",
-			"Keep Editorialist records tidy without touching accepted manuscript edits.",
+			"Use Maintenance to keep your vault tidy as revision rounds accumulate. Clean imported review blocks when you want notes to read cleanly again, then reset revision history when you are ready to track a fresh pass from a new starting point. None of these actions modify your manuscript text.",
 			"wrench",
 		);
 		body.parentElement?.addClass("editorialist-settings__section--maintenance");
 
-		const actionRow = body.createDiv({
+		const cleanupRow = body.createDiv({
+			cls: "editorialist-settings__maintenance-row",
+		});
+		const cleanupInfo = cleanupRow.createDiv({
+			cls: "editorialist-settings__maintenance-info",
+		});
+		cleanupInfo.createDiv({
+			cls: "editorialist-settings__maintenance-description",
+			text: activeBookLabel
+				? `Remove Editorialist's imported review blocks from ${vocabulary.pluralLabelLower} in the active ${vocabulary.scopeLabel}.`
+				: `Remove Editorialist's imported review blocks from ${vocabulary.pluralLabelLower} in the current ${vocabulary.scopeLabel}.`,
+		});
+
+		const cleanupActions = cleanupRow.createDiv({ cls: "editorialist-settings__maintenance-actions" });
+		this.createActionButton(cleanupActions, "brush-cleaning", `Clean all ${vocabulary.pluralLabelLower}`, async () => {
+			const removed = await this.plugin.cleanupAllSceneReviewNotes(this.activeBookOnly);
+			void this.displayAsync(false);
+			new Notice(
+				removed > 0
+					? `Cleaned ${removed} imported review block${removed === 1 ? "" : "s"} across ${vocabulary.pluralLabelLower}.`
+					: "No imported review blocks were found to clean.",
+			);
+		});
+		this.createActionButton(cleanupActions, "archive-x", `Clean completed ${vocabulary.pluralLabelLower}`, async () => {
+			const removed = await this.plugin.cleanupCompletedSceneReviewNotes(this.activeBookOnly);
+			void this.displayAsync(false);
+			new Notice(
+				removed > 0
+					? `Cleaned ${removed} imported review block${removed === 1 ? "" : "s"} from completed ${vocabulary.pluralLabelLower}.`
+					: `No completed ${vocabulary.pluralLabelLower} were ready for cleanup.`,
+			);
+		});
+
+		const historyCard = body.createDiv({ cls: "editorialist-settings__maintenance-card" });
+		const actionRow = historyCard.createDiv({
 			cls: "editorialist-settings__maintenance-row",
 		});
 		const actionInfo = actionRow.createDiv({
@@ -590,19 +614,15 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 		actionInfo.createDiv({
 			cls: "editorialist-settings__maintenance-title",
-			text: "Clear cleaned records",
+			text: "Clear cleaned history",
 		});
 		actionInfo.createDiv({
 			cls: "editorialist-settings__maintenance-description",
-			text: "Remove saved records for revision passes that are already cleaned.",
-		});
-		actionInfo.createDiv({
-			cls: "editorialist-settings__maintenance-note",
-			text: "This does not affect your manuscript.",
+			text: "Reset revision history stats to track your latest round of revisions from a new starting point.",
 		});
 
 		const actions = actionRow.createDiv({ cls: "editorialist-settings__maintenance-actions" });
-		const clearButton = this.createActionButton(actions, "trash-2", "Clear records", async () => {
+		const clearButton = this.createActionButton(actions, "trash-2", "Clear cleaned history", async () => {
 			const removedCount = await this.plugin.clearCleanedSweepRecords();
 			void this.displayAsync(false);
 			if (removedCount === 0) {

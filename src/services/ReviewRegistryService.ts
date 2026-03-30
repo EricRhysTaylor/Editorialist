@@ -535,6 +535,7 @@ export class ReviewRegistryService {
 				kind: profile.kind,
 				reviewerType: profile.reviewerType,
 				aliases: [...profile.aliases],
+				strengths: profile.strengths ? [...profile.strengths] : undefined,
 				isStarred: profile.isStarred,
 				model: profile.model,
 				provider: profile.provider,

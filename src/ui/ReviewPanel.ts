@@ -68,16 +68,14 @@ export class ReviewPanel extends ItemView {
 		});
 
 		if (!session) {
-			const empty = header.createDiv({ cls: "editorialist-panel__empty" });
-			empty.appendText("Run ");
-			const shortcut = empty.createSpan({ cls: "editorialist-panel__command-shortcut" });
-			shortcut.createEl("kbd", { text: "⌘" });
-			shortcut.createEl("kbd", { text: "P" });
-			empty.appendText(" ");
-			const launchLink = empty.createEl("button", {
+			const actionStrip = header.createDiv({ cls: "editorialist-panel__launch-strip" });
+			const intro = actionStrip.createDiv({ cls: "editorialist-panel__launch-section editorialist-panel__launch-section--intro" });
+			const sentence = intro.createDiv({ cls: "editorialist-panel__empty" });
+			sentence.appendText("Import formatted revision notes using ");
+			const launchLink = sentence.createEl("a", {
 				cls: "editorialist-panel__command-link",
 				attr: {
-					type: "button",
+					href: "#",
 					title: "Open Editorialist begin",
 				},
 			});
@@ -88,29 +86,33 @@ export class ReviewPanel extends ItemView {
 			this.bindImmediateAction(launchLink, () => {
 				void this.plugin.openEditorialistModal();
 			});
-			empty.appendText(" to import formatted revision notes or continue in this note.");
+			sentence.appendText(", or continue your existing revision workflow.");
+			const shortcut = sentence.createSpan({ cls: "editorialist-panel__command-shortcut" });
+			shortcut.createSpan({ cls: "editorialist-panel__command-shortcut-label", text: "Shortcut" });
+			shortcut.createEl("kbd", { text: "⌘" });
+			shortcut.createEl("kbd", { text: "P" });
 
 			const launchTarget = this.plugin.getNextLogicalReviewLaunchTarget();
 			if (launchTarget) {
-				const next = header.createDiv({ cls: "editorialist-panel__launch-target" });
-				next.createDiv({
-					cls: "editorialist-panel__launch-target-label",
-					text: `Next ${launchTarget.unitLabel}`,
+				actionStrip.createDiv({ cls: "editorialist-panel__launch-divider" });
+				const next = actionStrip.createDiv({ cls: "editorialist-panel__launch-section editorialist-panel__launch-section--next" });
+				const nextLine = next.createDiv({ cls: "editorialist-panel__launch-target" });
+				nextLine.createSpan({
+					cls: "editorialist-panel__launch-target-prefix",
+					text: `→ Next ${launchTarget.unitLabel} `,
 				});
-				const nextButton = next.createEl("button", {
+				const nextLink = nextLine.createEl("a", {
 					cls: "editorialist-panel__launch-target-link",
 					attr: {
-						type: "button",
+						href: "#",
 						title: `Open ${launchTarget.label}`,
 					},
 				});
-				nextButton.createSpan({
+				nextLink.createSpan({
 					cls: "editorialist-panel__launch-target-text",
 					text: launchTarget.label,
 				});
-				const nextIcon = nextButton.createSpan({ cls: "editorialist-panel__launch-target-icon" });
-				setIcon(nextIcon, "arrow-right");
-				this.bindImmediateAction(nextButton, () => {
+				this.bindImmediateAction(nextLink, () => {
 					void this.plugin.startOrResumeReviewForNote(launchTarget.notePath);
 				});
 			}

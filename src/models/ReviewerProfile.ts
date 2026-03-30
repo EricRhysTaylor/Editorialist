@@ -36,6 +36,7 @@ export interface ContributorProfile {
 	kind: ContributorKind;
 	reviewerType: ReviewerType;
 	aliases: string[];
+	strengths?: string[];
 	provider?: string;
 	model?: string;
 	isStarred?: boolean;

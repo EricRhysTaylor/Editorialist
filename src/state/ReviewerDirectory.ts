@@ -25,6 +25,7 @@ export class ReviewerDirectory {
 		return this.profiles.map((profile) => ({
 			...profile,
 			aliases: [...profile.aliases],
+			strengths: profile.strengths ? [...profile.strengths] : undefined,
 		}));
 	}
 
@@ -149,6 +150,7 @@ export class ReviewerDirectory {
 		target.provider = target.provider ?? source.provider;
 		target.model = target.model ?? source.model;
 		target.reviewerType = this.chooseReviewerType(target.reviewerType, source.reviewerType);
+		target.strengths = this.mergeStrengths(source.strengths, target.strengths);
 		target.stats = this.mergeStats(source.stats, target.stats);
 		target.updatedAt = Date.now();
 
@@ -174,6 +176,24 @@ export class ReviewerDirectory {
 			this.didChange = true;
 		}
 		profile.updatedAt = Date.now();
+		return profile;
+	}
+
+	setStrengths(reviewerId: string, strengths: string[]): ReviewerProfile | null {
+		const profile = this.getProfileById(reviewerId);
+		if (!profile) {
+			return null;
+		}
+
+		const normalizedStrengths = this.normalizeStrengths(strengths);
+		const currentStrengths = this.normalizeStrengths(profile.strengths ?? []);
+		if (JSON.stringify(normalizedStrengths) === JSON.stringify(currentStrengths)) {
+			return profile;
+		}
+
+		profile.strengths = normalizedStrengths.length > 0 ? normalizedStrengths : undefined;
+		profile.updatedAt = Date.now();
+		this.didChange = true;
 		return profile;
 	}
 
@@ -296,6 +316,7 @@ export class ReviewerDirectory {
 			kind: seed.kind,
 			reviewerType: seed.reviewerType,
 			aliases: [...seed.aliasCandidates],
+			strengths: undefined,
 			provider: seed.provider,
 			model: seed.model,
 			isStarred: false,
@@ -368,6 +389,7 @@ export class ReviewerDirectory {
 			kind: seed.kind,
 			reviewerType: seed.reviewerType,
 			aliases,
+			strengths: this.normalizeStrengths(profile.strengths ?? []),
 			provider: seed.provider,
 			model: seed.model,
 			isStarred: profile.isStarred ?? false,
@@ -382,6 +404,7 @@ export class ReviewerDirectory {
 		if (JSON.stringify(normalized) !== JSON.stringify({
 			...profile,
 			aliases: [...(profile.aliases ?? [])],
+			strengths: this.normalizeStrengths(profile.strengths ?? []),
 			isStarred: profile.isStarred ?? false,
 			stats: {
 				...this.createEmptyStats(),
@@ -429,6 +452,28 @@ export class ReviewerDirectory {
 			acceptedEdits: (sourceStats.acceptedEdits ?? 0) + (targetStats.acceptedEdits ?? 0),
 			acceptedMoves: (sourceStats.acceptedMoves ?? 0) + (targetStats.acceptedMoves ?? 0),
 		};
+	}
+
+	private mergeStrengths(source?: string[], target?: string[]): string[] | undefined {
+		const merged = this.normalizeStrengths([...(target ?? []), ...(source ?? [])]);
+		return merged.length > 0 ? merged : undefined;
+	}
+
+	private normalizeStrengths(strengths: string[]): string[] {
+		const unique: string[] = [];
+		for (const strength of strengths) {
+			const normalized = strength
+				.trim()
+				.replace(/\s+/g, " ");
+			if (!normalized) {
+				continue;
+			}
+			if (unique.some((item) => this.normalizeValue(item) === this.normalizeValue(normalized))) {
+				continue;
+			}
+			unique.push(normalized);
+		}
+		return unique;
 	}
 
 	private createStableId(displayName: string, kind: ReviewerProfile["kind"], provider?: string, model?: string): string {

@@ -43,6 +43,7 @@ import { ReviewWorkflowService } from "./services/ReviewWorkflowService";
 import { EditorialistModal, type ClipboardReviewBatch } from "./ui/EditorialistModal";
 import { openEditorialistChoiceModal } from "./ui/EditorialistChoiceModal";
 import { openContributorReassignmentModal, type ContributorReassignmentMode } from "./ui/ContributorReassignmentModal";
+import { openContributorStrengthsModal } from "./ui/ContributorStrengthsModal";
 import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
 import { EditorialistSettingTab } from "./ui/EditorialistSettingTab";
 import { createReviewDecorationsExtension, syncReviewDecorations } from "./ui/Decorations";
@@ -841,6 +842,7 @@ export default class EditorialistPlugin extends Plugin {
 			title: "Manage contributor",
 			description: `Choose how to update ${profile.displayName}.`,
 			choices: [
+				{ label: "Edit strengths", value: "strengths" },
 				{ label: "Reassign contributor", value: "reassign" },
 				{ label: "Merge into another contributor", value: "merge" },
 			],
@@ -849,7 +851,39 @@ export default class EditorialistPlugin extends Plugin {
 			return false;
 		}
 
+		if (action === "strengths") {
+			return this.editContributorStrengths(reviewerId);
+		}
+
 		return this.reassignContributorById(reviewerId, action);
+	}
+
+	async editContributorStrengths(reviewerId: string): Promise<boolean> {
+		const profile = this.reviewerDirectory.getProfileById(reviewerId);
+		if (!profile) {
+			new Notice("Contributor not found.");
+			return false;
+		}
+
+		const result = await openContributorStrengthsModal(this.app, { profile });
+		if (!result) {
+			return false;
+		}
+
+		const updatedProfile = this.reviewerDirectory.setStrengths(reviewerId, result.strengths);
+		if (!updatedProfile) {
+			new Notice("Could not update contributor strengths.");
+			return false;
+		}
+
+		await this.savePluginData();
+		this.refreshReviewPanel();
+		new Notice(
+			updatedProfile.strengths && updatedProfile.strengths.length > 0
+				? `Updated strengths for ${updatedProfile.displayName}.`
+				: `Cleared strengths for ${updatedProfile.displayName}.`,
+		);
+		return true;
 	}
 
 	async reassignContributorById(
