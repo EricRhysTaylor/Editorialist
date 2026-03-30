@@ -12,6 +12,7 @@ export interface EditorialistModalOptions {
 	activeNoteLabel?: string;
 	currentNoteHasReviewBlock: boolean;
 	currentNoteStatus?: "ready" | "completed";
+	isReviewPanelOpen: boolean;
 	nextNoteLabel?: string;
 	noteUnitLabel?: "note" | "scene";
 	onCopyTemplate: () => Promise<void>;
@@ -168,16 +169,18 @@ export class EditorialistModal extends Modal {
 		this.renderSelectionSummary(card);
 
 		this.renderDetectionGrid(card);
-		this.renderSecondaryActions(card, [
-			{
-				icon: "list-todo",
-				label: "Open revisions side-panel",
-				onClick: async () => {
-					await this.options.onOpenReviewPanel();
-					this.close();
+		if (!this.options.isReviewPanelOpen) {
+			this.renderSecondaryActions(card, [
+				{
+					icon: "list-todo",
+					label: "Open revisions side-panel",
+					onClick: async () => {
+						await this.options.onOpenReviewPanel();
+						this.close();
+					},
 				},
-			},
-		]);
+			]);
+		}
 	}
 
 	private renderEmptyState(parent: HTMLElement): void {

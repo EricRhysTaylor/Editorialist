@@ -8,6 +8,7 @@ interface ReviewWorkflowHost {
 	enterCompletedSweepAudit: () => Promise<void>;
 	notify: (message: string) => void;
 	openNoteForReview: (filePath: string) => Promise<void>;
+	recordCompletedSceneRevision: (notePath: string, batchId: string) => Promise<{ from: number; to: number } | null>;
 }
 
 export class ReviewWorkflowService {
@@ -108,6 +109,14 @@ export class ReviewWorkflowService {
 			return;
 		}
 
+		const currentNotePath = guidedSweep.notePaths[guidedSweep.currentNoteIndex];
+		if (currentNotePath) {
+			const revisionUpdate = await this.host.recordCompletedSceneRevision(currentNotePath, guidedSweep.batchId);
+			if (revisionUpdate) {
+				this.host.notify(`Revision count updated: ${revisionUpdate.from} → ${revisionUpdate.to}`);
+			}
+		}
+
 		await this.registry.updateSweepRegistry(guidedSweep.batchId, {
 			currentNotePath: nextNotePath,
 			status: "in_progress",
@@ -123,6 +132,14 @@ export class ReviewWorkflowService {
 		const guidedSweep = this.store.getGuidedSweep();
 		if (!guidedSweep) {
 			return;
+		}
+
+		const currentNotePath = guidedSweep.notePaths[guidedSweep.currentNoteIndex];
+		if (currentNotePath) {
+			const revisionUpdate = await this.host.recordCompletedSceneRevision(currentNotePath, guidedSweep.batchId);
+			if (revisionUpdate) {
+				this.host.notify(`Revision count updated: ${revisionUpdate.from} → ${revisionUpdate.to}`);
+			}
 		}
 
 		const entry = this.registry.getSweepRegistryEntry(guidedSweep.batchId);

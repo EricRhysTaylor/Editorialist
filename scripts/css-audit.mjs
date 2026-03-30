@@ -4,7 +4,7 @@ import path from "node:path";
 const ROOT = process.cwd();
 const CSS_FILES = collectCssFiles(ROOT);
 
-const ALLOWED_ROOT_CLASSES = [".editorialist-"];
+const ALLOWED_ROOT_CLASSES = [".editorialist-", ".ert-"];
 
 const DISALLOWED_BARE_SELECTORS = new Set([
 	"button",
@@ -106,6 +106,7 @@ function checkUnprefixedClasses(file, selector) {
 	for (const className of classMatches) {
 		if (
 			className.startsWith(".editorialist-") ||
+			className.startsWith(".ert-") ||
 			className.startsWith(".is-") ||
 			className.startsWith(".mod-") ||
 			className.startsWith(".theme-")
@@ -120,7 +121,7 @@ function checkUnprefixedClasses(file, selector) {
 		fail(
 			file,
 			selector,
-			`Unprefixed class "${className}" found. Editorialist-owned classes must use the "editorialist-" prefix.`,
+			`Unprefixed class "${className}" found. Editorialist-owned classes must use the "editorialist-" prefix, or the canonical "ert-" archetype prefix.`,
 		);
 	}
 }

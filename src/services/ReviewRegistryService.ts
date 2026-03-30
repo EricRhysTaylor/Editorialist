@@ -152,6 +152,14 @@ export class ReviewRegistryService {
 		return Boolean(this.activeBookScope.sourceFolder);
 	}
 
+	isRadialTimelineScene(notePath: string): boolean {
+		if (!this.activeBookScope.sourceFolder) {
+			return false;
+		}
+
+		return this.isSceneClassNote(notePath) && isPathInFolderScope(notePath, this.activeBookScope.sourceFolder);
+	}
+
 	getSweepRegistryEntries(): ReviewSweepRegistryEntry[] {
 		return Object.values(this.sweepRegistry).sort((left, right) => right.updatedAt - left.updatedAt);
 	}
@@ -618,6 +626,61 @@ export class ReviewRegistryService {
 		}
 	}
 
+	async incrementSceneEditorialRevision(
+		notePath: string,
+		batchId?: string,
+	): Promise<{ from: number; to: number } | null> {
+		if (!this.isRadialTimelineScene(notePath)) {
+			return null;
+		}
+
+		const file = this.app.vault.getAbstractFileByPath(notePath);
+		if (!(file instanceof TFile)) {
+			return null;
+		}
+
+		const entry = batchId ? this.getSweepRegistryEntry(batchId) : null;
+		if (batchId && entry?.editorialRevisionUpdatedNotePaths?.includes(notePath)) {
+			return null;
+		}
+
+		const fileManager = this.app.fileManager as App["fileManager"] & {
+			processFrontMatter?: (
+				file: TFile,
+				fn: (frontmatter: Record<string, unknown>) => void,
+			) => Promise<void>;
+		};
+		if (!fileManager.processFrontMatter) {
+			return null;
+		}
+
+		let from = 0;
+		let to = 0;
+		await fileManager.processFrontMatter(file, (frontmatter) => {
+			const existingEditorial =
+				frontmatter.editorial && typeof frontmatter.editorial === "object" && !Array.isArray(frontmatter.editorial)
+					? (frontmatter.editorial as Record<string, unknown>)
+					: {};
+			const currentRevision = Number(existingEditorial.revision);
+			from = Number.isFinite(currentRevision) ? currentRevision : 0;
+			to = from + 1;
+			frontmatter.editorial = {
+				...existingEditorial,
+				revision: to,
+				revision_updated: new Date().toISOString(),
+			};
+		});
+
+		if (batchId) {
+			const updatedNotePaths = [...new Set([...(entry?.editorialRevisionUpdatedNotePaths ?? []), notePath])];
+			await this.updateSweepRegistry(batchId, {
+				editorialRevisionUpdatedNotePaths: updatedNotePaths,
+			});
+		}
+
+		return { from, to };
+	}
+
 	async clearCleanedSweepRecords(): Promise<number> {
 		return 0;
 	}
@@ -823,6 +886,9 @@ export class ReviewRegistryService {
 				activeBookLabel: entry.activeBookLabel ?? this.activeBookScope.label ?? undefined,
 				activeBookSourceFolder: entry.activeBookSourceFolder ?? this.activeBookScope.sourceFolder ?? undefined,
 				cleanedAt: currentPaths.length === 0 ? entry.cleanedAt ?? now : undefined,
+				editorialRevisionUpdatedNotePaths: [...(entry.editorialRevisionUpdatedNotePaths ?? [])].filter((path) =>
+					currentPaths.includes(path),
+				),
 				importedNotePaths: currentPaths,
 				currentNotePath,
 				sceneOrder: nextSceneOrder,
@@ -974,6 +1040,7 @@ export class ReviewRegistryService {
 						activeBookLabel: entry?.activeBookLabel,
 						activeBookSourceFolder: entry?.activeBookSourceFolder,
 						cleanedAt: entry?.cleanedAt,
+						editorialRevisionUpdatedNotePaths: [...(entry?.editorialRevisionUpdatedNotePaths ?? [])],
 						importedAt: entry?.importedAt ?? Date.now(),
 						importedNotePaths: [...(entry?.importedNotePaths ?? [])],
 						currentNotePath: entry?.currentNotePath,

@@ -36,7 +36,7 @@ import type {
 	SceneReviewRecord,
 	ReviewerStats,
 } from "./models/ReviewerProfile";
-import { ReviewStore, type AppliedReviewChange, type AppliedReviewState, type GuidedSweepState } from "./state/ReviewStore";
+import { ReviewStore, type AppliedReviewChange, type AppliedReviewState, type CompletedSweepState, type GuidedSweepState } from "./state/ReviewStore";
 import { ReviewerDirectory } from "./state/ReviewerDirectory";
 import { ReviewRegistryService } from "./services/ReviewRegistryService";
 import { ReviewWorkflowService } from "./services/ReviewWorkflowService";
@@ -110,10 +110,12 @@ interface CompletedReviewPreviewState {
 }
 
 interface CompletedSweepPanelState {
+	closeLabel: string;
 	description: string;
 	editsReviewedLabel: string;
+	durationLabel?: string;
 	nextSteps: Array<{
-		action?: "import" | "start";
+		action?: "clean" | "import" | "start";
 		label: string;
 	}>;
 	title: string;
@@ -156,6 +158,9 @@ export default class EditorialistPlugin extends Plugin {
 			await this.startOrResumeReviewForNote(filePath);
 			this.syncActiveEditorDecorations();
 		},
+		recordCompletedSceneRevision: async (notePath, batchId) => {
+			return this.recordCompletedSceneRevision(notePath, batchId);
+		},
 	});
 	private importEngine!: ImportEngine;
 
@@ -177,6 +182,9 @@ export default class EditorialistPlugin extends Plugin {
 		this.registerEditorExtension(createReviewDecorationsExtension());
 		this.registerView(REVIEW_PANEL_VIEW_TYPE, (leaf) => new ReviewPanel(leaf, this));
 		this.addSettingTab(new EditorialistSettingTab(this.app, this));
+		this.addRibbonIcon("list-todo", "Open Editorialist Review", () => {
+			void this.openReviewPanel();
+		});
 		registerCommands(this);
 		this.registerDomEvent(window, "resize", () => {
 			this.positionToolbarOverlay();
@@ -294,6 +302,7 @@ export default class EditorialistPlugin extends Plugin {
 			activeNoteLabel: context?.view.file?.basename,
 			currentNoteHasReviewBlock: launchState.currentNoteHasReviewBlock,
 			currentNoteStatus: launchState.currentNoteStatus,
+			isReviewPanelOpen: this.isReviewPanelOpen(),
 			nextNoteLabel: launchState.nextNoteLabel,
 			noteUnitLabel: launchState.noteUnitLabel,
 			onCopyTemplate: async () => {
@@ -338,6 +347,10 @@ export default class EditorialistPlugin extends Plugin {
 		});
 		this.app.workspace.revealLeaf(leaf);
 		this.refreshReviewPanel();
+	}
+
+	isReviewPanelOpen(): boolean {
+		return this.app.workspace.getLeavesOfType(REVIEW_PANEL_VIEW_TYPE).length > 0;
 	}
 
 	openSettings(): void {
@@ -522,6 +535,16 @@ export default class EditorialistPlugin extends Plugin {
 		this.syncActiveEditorDecorations();
 	}
 
+	async closeActiveReviewContext(): Promise<void> {
+		this.store.setAppliedReview(null);
+		this.store.setCompletedSweep(null);
+		this.store.clearSession();
+		this.activeHighlightRange = null;
+		this.activeHighlightTone = "active";
+		this.lastAppliedChange = null;
+		this.syncActiveEditorDecorations();
+	}
+
 	async continueGuidedSweep(): Promise<void> {
 		await this.workflow.advanceGuidedSweep();
 	}
@@ -530,9 +553,26 @@ export default class EditorialistPlugin extends Plugin {
 		await this.workflow.finishGuidedSweep();
 	}
 
+	async recordCompletedSceneRevision(
+		notePath: string,
+		batchId: string,
+	): Promise<{ from: number; to: number } | null> {
+		const session = this.getReviewSession();
+		if (session?.notePath === notePath && !this.isSweepComplete(session.suggestions)) {
+			return null;
+		}
+
+		return this.registry.incrementSceneEditorialRevision(notePath, batchId);
+	}
+
 	async resumeCompletedReviewMode(): Promise<void> {
-		if (!this.store.getCompletedSweep()) {
+		const completedSweep = this.getResolvedCompletedSweepState();
+		if (!completedSweep) {
 			return;
+		}
+
+		if (!this.store.getCompletedSweep()) {
+			this.store.setCompletedSweep(completedSweep);
 		}
 
 		await this.enterCompletedSweepAudit();
@@ -1111,23 +1151,31 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	getCompletedSweepPanelState(): CompletedSweepPanelState | null {
-		const completedSweep = this.store.getCompletedSweep();
+		const completedSweep = this.getResolvedCompletedSweepState();
 		if (!completedSweep) {
 			return null;
 		}
 
+		const entry = this.getSweepRegistryEntry(completedSweep.batchId);
 		const unitLabel = this.getSweepUnitLabel(
 			completedSweep.notePaths.length,
 			completedSweep.notePaths[0],
 		);
+		const nextSteps: CompletedSweepPanelState["nextSteps"] = [
+			{ action: "start", label: "Review changes" },
+			{ action: "import", label: "Import new revision notes" },
+		];
+		if ((entry?.importedNotePaths.length ?? 0) > 0) {
+			nextSteps.push({ action: "clean", label: "Clean review blocks" });
+		}
+
 		return {
+			closeLabel: "Close review",
 			title: "All revisions complete",
 			editsReviewedLabel: `${completedSweep.totalSuggestions} edit${completedSweep.totalSuggestions === 1 ? "" : "s"} reviewed across ${completedSweep.notePaths.length} ${unitLabel}`,
-			description: "You've finished reviewing all revision notes in this pass.",
-			nextSteps: [
-				{ action: "start", label: "Review changes" },
-				{ action: "import", label: "Import new revision notes" },
-			],
+			description: "You've finished this revision pass.",
+			durationLabel: this.getCompletedSweepDurationLabel(completedSweep),
+			nextSteps,
 		};
 	}
 
@@ -2211,7 +2259,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private getCompletedReviewPreviewState(session?: ReviewSession | null): CompletedReviewPreviewState | null {
-		const completedSweep = this.store.getCompletedSweep();
+		const completedSweep = this.getResolvedCompletedSweepState();
 		const targetSession = session ?? this.getReviewSession();
 		if (!completedSweep || !targetSession) {
 			return null;
@@ -2427,10 +2475,105 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private async enterCompletedSweepAudit(): Promise<void> {
+		const completedSweep = this.getResolvedCompletedSweepState();
+		if (completedSweep && !this.store.getCompletedSweep()) {
+			this.store.setCompletedSweep(completedSweep);
+		}
+
+		await this.ensureCompletedSweepAuditSession();
 		this.store.setAppliedReview(null);
 		const suggestionId = this.getAdjacentCompletedReviewSuggestionId("next");
 		this.store.selectSuggestion(suggestionId);
 		await this.revealSelectedSuggestion();
+	}
+
+	private async ensureCompletedSweepAuditSession(): Promise<void> {
+		const completedSweep = this.getResolvedCompletedSweepState();
+		if (!completedSweep) {
+			return;
+		}
+
+		const currentSession = this.getReviewSession();
+		if (
+			currentSession &&
+			completedSweep.notePaths.includes(currentSession.notePath) &&
+			currentSession.suggestions.some((suggestion) => this.isCompletedReviewSuggestion(suggestion))
+		) {
+			return;
+		}
+
+		const targetNotePath =
+			completedSweep.notePaths.find((notePath) => {
+				const record = this.getSceneReviewRecordByPath(notePath);
+				return Boolean(record && record.acceptedCount + record.rewrittenCount + record.rejectedCount > 0);
+			}) ?? completedSweep.notePaths[completedSweep.currentNoteIndex] ?? completedSweep.notePaths[0];
+		if (!targetNotePath) {
+			return;
+		}
+
+		await this.startOrResumeReviewForNote(targetNotePath);
+	}
+
+	private getResolvedCompletedSweepState(): CompletedSweepState | null {
+		const completedSweep = this.store.getCompletedSweep();
+		if (completedSweep) {
+			return completedSweep;
+		}
+
+		if (this.store.getGuidedSweep()) {
+			return null;
+		}
+
+		const summary = this.getReviewActivitySummary();
+		const remainingCount = summary.pending + summary.unresolved + summary.deferred;
+		if (remainingCount > 0) {
+			return null;
+		}
+
+		const latestCompletedSweep = this.registry
+			.getSweepRegistryEntries()
+			.find((entry) => entry.status === "completed");
+		if (!latestCompletedSweep) {
+			return null;
+		}
+
+		const notePaths =
+			latestCompletedSweep.sceneOrder.length > 0
+				? [...latestCompletedSweep.sceneOrder]
+				: [...latestCompletedSweep.importedNotePaths];
+		if (notePaths.length === 0) {
+			return null;
+		}
+
+		const currentNoteIndex = Math.max(
+			0,
+			notePaths.findIndex((path) => path === latestCompletedSweep.currentNotePath),
+		);
+
+		return {
+			batchId: latestCompletedSweep.batchId,
+			completedAt: latestCompletedSweep.updatedAt,
+			currentNoteIndex,
+			notePaths,
+			startedAt: latestCompletedSweep.importedAt,
+			totalSuggestions: latestCompletedSweep.totalSuggestions,
+		};
+	}
+
+	private getCompletedSweepDurationLabel(completedSweep: CompletedSweepState): string | undefined {
+		const elapsedMs = completedSweep.completedAt - completedSweep.startedAt;
+		if (!Number.isFinite(elapsedMs) || elapsedMs < 60_000) {
+			return undefined;
+		}
+
+		const totalMinutes = Math.round(elapsedMs / 60_000);
+		if (totalMinutes < 60) {
+			return `Completed in ${totalMinutes}m`;
+		}
+
+		const hours = Math.floor(totalMinutes / 60);
+		const minutes = totalMinutes % 60;
+		return minutes > 0 ? `Completed in ${hours}h ${minutes}m` : `Completed in ${hours}h`;
 	}
 
 	private async enterAppliedReviewMode(entries: AppliedReviewChange[]): Promise<void> {
@@ -3004,6 +3147,16 @@ export default class EditorialistPlugin extends Plugin {
 
 	async cleanupReviewBatchById(batchId: string): Promise<void> {
 		await this.cleanupReviewBatch(batchId);
+	}
+
+	async cleanupCompletedSweepReviewBlocks(): Promise<void> {
+		const completedSweep = this.getResolvedCompletedSweepState();
+		if (!completedSweep) {
+			new Notice("No completed revision pass is available to clean.");
+			return;
+		}
+
+		await this.cleanupReviewBatch(completedSweep.batchId);
 	}
 
 	async removeImportedReviewBlocksInCurrentNote(): Promise<void> {

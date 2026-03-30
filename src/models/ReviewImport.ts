@@ -110,6 +110,7 @@ export interface ReviewSweepRegistryEntry {
 	activeBookLabel?: string;
 	activeBookSourceFolder?: string;
 	cleanedAt?: number;
+	editorialRevisionUpdatedNotePaths?: string[];
 	importedAt: number;
 	importedNotePaths: string[];
 	currentNotePath?: string;

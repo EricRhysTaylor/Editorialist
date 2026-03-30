@@ -132,7 +132,12 @@ export function createReviewToolbarElement(
 
 	if (state.mode === "applied_review") {
 		toolbar.addClass("editorialist-toolbar--panel");
-		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
+		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
+		buildFlatIconButton(leading, "Exit review", "x", () => {
+			void plugin.closeActiveReviewContext();
+		});
+
+		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });
 		markAsNonEditorSurface(meta);
 		renderMetaSegment(meta, state.title, "editorialist-toolbar__meta-segment--positive");
 		renderMetaSeparator(meta);
@@ -145,15 +150,17 @@ export function createReviewToolbarElement(
 		buildButton(actions, "Next", "arrow-right", () => {
 			void plugin.selectNextAppliedReviewChange();
 		}, false);
-		buildButton(actions, "Exit", "x", () => {
-			void plugin.exitAppliedReviewMode();
-		}, false);
 		return overlay;
 	}
 
 	if (state.mode === "accepted_review") {
 		toolbar.addClass("editorialist-toolbar--panel");
-		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
+		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
+		buildFlatIconButton(leading, "Exit review", "x", () => {
+			void plugin.closeActiveReviewContext();
+		});
+
+		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });
 		markAsNonEditorSurface(meta);
 		renderMetaSegment(meta, state.title, "editorialist-toolbar__meta-segment--positive");
 		renderMetaSeparator(meta);
@@ -166,18 +173,15 @@ export function createReviewToolbarElement(
 		buildButton(actions, "Next", "arrow-right", () => {
 			void plugin.selectNextAcceptedSuggestion();
 		}, false);
-		buildButton(actions, "Exit", "x", () => {
-			void plugin.exitAcceptedReviewMode();
-		}, false);
 		return overlay;
 	}
 
 	if (state.mode === "completed_review") {
 		toolbar.addClass("editorialist-toolbar--completed-review");
-		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
-		buildButton(leading, "Close", "x", () => {
-			void plugin.exitCompletedReviewMode();
-		}, false);
+		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
+		buildFlatIconButton(leading, "Close review", "x", () => {
+			void plugin.closeActiveReviewContext();
+		});
 
 		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });
 		markAsNonEditorSurface(meta);
@@ -280,6 +284,27 @@ export function createReviewToolbarElement(
 	}
 
 	return overlay;
+}
+
+function buildFlatIconButton(
+	parent: HTMLElement,
+	label: string,
+	icon: string,
+	onClick: () => void,
+): void {
+	const button = parent.createEl("button", {
+		cls: "ert-btn ert-btn--flat-ghost ert-btn--flat-icon editorialist-toolbar__flat-close",
+	});
+	button.type = "button";
+	button.setAttribute("aria-label", label);
+	button.setAttribute("title", label);
+	markAsNonEditorSurface(button);
+	const iconEl = button.createSpan({ cls: "editorialist-toolbar__button-icon" });
+	markAsNonEditorSurface(iconEl);
+	setIcon(iconEl, icon);
+	bindImmediateAction(button, () => {
+		onClick();
+	});
 }
 
 function buildButton(

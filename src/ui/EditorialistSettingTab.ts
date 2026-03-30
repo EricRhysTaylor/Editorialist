@@ -1,4 +1,4 @@
-import { ButtonComponent, Notice, PluginSettingTab, setIcon, type App } from "obsidian";
+import { ButtonComponent, Notice, PluginSettingTab, setIcon, TFile, type App } from "obsidian";
 import {
 	formatReviewerTypeLabel,
 } from "../core/ContributorIdentity";
@@ -6,6 +6,7 @@ import {
 	CONTRIBUTOR_ROLE_DEFINITIONS,
 	getContributorStrengthDefinition,
 } from "../core/ContributorStrengths";
+import { getFrontmatterStringValues } from "../core/VaultScope";
 import type { SceneReviewRecord } from "../models/ReviewerProfile";
 import type EditorialistPlugin from "../main";
 
@@ -17,6 +18,19 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private activeBookOnly = true;
 	private activeTab: "core" | "reviewer" = "core";
 	private displayRunId = 0;
+
+	private static readonly RT_STATUS_GLYPH_DEFINITIONS = [
+		{ glyph: "T", label: "Todo", tone: "todo", values: ["todo", "to do", "t"] },
+		{ glyph: "W", label: "Working", tone: "working", values: ["working", "in progress", "draft", "w"] },
+		{ glyph: "C", label: "Complete", tone: "complete", values: ["complete", "completed", "done", "final", "c"] },
+	] as const;
+
+	private static readonly RT_STAGE_GLYPH_DEFINITIONS = [
+		{ glyph: "Z", label: "Zero", tone: "zero", values: ["zero", "z"] },
+		{ glyph: "A", label: "Author", tone: "author", values: ["author", "a"] },
+		{ glyph: "H", label: "House", tone: "house", values: ["house", "h"] },
+		{ glyph: "P", label: "Press", tone: "press", values: ["press", "p"] },
+	] as const;
 
 	constructor(
 		app: App,
@@ -377,6 +391,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	): void {
 		const activeBook = this.plugin.getActiveBookScopeInfo();
 		const vocabulary = this.getInventoryVocabulary(activeBook);
+		const showRtSceneGlyphs = this.shouldRenderRtSceneGlyphs(activeBook);
 		const body = this.createSection(
 			parent,
 			`${vocabulary.singularLabel} inventory`,
@@ -462,7 +477,29 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			const sceneCell = row.createEl("td", {
 				cls: "editorialist-settings__inventory-col-scene",
 			});
-			const sceneLink = sceneCell.createEl("a", {
+			const sceneEntry = sceneCell.createDiv({
+				cls: "editorialist-settings__inventory-scene-entry",
+			});
+			if (showRtSceneGlyphs) {
+				const rtGlyphs = this.getRtSceneGlyphState(record.notePath);
+				if (rtGlyphs) {
+					this.createInventoryRtGlyph(
+						sceneEntry,
+						rtGlyphs.status.glyph,
+						rtGlyphs.status.label,
+						rtGlyphs.status.tone,
+						"status",
+					);
+					this.createInventoryRtGlyph(
+						sceneEntry,
+						rtGlyphs.stage.glyph,
+						rtGlyphs.stage.label,
+						rtGlyphs.stage.tone,
+						"stage",
+					);
+				}
+			}
+			const sceneLink = sceneEntry.createEl("a", {
 				cls: "editorialist-settings__inventory-note-link",
 				text: record.noteTitle,
 				attr: {
@@ -487,6 +524,108 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				text: `${record.acceptedCount + record.rewrittenCount}`,
 			});
 		}
+	}
+
+	private shouldRenderRtSceneGlyphs(activeBook: { label: string | null; sourceFolder: string | null }): boolean {
+		return this.isRadialTimelineInstalled() && Boolean(activeBook.label && activeBook.sourceFolder);
+	}
+
+	private getRtSceneGlyphState(notePath: string):
+		| {
+				status: { glyph: string; label: string; tone: string };
+				stage: { glyph: string; label: string; tone: string };
+		  }
+		| null {
+		const file = this.app.vault.getAbstractFileByPath(notePath);
+		if (!(file instanceof TFile)) {
+			return null;
+		}
+
+		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+		if (!frontmatter) {
+			return null;
+		}
+
+		const status = this.resolveRtGlyphValue(
+			frontmatter,
+			[
+				"status",
+				"Status",
+				"scene_status",
+				"sceneStatus",
+				"SceneStatus",
+				"manuscript_status",
+				"manuscriptStatus",
+				"ManuscriptStatus",
+			],
+			EditorialistSettingTab.RT_STATUS_GLYPH_DEFINITIONS,
+		);
+		const stage = this.resolveRtGlyphValue(
+			frontmatter,
+			[
+				"stage",
+				"Stage",
+				"scene_stage",
+				"sceneStage",
+				"SceneStage",
+				"manuscript_stage",
+				"manuscriptStage",
+				"ManuscriptStage",
+				"publishing_stage",
+				"publishingStage",
+				"PublishingStage",
+			],
+			EditorialistSettingTab.RT_STAGE_GLYPH_DEFINITIONS,
+		);
+
+		if (!status || !stage) {
+			return null;
+		}
+
+		return { status, stage };
+	}
+
+	private resolveRtGlyphValue(
+		frontmatter: Record<string, unknown>,
+		keys: string[],
+		definitions: ReadonlyArray<{
+			glyph: string;
+			label: string;
+			tone: string;
+			values: readonly string[];
+		}>,
+	): { glyph: string; label: string; tone: string } | null {
+		const values = getFrontmatterStringValues(frontmatter, keys);
+		for (const rawValue of values) {
+			const normalizedValue = rawValue.trim().toLowerCase();
+			const definition = definitions.find((candidate) => candidate.values.includes(normalizedValue));
+			if (definition) {
+				return {
+					glyph: definition.glyph,
+					label: definition.label,
+					tone: definition.tone,
+				};
+			}
+		}
+
+		return null;
+	}
+
+	private createInventoryRtGlyph(
+		parent: HTMLElement,
+		glyph: string,
+		label: string,
+		tone: string,
+		kind: "status" | "stage",
+	): void {
+		parent.createSpan({
+			cls: `editorialist-settings__inventory-rt-glyph editorialist-settings__inventory-rt-glyph--${kind} editorialist-settings__inventory-rt-glyph--${tone}`,
+			text: glyph,
+			attr: {
+				"aria-label": label,
+				title: label,
+			},
+		});
 	}
 
 	private renderContributorsSection(parent: HTMLElement): void {
@@ -569,7 +708,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			const manageIcon = manageButton.buttonEl.createSpan({ cls: "editorialist-settings__action-button-icon" });
 			setIcon(manageIcon, "ellipsis");
 
-			this.renderContributorUseIcons(footer, profile);
+			this.renderContributorUseIcons(footer, controls, profile);
 		}
 
 		const fillerCount = (3 - (profiles.length % 3)) % 3;
@@ -804,12 +943,16 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const sliceAngle = 360 / records.length;
 		const completeColor = "color-mix(in srgb, var(--color-green) 46%, var(--background-primary) 54%)";
 		const incompleteColor = "color-mix(in srgb, var(--background-modifier-border) 72%, transparent)";
+		const gapColor = "color-mix(in srgb, var(--background-modifier-border) 40%, transparent)";
 		const segments: string[] = [];
 		let currentAngle = 0;
 
 		for (const record of records) {
 			const sliceStart = currentAngle;
 			const sliceEnd = currentAngle + sliceAngle;
+			const gapDegrees = records.length > 1 ? Math.min(2, sliceAngle * 0.14) : 0;
+			const visualStart = Math.min(sliceEnd, sliceStart + gapDegrees / 2);
+			const visualEnd = Math.max(visualStart, sliceEnd - gapDegrees / 2);
 			const totalSuggestions =
 				record.pendingCount +
 				record.unresolvedCount +
@@ -819,14 +962,23 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				record.rewrittenCount;
 			const processedSuggestions = record.acceptedCount + record.rejectedCount + record.rewrittenCount;
 			const processedRatio = totalSuggestions > 0 ? Math.min(1, processedSuggestions / totalSuggestions) : 0;
-			const processedEnd = sliceStart + (sliceAngle * processedRatio);
+			const visualSpan = Math.max(0, visualEnd - visualStart);
+			const processedEnd = visualStart + (visualSpan * processedRatio);
 
-			if (processedRatio > 0) {
-				segments.push(`${completeColor} ${sliceStart}deg ${processedEnd}deg`);
+			if (sliceStart < visualStart) {
+				segments.push(`${gapColor} ${sliceStart}deg ${visualStart}deg`);
 			}
 
-			if (processedEnd < sliceEnd) {
-				segments.push(`${incompleteColor} ${processedEnd}deg ${sliceEnd}deg`);
+			if (processedRatio > 0) {
+				segments.push(`${completeColor} ${visualStart}deg ${processedEnd}deg`);
+			}
+
+			if (processedEnd < visualEnd) {
+				segments.push(`${incompleteColor} ${processedEnd}deg ${visualEnd}deg`);
+			}
+
+			if (visualEnd < sliceEnd) {
+				segments.push(`${gapColor} ${visualEnd}deg ${sliceEnd}deg`);
 			}
 
 			currentAngle = sliceEnd;
@@ -848,20 +1000,25 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 	private renderContributorUseIcons(
 		parent: HTMLElement,
+		controls: HTMLElement,
 		profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number],
 	): void {
-		const icons = parent.createDiv({ cls: "editorialist-settings__contributor-use-icons" });
 		const roleDefinition = CONTRIBUTOR_ROLE_DEFINITIONS.find((definition) => definition.value === profile.reviewerType);
 		if (roleDefinition) {
-			const roleIcon = icons.createSpan({
-				cls: "editorialist-settings__contributor-use-icon editorialist-settings__contributor-use-icon--role",
+			const roleIcon = controls.createSpan({
+				cls: "editorialist-settings__contributor-use-icon editorialist-settings__contributor-use-icon--role-button",
 				attr: {
 					"aria-label": roleDefinition.label,
-					title: roleDefinition.label,
 				},
 			});
 			setIcon(roleIcon, roleDefinition.icon);
 		}
+
+		if ((profile.strengths?.length ?? 0) === 0) {
+			return;
+		}
+
+		const icons = parent.createDiv({ cls: "editorialist-settings__contributor-use-icons" });
 
 		for (const strength of profile.strengths ?? []) {
 			const definition = getContributorStrengthDefinition(strength);
@@ -873,7 +1030,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				cls: "editorialist-settings__contributor-use-icon",
 				attr: {
 					"aria-label": definition.label,
-					title: definition.label,
 				},
 			});
 			setIcon(strengthIcon, definition.icon);

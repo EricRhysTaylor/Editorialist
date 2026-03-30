@@ -28,7 +28,7 @@ export class ReviewPanel extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Editorial review";
+		return "Editorialist Review";
 	}
 
 	getIcon(): string {
@@ -52,7 +52,7 @@ export class ReviewPanel extends ItemView {
 		const titleRow = header.createDiv({ cls: "editorialist-panel__title-row" });
 		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__title-icon" });
 		setIcon(titleIcon, "list-todo");
-		titleRow.createEl("h2", { text: "Editorial review" });
+		titleRow.createEl("h2", { text: "Editorialist Review" });
 		const settingsButton = titleRow.createEl("button", {
 			cls: "editorialist-panel__settings-button",
 			attr: {
@@ -228,11 +228,11 @@ export class ReviewPanel extends ItemView {
 
 		const card = this.contentEl.createDiv({ cls: "editorialist-panel__completion" });
 		const bgIcon = card.createSpan({ cls: "editorialist-panel__completion-bg-icon" });
-		setIcon(bgIcon, "check-circle");
+		setIcon(bgIcon, "list-todo");
 
 		const titleRow = card.createDiv({ cls: "editorialist-panel__completion-title-row" });
 		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__completion-title-icon" });
-		setIcon(titleIcon, "check-circle");
+		setIcon(titleIcon, "list-todo");
 		titleRow.createSpan({
 			cls: "editorialist-panel__completion-title",
 			text: completedSweep.title,
@@ -242,14 +242,23 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-panel__completion-summary",
 			text: completedSweep.editsReviewedLabel,
 		});
+		if (completedSweep.durationLabel) {
+			card.createDiv({
+				cls: "editorialist-panel__completion-duration",
+				text: completedSweep.durationLabel,
+			});
+		}
 		card.createDiv({
 			cls: "editorialist-panel__completion-description",
 			text: completedSweep.description,
 		});
 
 		const steps = card.createDiv({ cls: "editorialist-panel__completion-steps" });
-		for (const step of completedSweep.nextSteps) {
+		completedSweep.nextSteps.forEach((step, index) => {
 			const item = steps.createDiv({ cls: "editorialist-panel__completion-step" });
+			if (index === 0) {
+				item.addClass("is-primary");
+			}
 			const bullet = item.createSpan({ cls: "editorialist-panel__completion-step-bullet" });
 			setIcon(bullet, "arrow-right");
 
@@ -265,7 +274,7 @@ export class ReviewPanel extends ItemView {
 				this.bindImmediateAction(link, () => {
 					void this.plugin.openEditorialistModal();
 				});
-				continue;
+				return;
 			}
 
 			if (step.action === "start") {
@@ -280,14 +289,42 @@ export class ReviewPanel extends ItemView {
 				this.bindImmediateAction(link, () => {
 					void this.plugin.resumeCompletedReviewMode();
 				});
-				continue;
+				return;
+			}
+
+			if (step.action === "clean") {
+				const link = item.createEl("a", {
+					cls: "editorialist-panel__completion-step-link",
+					attr: {
+						href: "#",
+						title: step.label,
+					},
+				});
+				link.createSpan({ text: step.label });
+				this.bindImmediateAction(link, () => {
+					void this.plugin.cleanupCompletedSweepReviewBlocks();
+				});
+				return;
 			}
 
 			item.createSpan({
 				cls: "editorialist-panel__completion-step-text",
 				text: step.label,
 			});
-		}
+		});
+
+		const closeRow = card.createDiv({ cls: "editorialist-panel__completion-close" });
+		const closeLink = closeRow.createEl("a", {
+			cls: "editorialist-panel__completion-close-link",
+			attr: {
+				href: "#",
+				title: completedSweep.closeLabel,
+			},
+		});
+		closeLink.createSpan({ text: `→ ${completedSweep.closeLabel}` });
+		this.bindImmediateAction(closeLink, () => {
+			void this.plugin.closeActiveReviewContext();
+		});
 	}
 
 	private renderFilters(): void {
@@ -510,7 +547,7 @@ export class ReviewPanel extends ItemView {
 			},
 		);
 
-		this.renderSuggestionCopy(card, suggestion);
+		this.renderSuggestionCopy(card, suggestion, selected);
 
 		const reason = card.createDiv({
 			cls: `editorialist-suggestion__reason editorialist-suggestion__reason--${this.getSuggestionReasonTone(suggestion)}`,
@@ -562,14 +599,151 @@ export class ReviewPanel extends ItemView {
 		return suggestions.find((suggestion) => this.isOpenSuggestion(suggestion))?.id ?? null;
 	}
 
-	private renderSuggestionCopy(parent: HTMLElement, suggestion: ReviewSuggestion): void {
+	private renderSuggestionCopy(parent: HTMLElement, suggestion: ReviewSuggestion, active: boolean): void {
 		const copy = parent.createDiv({ cls: "editorialist-suggestion__copy" });
+		if (active && this.renderSuggestionStructure(copy, suggestion)) {
+			if (suggestion.why) {
+				this.renderCopyBlock(copy, "WHY", suggestion.why);
+			}
+			return;
+		}
+
 		getSuggestionCopyBlocks(suggestion).forEach((block) => {
 			this.renderCopyBlock(copy, block.label, block.body);
 		});
 		if (suggestion.why) {
 			this.renderCopyBlock(copy, "WHY", suggestion.why);
 		}
+	}
+
+	private renderSuggestionStructure(parent: HTMLElement, suggestion: ReviewSuggestion): boolean {
+		if (this.isOtherTextSuggestion(suggestion)) {
+			return false;
+		}
+
+		switch (suggestion.operation) {
+			case "edit":
+				this.renderComparisonStructure(parent, "Original", suggestion.payload.original, "Revised", suggestion.payload.revised);
+				return true;
+			case "condense":
+				this.renderComparisonStructure(
+					parent,
+					"Before",
+					suggestion.payload.target,
+					"After",
+					suggestion.payload.suggestion ?? "Condense this paragraph.",
+					true,
+				);
+				return true;
+			case "cut":
+				this.renderDeleteStructure(parent, "Remove", suggestion.payload.target);
+				return true;
+			case "move":
+				this.renderMoveStructure(parent, suggestion);
+				return true;
+		}
+	}
+
+	private renderComparisonStructure(
+		parent: HTMLElement,
+		beforeLabel: string,
+		beforeText: string,
+		afterLabel: string,
+		afterText: string,
+		isCondense = false,
+	): void {
+		const structure = parent.createDiv({
+			cls: `editorialist-suggestion__structure editorialist-suggestion__structure--comparison${isCondense ? " editorialist-suggestion__structure--condense" : ""}`,
+		});
+		this.renderStructureBlock(structure, beforeLabel, beforeText, {
+			icon: isCondense ? "minimize-2" : "align-left",
+			tone: "ghost",
+		});
+		const bridge = structure.createDiv({ cls: "editorialist-suggestion__structure-bridge" });
+		const bridgeIcon = bridge.createSpan({ cls: "editorialist-suggestion__structure-bridge-icon" });
+		setIcon(bridgeIcon, isCondense ? "arrow-down" : "arrow-right");
+		bridge.createSpan({
+			cls: "editorialist-suggestion__structure-bridge-text",
+			text: isCondense ? "Condense to this version" : "Replace with this version",
+		});
+		this.renderStructureBlock(structure, afterLabel, afterText, {
+			icon: isCondense ? "sparkles" : "check",
+			tone: "active",
+		});
+	}
+
+	private renderMoveStructure(parent: HTMLElement, suggestion: Extract<ReviewSuggestion, { operation: "move" }>): void {
+		const structure = parent.createDiv({
+			cls: "editorialist-suggestion__structure editorialist-suggestion__structure--move",
+		});
+		const split = structure.createDiv({ cls: "editorialist-suggestion__structure-split" });
+		const sourceColumn = split.createDiv({ cls: "editorialist-suggestion__structure-column" });
+		const destinationColumn = split.createDiv({ cls: "editorialist-suggestion__structure-column" });
+
+		this.renderStructureBlock(sourceColumn, "Move from here", suggestion.payload.target, {
+			icon: "arrow-right-left",
+			tone: "ghost",
+		});
+
+		const placementLabel = suggestion.payload.placement === "after" ? "Insert after this paragraph" : "Insert before this paragraph";
+		this.renderInsertionMarker(destinationColumn, placementLabel, suggestion.payload.target);
+		this.renderStructureBlock(destinationColumn, "Anchor", suggestion.payload.anchor, {
+			icon: "map-pin",
+			tone: "muted",
+		});
+	}
+
+	private renderDeleteStructure(parent: HTMLElement, label: string, text: string): void {
+		const structure = parent.createDiv({
+			cls: "editorialist-suggestion__structure editorialist-suggestion__structure--delete",
+		});
+		this.renderStructureBlock(structure, label, text, {
+			icon: "scissors",
+			tone: "ghost",
+			state: "delete",
+		});
+	}
+
+	private renderInsertionMarker(parent: HTMLElement, label: string, text: string): void {
+		const insertion = parent.createDiv({ cls: "editorialist-suggestion__insert" });
+		const marker = insertion.createDiv({ cls: "editorialist-suggestion__insert-marker" });
+		const markerIcon = marker.createSpan({ cls: "editorialist-suggestion__insert-marker-icon" });
+		setIcon(markerIcon, "corner-left-down");
+		marker.createSpan({
+			cls: "editorialist-suggestion__insert-marker-text",
+			text: label,
+		});
+		this.renderStructureBlock(insertion, "Inserted content", text, {
+			icon: "plus",
+			tone: "active",
+			state: "insert",
+		});
+	}
+
+	private renderStructureBlock(
+		parent: HTMLElement,
+		label: string,
+		text: string,
+		options: {
+			icon: string;
+			state?: "insert" | "delete";
+			tone: "active" | "ghost" | "muted";
+		},
+	): void {
+		const block = parent.createDiv({
+			cls: `editorialist-suggestion__structure-block editorialist-suggestion__structure-block--${options.tone}${options.state ? ` editorialist-suggestion__structure-block--${options.state}` : ""}`,
+		});
+		const header = block.createDiv({ cls: "editorialist-suggestion__structure-block-header" });
+		const icon = header.createSpan({ cls: "editorialist-suggestion__structure-block-icon" });
+		setIcon(icon, options.icon);
+		header.createSpan({
+			cls: "editorialist-suggestion__structure-block-label",
+			text: label,
+		});
+		block.createDiv({
+			cls: "editorialist-suggestion__structure-block-body",
+			text,
+		});
 	}
 
 	private getCollapsedPreview(suggestion: ReviewSuggestion): string {
@@ -581,11 +755,11 @@ export class ReviewPanel extends ItemView {
 			case "edit":
 				return suggestion.payload.revised;
 			case "cut":
-				return suggestion.payload.target;
+				return "Remove paragraph";
 			case "condense":
-				return suggestion.payload.suggestion ?? suggestion.payload.target;
+				return suggestion.payload.suggestion ?? "Condense paragraph";
 			case "move":
-				return suggestion.payload.target;
+				return `Move ${suggestion.payload.placement} anchor`;
 		}
 	}
 
