@@ -5,6 +5,7 @@ import type { ReviewRegistryService } from "./ReviewRegistryService";
 interface ReviewWorkflowHost {
 	clearReviewSelection: () => Promise<void>;
 	cleanupBatchById: (batchId: string) => Promise<void>;
+	enterCompletedSweepAudit: () => Promise<void>;
 	notify: (message: string) => void;
 	openNoteForReview: (filePath: string) => Promise<void>;
 }
@@ -124,10 +125,20 @@ export class ReviewWorkflowService {
 			return;
 		}
 
+		const entry = this.registry.getSweepRegistryEntry(guidedSweep.batchId);
 		await this.registry.updateSweepRegistry(guidedSweep.batchId, {
 			status: "completed",
 		});
+		this.store.setCompletedSweep({
+			batchId: guidedSweep.batchId,
+			completedAt: Date.now(),
+			currentNoteIndex: guidedSweep.currentNoteIndex,
+			notePaths: [...guidedSweep.notePaths],
+			startedAt: guidedSweep.startedAt,
+			totalSuggestions: entry?.totalSuggestions ?? 0,
+		});
 		this.store.setGuidedSweep(null);
+		await this.host.enterCompletedSweepAudit();
 		this.host.notify("Guided sweep complete.");
 	}
 

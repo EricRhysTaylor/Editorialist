@@ -57,12 +57,22 @@ export interface AcceptedReviewToolbarState {
 	title: string;
 }
 
+export interface CompletedReviewToolbarState {
+	mode: "completed_review";
+	canNext: boolean;
+	canPrevious: boolean;
+	canUndo: boolean;
+	currentIndexLabel?: string;
+	title: string;
+}
+
 export type ToolbarState =
 	| ReviewToolbarState
 	| HandoffToolbarState
 	| PanelToolbarState
 	| AppliedReviewToolbarState
-	| AcceptedReviewToolbarState;
+	| AcceptedReviewToolbarState
+	| CompletedReviewToolbarState;
 
 export function createReviewToolbarElement(
 	plugin: EditorialistPlugin,
@@ -159,6 +169,36 @@ export function createReviewToolbarElement(
 		buildButton(actions, "Exit", "x", () => {
 			void plugin.exitAcceptedReviewMode();
 		}, false);
+		return overlay;
+	}
+
+	if (state.mode === "completed_review") {
+		toolbar.addClass("editorialist-toolbar--completed-review");
+		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
+		buildButton(leading, "Close", "x", () => {
+			void plugin.exitCompletedReviewMode();
+		}, false);
+
+		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });
+		markAsNonEditorSurface(meta);
+		renderMetaSegment(meta, state.title, "editorialist-toolbar__meta-segment--positive");
+		if (state.currentIndexLabel) {
+			renderMetaSeparator(meta);
+			renderMetaSegment(meta, state.currentIndexLabel);
+		}
+
+		const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
+		buildButton(actions, "Previous", "arrow-left", () => {
+			void plugin.selectPreviousCompletedReviewSuggestion();
+		}, !state.canPrevious);
+		buildButton(actions, "Next", "arrow-right", () => {
+			void plugin.selectNextCompletedReviewSuggestion();
+		}, !state.canNext);
+		if (state.canUndo) {
+			buildButton(actions, "Undo", "rotate-ccw", () => {
+				void plugin.undoLastAppliedSuggestion();
+			}, false);
+		}
 		return overlay;
 	}
 

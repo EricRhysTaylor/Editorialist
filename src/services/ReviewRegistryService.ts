@@ -21,6 +21,7 @@ import type {
 	EditorialistPluginData,
 	PersistedReviewDecisionRecord,
 	ReviewerProfile,
+	ReviewerStats,
 	ReviewerSignalRecord,
 	SceneReviewRecord,
 } from "../models/ReviewerProfile";
@@ -68,6 +69,63 @@ export class ReviewRegistryService {
 				: {};
 		this.sceneReviewIndex = this.normalizeSceneReviewIndex(savedData?.sceneReviewIndex);
 		this.sweepRegistry = this.normalizeSweepRegistry(savedData?.sweepRegistry);
+	}
+
+	rebuildReviewerStatsFromSignals(): void {
+		const profiles = this.reviewerDirectory.getProfiles();
+		const totalsByReviewerId = new Map<string, ReviewerStats>();
+
+		for (const profile of profiles) {
+			totalsByReviewerId.set(profile.id, {
+				totalSuggestions: 0,
+				accepted: 0,
+				pending: 0,
+				deferred: 0,
+				rejected: 0,
+				rewritten: 0,
+				unresolved: 0,
+				acceptedEdits: 0,
+				acceptedMoves: 0,
+			});
+		}
+
+		for (const record of Object.values(this.reviewerSignalIndex)) {
+			const stats = totalsByReviewerId.get(record.reviewerId);
+			if (!stats) {
+				continue;
+			}
+
+			stats.totalSuggestions += 1;
+			switch (record.status) {
+				case "accepted":
+					stats.accepted += 1;
+					if (record.operation === "move") {
+						stats.acceptedMoves = (stats.acceptedMoves ?? 0) + 1;
+					} else if (record.operation === "edit" || record.operation === "cut" || record.operation === "condense") {
+						stats.acceptedEdits = (stats.acceptedEdits ?? 0) + 1;
+					}
+					break;
+				case "pending":
+					stats.pending = (stats.pending ?? 0) + 1;
+					break;
+				case "deferred":
+					stats.deferred += 1;
+					break;
+				case "rejected":
+					stats.rejected += 1;
+					break;
+				case "rewritten":
+					stats.rewritten += 1;
+					break;
+				case "unresolved":
+					stats.unresolved += 1;
+					break;
+			}
+		}
+
+		for (const [reviewerId, stats] of totalsByReviewerId) {
+			this.reviewerDirectory.setStats(reviewerId, stats);
+		}
 	}
 
 	buildPluginData(reviewerProfiles: ReviewerProfile[]): EditorialistPluginData {
@@ -154,6 +212,7 @@ export class ReviewRegistryService {
 			(totals, profile) => {
 				totals.totalSuggestions += profile.stats?.totalSuggestions ?? 0;
 				totals.accepted += profile.stats?.accepted ?? 0;
+				totals.pending += profile.stats?.pending ?? 0;
 				totals.deferred += profile.stats?.deferred ?? 0;
 				totals.rejected += profile.stats?.rejected ?? 0;
 				totals.rewritten += profile.stats?.rewritten ?? 0;
@@ -175,7 +234,7 @@ export class ReviewRegistryService {
 
 		return {
 			...totals,
-			processed: Math.max(0, totals.totalSuggestions - totals.pending - totals.unresolved),
+			processed: totals.accepted + totals.rejected + totals.rewritten,
 			totalSweeps: entries.length,
 			inProgressSweeps: entries.filter((entry) => entry.status === "in_progress").length,
 			completedSweeps: entries.filter((entry) => entry.status === "completed").length,
@@ -667,6 +726,8 @@ export class ReviewRegistryService {
 			status:
 				suggestion.status === "accepted"
 					? "accepted"
+					: suggestion.status === "pending"
+						? "pending"
 					: suggestion.status === "rejected"
 						? "rejected"
 						: suggestion.status === "rewritten"
@@ -711,6 +772,7 @@ export class ReviewRegistryService {
 		const stats = {
 			totalSuggestions: profile.stats?.totalSuggestions ?? 0,
 			accepted: profile.stats?.accepted ?? 0,
+			pending: profile.stats?.pending ?? 0,
 			deferred: profile.stats?.deferred ?? 0,
 			rejected: profile.stats?.rejected ?? 0,
 			rewritten: profile.stats?.rewritten ?? 0,
@@ -727,6 +789,8 @@ export class ReviewRegistryService {
 			} else if (record.operation === "edit" || record.operation === "cut" || record.operation === "condense") {
 				stats.acceptedEdits = Math.max(0, (stats.acceptedEdits ?? 0) + direction);
 			}
+		} else if (record.status === "pending") {
+			stats.pending = Math.max(0, (stats.pending ?? 0) + direction);
 		} else if (record.status === "rejected") {
 			stats.rejected = Math.max(0, stats.rejected + direction);
 		} else if (record.status === "rewritten") {

@@ -32,6 +32,7 @@ export type ContributorStrength =
 export interface ReviewerStats {
 	totalSuggestions: number;
 	accepted: number;
+	pending?: number;
 	deferred: number;
 	rejected: number;
 	rewritten: number;
@@ -78,7 +79,7 @@ export type ReviewerResolution = ContributorResolution;
 export interface ReviewerSignalRecord {
 	key: string;
 	reviewerId: string;
-	status: "accepted" | "deferred" | "rejected" | "rewritten" | "unresolved";
+	status: "accepted" | "pending" | "deferred" | "rejected" | "rewritten" | "unresolved";
 	operation: ReviewOperationType;
 	sessionId?: string;
 	sessionStartedAt?: number;

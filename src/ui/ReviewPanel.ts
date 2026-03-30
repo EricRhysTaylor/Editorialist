@@ -67,6 +67,13 @@ export class ReviewPanel extends ItemView {
 			this.plugin.openSettings();
 		});
 
+		const completedSweep = this.plugin.getCompletedSweepPanelState();
+		if (completedSweep) {
+			this.contentEl.createDiv({ cls: "editorialist-panel__divider" });
+			this.renderCompletedSweepCard(completedSweep);
+			return;
+		}
+
 		if (!session) {
 			const actionStrip = header.createDiv({ cls: "editorialist-panel__launch-strip" });
 			const intro = actionStrip.createDiv({ cls: "editorialist-panel__launch-section editorialist-panel__launch-section--intro" });
@@ -210,6 +217,75 @@ export class ReviewPanel extends ItemView {
 				if (document.body.contains(targetCard)) {
 					this.centerCardInScrollView(targetCard);
 				}
+			});
+		}
+	}
+
+	private renderCompletedSweepCard(completedSweep: ReturnType<EditorialistPlugin["getCompletedSweepPanelState"]>): void {
+		if (!completedSweep) {
+			return;
+		}
+
+		const card = this.contentEl.createDiv({ cls: "editorialist-panel__completion" });
+		const bgIcon = card.createSpan({ cls: "editorialist-panel__completion-bg-icon" });
+		setIcon(bgIcon, "check-circle");
+
+		const titleRow = card.createDiv({ cls: "editorialist-panel__completion-title-row" });
+		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__completion-title-icon" });
+		setIcon(titleIcon, "check-circle");
+		titleRow.createSpan({
+			cls: "editorialist-panel__completion-title",
+			text: completedSweep.title,
+		});
+
+		card.createDiv({
+			cls: "editorialist-panel__completion-summary",
+			text: completedSweep.editsReviewedLabel,
+		});
+		card.createDiv({
+			cls: "editorialist-panel__completion-description",
+			text: completedSweep.description,
+		});
+
+		const steps = card.createDiv({ cls: "editorialist-panel__completion-steps" });
+		for (const step of completedSweep.nextSteps) {
+			const item = steps.createDiv({ cls: "editorialist-panel__completion-step" });
+			const bullet = item.createSpan({ cls: "editorialist-panel__completion-step-bullet" });
+			setIcon(bullet, "arrow-right");
+
+			if (step.action === "import") {
+				const link = item.createEl("a", {
+					cls: "editorialist-panel__completion-step-link",
+					attr: {
+						href: "#",
+						title: step.label,
+					},
+				});
+				link.createSpan({ text: step.label });
+				this.bindImmediateAction(link, () => {
+					void this.plugin.openEditorialistModal();
+				});
+				continue;
+			}
+
+			if (step.action === "start") {
+				const link = item.createEl("a", {
+					cls: "editorialist-panel__completion-step-link",
+					attr: {
+						href: "#",
+						title: step.label,
+					},
+				});
+				link.createSpan({ text: step.label });
+				this.bindImmediateAction(link, () => {
+					void this.plugin.resumeCompletedReviewMode();
+				});
+				continue;
+			}
+
+			item.createSpan({
+				cls: "editorialist-panel__completion-step-text",
+				text: step.label,
 			});
 		}
 	}

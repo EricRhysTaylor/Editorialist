@@ -19,8 +19,18 @@ export interface AppliedReviewState {
 	notePath: string;
 }
 
+export interface CompletedSweepState {
+	batchId: string;
+	completedAt: number;
+	currentNoteIndex: number;
+	notePaths: string[];
+	startedAt: number;
+	totalSuggestions: number;
+}
+
 export interface ReviewStoreState {
 	appliedReview: AppliedReviewState | null;
+	completedSweep: CompletedSweepState | null;
 	guidedSweep: GuidedSweepState | null;
 	selectedSuggestionId: string | null;
 	session: ReviewSession | null;
@@ -33,6 +43,7 @@ export class ReviewStore {
 
 	private state: ReviewStoreState = {
 		appliedReview: null,
+		completedSweep: null,
 		guidedSweep: null,
 		selectedSuggestionId: null,
 		session: null,
@@ -52,6 +63,12 @@ export class ReviewStore {
 				? {
 						...this.state.appliedReview,
 						entries: this.state.appliedReview.entries.map((entry) => ({ ...entry })),
+					}
+				: null,
+			completedSweep: this.state.completedSweep
+				? {
+						...this.state.completedSweep,
+						notePaths: [...this.state.completedSweep.notePaths],
 					}
 				: null,
 			guidedSweep: this.state.guidedSweep
@@ -76,6 +93,10 @@ export class ReviewStore {
 
 	getGuidedSweep(): GuidedSweepState | null {
 		return this.state.guidedSweep;
+	}
+
+	getCompletedSweep(): CompletedSweepState | null {
+		return this.state.completedSweep;
 	}
 
 	getAppliedReview(): AppliedReviewState | null {
@@ -105,6 +126,12 @@ export class ReviewStore {
 
 		this.state = {
 			appliedReview: this.state.appliedReview,
+			completedSweep:
+				this.state.completedSweep &&
+				this.state.completedSweep.notePaths.includes(session.notePath) &&
+				!firstOpenSuggestion
+					? this.state.completedSweep
+					: null,
 			guidedSweep: this.state.guidedSweep,
 			session,
 			selectedSuggestionId,
@@ -115,6 +142,7 @@ export class ReviewStore {
 	clearSession(): void {
 		this.state = {
 			appliedReview: null,
+			completedSweep: this.state.completedSweep,
 			guidedSweep: this.state.guidedSweep,
 			session: null,
 			selectedSuggestionId: null,
@@ -148,6 +176,7 @@ export class ReviewStore {
 
 		this.state = {
 			appliedReview: this.state.appliedReview,
+			completedSweep: this.state.completedSweep,
 			guidedSweep: this.state.guidedSweep,
 			session,
 			selectedSuggestionId,
@@ -159,6 +188,15 @@ export class ReviewStore {
 		this.state = {
 			...this.state,
 			guidedSweep,
+			completedSweep: guidedSweep ? null : this.state.completedSweep,
+		};
+		this.emit();
+	}
+
+	setCompletedSweep(completedSweep: CompletedSweepState | null): void {
+		this.state = {
+			...this.state,
+			completedSweep,
 		};
 		this.emit();
 	}

@@ -466,6 +466,7 @@ export class ReviewerDirectory {
 		return {
 			totalSuggestions: sourceStats.totalSuggestions + targetStats.totalSuggestions,
 			accepted: sourceStats.accepted + targetStats.accepted,
+			pending: (sourceStats.pending ?? 0) + (targetStats.pending ?? 0),
 			deferred: sourceStats.deferred + targetStats.deferred,
 			rejected: sourceStats.rejected + targetStats.rejected,
 			rewritten: sourceStats.rewritten + targetStats.rewritten,
@@ -511,6 +512,7 @@ export class ReviewerDirectory {
 		return {
 			totalSuggestions: 0,
 			accepted: 0,
+			pending: 0,
 			deferred: 0,
 			rejected: 0,
 			rewritten: 0,

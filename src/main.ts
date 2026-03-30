@@ -104,6 +104,21 @@ interface AcceptedReviewPreviewState {
 	title: string;
 }
 
+interface CompletedReviewPreviewState {
+	currentIndexLabel?: string;
+	title: string;
+}
+
+interface CompletedSweepPanelState {
+	description: string;
+	editsReviewedLabel: string;
+	nextSteps: Array<{
+		action?: "import" | "start";
+		label: string;
+	}>;
+	title: string;
+}
+
 interface ReviewLaunchTarget {
 	label: string;
 	notePath: string;
@@ -131,12 +146,14 @@ export default class EditorialistPlugin extends Plugin {
 		cleanupBatchById: async (batchId) => {
 			await this.cleanupReviewBatch(batchId);
 		},
+		enterCompletedSweepAudit: async () => {
+			await this.enterCompletedSweepAudit();
+		},
 		notify: (message) => {
 			new Notice(message);
 		},
 		openNoteForReview: async (filePath) => {
-			await this.openSceneNote(filePath);
-			await this.parseCurrentNote({ suppressNotice: true });
+			await this.startOrResumeReviewForNote(filePath);
 			this.syncActiveEditorDecorations();
 		},
 	});
@@ -215,6 +232,13 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
+		await this.parseReviewContext(context, suppressNotice);
+	}
+
+	private async parseReviewContext(
+		context: ActiveNoteContext,
+		suppressNotice: boolean,
+	): Promise<void> {
 		const previousSession = this.store.getSession();
 		const preferredSelectionId =
 			previousSession?.notePath === context.filePath ? this.store.getState().selectedSuggestionId : null;
@@ -504,6 +528,42 @@ export default class EditorialistPlugin extends Plugin {
 
 	async finishGuidedSweep(): Promise<void> {
 		await this.workflow.finishGuidedSweep();
+	}
+
+	async resumeCompletedReviewMode(): Promise<void> {
+		if (!this.store.getCompletedSweep()) {
+			return;
+		}
+
+		await this.enterCompletedSweepAudit();
+	}
+
+	async selectNextCompletedReviewSuggestion(): Promise<void> {
+		const nextId = this.getAdjacentCompletedReviewSuggestionId("next");
+		if (!nextId) {
+			return;
+		}
+
+		this.store.selectSuggestion(nextId);
+		await this.revealSelectedSuggestion();
+	}
+
+	async selectPreviousCompletedReviewSuggestion(): Promise<void> {
+		const previousId = this.getAdjacentCompletedReviewSuggestionId("previous");
+		if (!previousId) {
+			return;
+		}
+
+		this.store.selectSuggestion(previousId);
+		await this.revealSelectedSuggestion();
+	}
+
+	async exitCompletedReviewMode(): Promise<void> {
+		this.store.setCompletedSweep(null);
+		this.store.clearSession();
+		this.activeHighlightRange = null;
+		this.activeHighlightTone = "active";
+		this.syncActiveEditorDecorations();
 	}
 
 	async rejectSelectedSuggestion(): Promise<void> {
@@ -796,6 +856,7 @@ export default class EditorialistPlugin extends Plugin {
 		const change = this.lastAppliedChange;
 		const context = this.getReviewNoteContext();
 		const appliedSuggestion = change ? this.getSuggestionById(change.suggestionId) : null;
+		const completedSweep = this.store.getCompletedSweep();
 		if (!change || !context || context.filePath !== change.notePath) {
 			new Notice("No applied change is ready to undo.");
 			return;
@@ -819,6 +880,15 @@ export default class EditorialistPlugin extends Plugin {
 			await this.registry.clearPersistedReviewDecision(change.notePath, appliedSuggestion, { persist: false });
 		}
 		this.lastAppliedChange = null;
+		if (completedSweep) {
+			this.store.setCompletedSweep(null);
+			this.store.setGuidedSweep({
+				batchId: completedSweep.batchId,
+				currentNoteIndex: completedSweep.currentNoteIndex,
+				notePaths: [...completedSweep.notePaths],
+				startedAt: completedSweep.startedAt,
+			});
+		}
 		this.resyncSessionForActiveNote();
 		this.store.selectSuggestion(change.suggestionId);
 		await this.revealSuggestionContext(change.suggestionId);
@@ -1037,6 +1107,27 @@ export default class EditorialistPlugin extends Plugin {
 			label: activeBookCandidate.noteTitle,
 			notePath: activeBookCandidate.notePath,
 			unitLabel: this.registry.usesSceneTerminology(activeBookCandidate.notePath) ? "scene" : "note",
+		};
+	}
+
+	getCompletedSweepPanelState(): CompletedSweepPanelState | null {
+		const completedSweep = this.store.getCompletedSweep();
+		if (!completedSweep) {
+			return null;
+		}
+
+		const unitLabel = this.getSweepUnitLabel(
+			completedSweep.notePaths.length,
+			completedSweep.notePaths[0],
+		);
+		return {
+			title: "All revisions complete",
+			editsReviewedLabel: `${completedSweep.totalSuggestions} edit${completedSweep.totalSuggestions === 1 ? "" : "s"} reviewed across ${completedSweep.notePaths.length} ${unitLabel}`,
+			description: "You've finished reviewing all revision notes in this pass.",
+			nextSteps: [
+				{ action: "start", label: "Review changes" },
+				{ action: "import", label: "Import new revision notes" },
+			],
 		};
 	}
 
@@ -1532,6 +1623,18 @@ export default class EditorialistPlugin extends Plugin {
 			};
 		}
 
+		const completedReview = this.getCompletedReviewPreviewState(session);
+		if (completedReview) {
+			return {
+				mode: "completed_review",
+				currentIndexLabel: completedReview.currentIndexLabel,
+				title: completedReview.title,
+				canNext: this.getAdjacentCompletedReviewSuggestionId("next") !== null,
+				canPrevious: this.getAdjacentCompletedReviewSuggestionId("previous") !== null,
+				canUndo: Boolean(this.lastAppliedChange),
+			};
+		}
+
 		const acceptedReview = this.getAcceptedReviewPreviewState(session);
 		if (acceptedReview) {
 			return {
@@ -1671,7 +1774,18 @@ export default class EditorialistPlugin extends Plugin {
 	private resyncSessionForActiveNote(): void {
 		const context = this.getReviewNoteContext() ?? this.getActiveNoteContext();
 		const session = this.store.getSession();
-		if (!context || !session || session.notePath !== context.filePath) {
+		if (!context) {
+			this.store.setAppliedReview(null);
+			this.activeHighlightRange = null;
+			this.activeHighlightTone = "active";
+			this.lastAppliedChange = null;
+			if (session) {
+				this.store.clearSession();
+			}
+			return;
+		}
+
+		if (!session || session.notePath !== context.filePath) {
 			this.store.setAppliedReview(null);
 			this.activeHighlightRange = null;
 			this.activeHighlightTone = "active";
@@ -2096,6 +2210,34 @@ export default class EditorialistPlugin extends Plugin {
 		};
 	}
 
+	private getCompletedReviewPreviewState(session?: ReviewSession | null): CompletedReviewPreviewState | null {
+		const completedSweep = this.store.getCompletedSweep();
+		const targetSession = session ?? this.getReviewSession();
+		if (!completedSweep || !targetSession) {
+			return null;
+		}
+
+		const reviewableSuggestions = targetSession.suggestions.filter((suggestion) =>
+			this.isCompletedReviewSuggestion(suggestion),
+		);
+		if (reviewableSuggestions.length === 0) {
+			return {
+				title: "All revisions complete",
+			};
+		}
+
+		const selectedSuggestion = this.store.getSelectedSuggestion();
+		const currentIndex = selectedSuggestion
+			? reviewableSuggestions.findIndex((suggestion) => suggestion.id === selectedSuggestion.id)
+			: -1;
+
+		return {
+			currentIndexLabel:
+				currentIndex === -1 ? undefined : `${currentIndex + 1} of ${reviewableSuggestions.length}`,
+			title: "All revisions complete",
+		};
+	}
+
 	private getAdjacentAcceptedSuggestionId(
 		direction: "next" | "previous",
 		fromId?: string,
@@ -2123,6 +2265,37 @@ export default class EditorialistPlugin extends Plugin {
 				? (currentIndex + 1) % acceptedSuggestions.length
 				: (currentIndex - 1 + acceptedSuggestions.length) % acceptedSuggestions.length;
 		return acceptedSuggestions[nextIndex]?.id ?? null;
+	}
+
+	private getAdjacentCompletedReviewSuggestionId(
+		direction: "next" | "previous",
+		fromId?: string,
+	): string | null {
+		const session = this.getReviewSession();
+		if (!session) {
+			return null;
+		}
+
+		const reviewableSuggestions = session.suggestions.filter((suggestion) =>
+			this.isCompletedReviewSuggestion(suggestion),
+		);
+		if (reviewableSuggestions.length === 0) {
+			return null;
+		}
+
+		const currentId = fromId ?? this.store.getState().selectedSuggestionId;
+		const currentIndex = currentId
+			? reviewableSuggestions.findIndex((suggestion) => suggestion.id === currentId)
+			: -1;
+		if (currentIndex === -1) {
+			return reviewableSuggestions[0]?.id ?? null;
+		}
+
+		const nextIndex =
+			direction === "next"
+				? (currentIndex + 1) % reviewableSuggestions.length
+				: (currentIndex - 1 + reviewableSuggestions.length) % reviewableSuggestions.length;
+		return reviewableSuggestions[nextIndex]?.id ?? null;
 	}
 
 	private getPanelOnlyReviewStateForSession(session?: ReviewSession | null): PanelOnlyReviewState | null {
@@ -2185,6 +2358,13 @@ export default class EditorialistPlugin extends Plugin {
 		return suggestion.status === "accepted" && this.hasRevealableAcceptedRange(suggestion);
 	}
 
+	private isCompletedReviewSuggestion(suggestion: ReviewSuggestion): boolean {
+		return (
+			(suggestion.status === "accepted" || suggestion.status === "rewritten") &&
+			this.hasRevealableAcceptedRange(suggestion)
+		);
+	}
+
 	private hasRevealableAcceptedRange(suggestion: ReviewSuggestion): boolean {
 		if (this.hasResolvedRange(getSuggestionPrimaryTarget(suggestion))) {
 			return true;
@@ -2244,6 +2424,13 @@ export default class EditorialistPlugin extends Plugin {
 		this.activeHighlightRange = null;
 		this.activeHighlightTone = "active";
 		this.syncActiveEditorDecorations();
+	}
+
+	private async enterCompletedSweepAudit(): Promise<void> {
+		this.store.setAppliedReview(null);
+		const suggestionId = this.getAdjacentCompletedReviewSuggestionId("next");
+		this.store.selectSuggestion(suggestionId);
+		await this.revealSelectedSuggestion();
 	}
 
 	private async enterAppliedReviewMode(entries: AppliedReviewChange[]): Promise<void> {
@@ -2487,6 +2674,7 @@ export default class EditorialistPlugin extends Plugin {
 		const reviewerProfiles = Array.isArray(savedData?.reviewerProfiles) ? savedData.reviewerProfiles : [];
 		this.registry.load(savedData);
 		this.reviewerDirectory.setProfiles(reviewerProfiles);
+		this.registry.rebuildReviewerStatsFromSignals();
 	}
 
 	private async savePluginData(): Promise<void> {
@@ -2510,7 +2698,15 @@ export default class EditorialistPlugin extends Plugin {
 
 	async startOrResumeReviewForNote(notePath: string): Promise<void> {
 		await this.openSceneNote(notePath);
-		await this.parseCurrentNote({ suppressNotice: true });
+		const context =
+			this.getNoteContextByPath(notePath) ??
+			(this.getActiveNoteContext()?.filePath === notePath ? this.getActiveNoteContext() : null);
+		if (!context) {
+			new Notice("Could not open the next note for review.");
+			return;
+		}
+
+		await this.parseReviewContext(context, true);
 	}
 
 	async cleanSceneReviewNote(notePath: string): Promise<void> {

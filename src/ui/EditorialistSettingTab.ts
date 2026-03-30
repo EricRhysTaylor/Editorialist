@@ -2,7 +2,10 @@ import { ButtonComponent, Notice, PluginSettingTab, setIcon, type App } from "ob
 import {
 	formatReviewerTypeLabel,
 } from "../core/ContributorIdentity";
-import { getContributorStrengthDefinition } from "../core/ContributorStrengths";
+import {
+	CONTRIBUTOR_ROLE_DEFINITIONS,
+	getContributorStrengthDefinition,
+} from "../core/ContributorStrengths";
 import type { SceneReviewRecord } from "../models/ReviewerProfile";
 import type EditorialistPlugin from "../main";
 
@@ -318,7 +321,14 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 		progressCard.createDiv({
 			cls: "editorialist-settings__hero-progress-detail",
-			text: summary.totalSuggestions > 0 ? "Current revision progress" : "No revision notes imported yet",
+			text:
+				summary.totalSuggestions === 0
+					? "No revision notes imported yet"
+					: remainingCount === 0
+						? summary.rewritten > 0
+							? `Current revision complete · ${summary.rewritten} rewritten by the author`
+							: "Current revision complete"
+						: "Current revision progress",
 		});
 
 		const summaryGrid = heroBody.createDiv({ cls: "editorialist-settings__hero-summary" });
@@ -351,7 +361,12 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			`${summary.totalSuggestions}`,
 			"Across all revision passes",
 		);
-		this.createStatCard(cards, "Accepted / Rejected", `${summary.accepted} / ${summary.rejected}`, "Accepted · Rejected");
+		this.createStatCard(
+			cards,
+			"Actions taken",
+			`${summary.accepted} / ${summary.rejected} / ${summary.rewritten}`,
+			"Accepted · Rejected · Rewritten",
+		);
 		this.createStatCard(cards, "Completed sweeps", `${summary.completedSweeps}`, `${summary.totalSweeps} total imported`);
 	}
 
@@ -514,23 +529,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				cls: "editorialist-settings__contributor-role",
 				text: formatReviewerTypeLabel(profile.reviewerType),
 			});
-			if (profile.strengths && profile.strengths.length > 0) {
-				const strengths = text.createDiv({ cls: "editorialist-settings__contributor-strengths" });
-				for (const strength of profile.strengths) {
-					const definition = getContributorStrengthDefinition(strength);
-					if (!definition) {
-						continue;
-					}
-					const strengthIcon = strengths.createSpan({
-						cls: "editorialist-settings__contributor-strength-icon",
-						attr: {
-							"aria-label": definition.label,
-							title: definition.label,
-						},
-					});
-					setIcon(strengthIcon, definition.icon);
-				}
-			}
 
 			card.createDiv({
 				cls: "editorialist-settings__contributor-stats",
@@ -543,7 +541,8 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				});
 			}
 
-			const controls = card.createDiv({ cls: "editorialist-settings__contributor-controls" });
+			const footer = card.createDiv({ cls: "editorialist-settings__contributor-footer" });
+			const controls = footer.createDiv({ cls: "editorialist-settings__contributor-controls" });
 			const starButton = new ButtonComponent(controls)
 				.setTooltip(profile.isStarred ? "Unstar contributor" : "Star contributor")
 				.onClick(() => {
@@ -569,6 +568,8 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			manageButton.buttonEl.addClass("editorialist-settings__contributor-menu-button");
 			const manageIcon = manageButton.buttonEl.createSpan({ cls: "editorialist-settings__action-button-icon" });
 			setIcon(manageIcon, "ellipsis");
+
+			this.renderContributorUseIcons(footer, profile);
 		}
 
 		const fillerCount = (3 - (profiles.length % 3)) % 3;
@@ -816,7 +817,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				record.acceptedCount +
 				record.rejectedCount +
 				record.rewrittenCount;
-			const processedSuggestions = Math.max(0, totalSuggestions - record.pendingCount - record.unresolvedCount);
+			const processedSuggestions = record.acceptedCount + record.rejectedCount + record.rewrittenCount;
 			const processedRatio = totalSuggestions > 0 ? Math.min(1, processedSuggestions / totalSuggestions) : 0;
 			const processedEnd = sliceStart + (sliceAngle * processedRatio);
 
@@ -843,6 +844,40 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 		const icon = avatar.createSpan({ cls: "editorialist-settings__contributor-avatar-icon" });
 		setIcon(icon, profile.isStarred ? "user-star" : profile.kind === "ai" ? "cpu" : "user-round");
+	}
+
+	private renderContributorUseIcons(
+		parent: HTMLElement,
+		profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number],
+	): void {
+		const icons = parent.createDiv({ cls: "editorialist-settings__contributor-use-icons" });
+		const roleDefinition = CONTRIBUTOR_ROLE_DEFINITIONS.find((definition) => definition.value === profile.reviewerType);
+		if (roleDefinition) {
+			const roleIcon = icons.createSpan({
+				cls: "editorialist-settings__contributor-use-icon editorialist-settings__contributor-use-icon--role",
+				attr: {
+					"aria-label": roleDefinition.label,
+					title: roleDefinition.label,
+				},
+			});
+			setIcon(roleIcon, roleDefinition.icon);
+		}
+
+		for (const strength of profile.strengths ?? []) {
+			const definition = getContributorStrengthDefinition(strength);
+			if (!definition) {
+				continue;
+			}
+
+			const strengthIcon = icons.createSpan({
+				cls: "editorialist-settings__contributor-use-icon",
+				attr: {
+					"aria-label": definition.label,
+					title: definition.label,
+				},
+			});
+			setIcon(strengthIcon, definition.icon);
+		}
 	}
 
 }
