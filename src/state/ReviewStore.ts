@@ -7,7 +7,20 @@ export interface GuidedSweepState {
 	startedAt: number;
 }
 
+export interface AppliedReviewChange {
+	end: number;
+	start: number;
+	suggestionId: string;
+}
+
+export interface AppliedReviewState {
+	currentIndex: number;
+	entries: AppliedReviewChange[];
+	notePath: string;
+}
+
 export interface ReviewStoreState {
+	appliedReview: AppliedReviewState | null;
 	guidedSweep: GuidedSweepState | null;
 	selectedSuggestionId: string | null;
 	session: ReviewSession | null;
@@ -19,6 +32,7 @@ export class ReviewStore {
 	private readonly listeners = new Set<Listener>();
 
 	private state: ReviewStoreState = {
+		appliedReview: null,
 		guidedSweep: null,
 		selectedSuggestionId: null,
 		session: null,
@@ -34,6 +48,12 @@ export class ReviewStore {
 
 	getState(): ReviewStoreState {
 		return {
+			appliedReview: this.state.appliedReview
+				? {
+						...this.state.appliedReview,
+						entries: this.state.appliedReview.entries.map((entry) => ({ ...entry })),
+					}
+				: null,
 			guidedSweep: this.state.guidedSweep
 				? {
 						...this.state.guidedSweep,
@@ -58,6 +78,10 @@ export class ReviewStore {
 		return this.state.guidedSweep;
 	}
 
+	getAppliedReview(): AppliedReviewState | null {
+		return this.state.appliedReview;
+	}
+
 	getSelectedSuggestion(): ReviewSuggestion | null {
 		const session = this.state.session;
 		if (!session || !this.state.selectedSuggestionId) {
@@ -69,7 +93,10 @@ export class ReviewStore {
 
 	setSession(session: ReviewSession, preferredSelectionId?: string | null): void {
 		const firstOpenSuggestion = session.suggestions.find(
-			(suggestion) => suggestion.status !== "accepted" && suggestion.status !== "rejected",
+			(suggestion) =>
+				suggestion.status !== "accepted" &&
+				suggestion.status !== "rejected" &&
+				suggestion.status !== "rewritten",
 		);
 		const selectedSuggestionId =
 			preferredSelectionId && session.suggestions.some((suggestion) => suggestion.id === preferredSelectionId)
@@ -77,6 +104,7 @@ export class ReviewStore {
 				: firstOpenSuggestion?.id ?? session.suggestions[0]?.id ?? null;
 
 		this.state = {
+			appliedReview: this.state.appliedReview,
 			guidedSweep: this.state.guidedSweep,
 			session,
 			selectedSuggestionId,
@@ -86,6 +114,7 @@ export class ReviewStore {
 
 	clearSession(): void {
 		this.state = {
+			appliedReview: null,
 			guidedSweep: this.state.guidedSweep,
 			session: null,
 			selectedSuggestionId: null,
@@ -118,6 +147,7 @@ export class ReviewStore {
 			: suggestions[0]?.id ?? null;
 
 		this.state = {
+			appliedReview: this.state.appliedReview,
 			guidedSweep: this.state.guidedSweep,
 			session,
 			selectedSuggestionId,
@@ -129,6 +159,34 @@ export class ReviewStore {
 		this.state = {
 			...this.state,
 			guidedSweep,
+		};
+		this.emit();
+	}
+
+	setAppliedReview(appliedReview: AppliedReviewState | null): void {
+		this.state = {
+			...this.state,
+			appliedReview,
+		};
+		this.emit();
+	}
+
+	updateAppliedReviewCurrentIndex(currentIndex: number): void {
+		if (!this.state.appliedReview) {
+			return;
+		}
+
+		const safeIndex = Math.max(0, Math.min(currentIndex, this.state.appliedReview.entries.length - 1));
+		if (safeIndex === this.state.appliedReview.currentIndex) {
+			return;
+		}
+
+		this.state = {
+			...this.state,
+			appliedReview: {
+				...this.state.appliedReview,
+				currentIndex: safeIndex,
+			},
 		};
 		this.emit();
 	}

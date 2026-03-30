@@ -37,6 +37,7 @@ interface ReviewActivitySummary {
 	pending: number;
 	processed: number;
 	rejected: number;
+	rewritten: number;
 	totalSuggestions: number;
 	totalSweeps: number;
 	unresolved: number;
@@ -134,6 +135,7 @@ export class ReviewRegistryService {
 				totals.deferred += record.deferredCount;
 				totals.pending += record.pendingCount;
 				totals.rejected += record.rejectedCount;
+				totals.rewritten += record.rewrittenCount;
 				totals.unresolved += record.unresolvedCount;
 				return totals;
 			},
@@ -143,6 +145,7 @@ export class ReviewRegistryService {
 				deferred: 0,
 				pending: 0,
 				rejected: 0,
+				rewritten: 0,
 				unresolved: 0,
 			},
 		);
@@ -152,6 +155,7 @@ export class ReviewRegistryService {
 				totals.accepted += profile.stats?.accepted ?? 0;
 				totals.deferred += profile.stats?.deferred ?? 0;
 				totals.rejected += profile.stats?.rejected ?? 0;
+				totals.rewritten += profile.stats?.rewritten ?? 0;
 				totals.unresolved += profile.stats?.unresolved ?? 0;
 				return totals;
 			},
@@ -161,6 +165,7 @@ export class ReviewRegistryService {
 				deferred: 0,
 				pending: 0,
 				rejected: 0,
+				rewritten: 0,
 				unresolved: 0,
 			},
 		);
@@ -227,7 +232,7 @@ export class ReviewRegistryService {
 		notePath: string,
 		suggestion: ReviewSuggestion,
 		status: PersistedReviewDecisionRecord["status"],
-		options?: { persist?: boolean },
+		options?: { persist?: boolean; sessionId?: string; sessionStartedAt?: number },
 	): Promise<void> {
 		const key = this.createPersistedReviewDecisionKey(notePath, suggestion);
 		const existing = this.reviewDecisionIndex[key];
@@ -239,6 +244,8 @@ export class ReviewRegistryService {
 			key,
 			status,
 			updatedAt: Date.now(),
+			sessionId: options?.sessionId,
+			sessionStartedAt: options?.sessionStartedAt,
 		};
 		if (options?.persist !== false) {
 			await this.persistData();
@@ -263,7 +270,7 @@ export class ReviewRegistryService {
 
 	async syncReviewerSignalsForSession(
 		session: ReviewSession | null,
-		options?: { persist?: boolean },
+		options?: { persist?: boolean; sessionId?: string; sessionStartedAt?: number },
 	): Promise<void> {
 		if (!session) {
 			return;
@@ -279,7 +286,12 @@ export class ReviewRegistryService {
 			const key = this.createReviewerSignalKey(session.notePath, suggestion);
 			activeKeys.add(key);
 			const existingRecord = nextIndex[key];
-			const desiredRecord = this.createReviewerSignalRecord(key, suggestion);
+			const desiredRecord = this.createReviewerSignalRecord(
+				key,
+				suggestion,
+				options?.sessionId,
+				options?.sessionStartedAt,
+			);
 
 			if (this.sameReviewerSignalRecord(existingRecord, desiredRecord)) {
 				continue;
@@ -380,6 +392,7 @@ export class ReviewRegistryService {
 			let deferredCount = 0;
 			let pendingCount = 0;
 			let rejectedCount = 0;
+			let rewrittenCount = 0;
 			let unresolvedCount = 0;
 			let lastDecisionAt = 0;
 
@@ -402,6 +415,9 @@ export class ReviewRegistryService {
 					case "rejected":
 						rejectedCount += 1;
 						break;
+					case "rewritten":
+						rewrittenCount += 1;
+						break;
 					case "unresolved":
 						unresolvedCount += 1;
 						break;
@@ -420,8 +436,9 @@ export class ReviewRegistryService {
 				deferredCount,
 				acceptedCount,
 				rejectedCount,
+				rewrittenCount,
 				status:
-					pendingCount === 0 && unresolvedCount === 0
+					pendingCount === 0 && unresolvedCount === 0 && deferredCount === 0
 						? "completed"
 						: "in_progress",
 				lastUpdated: Math.max(file.stat.mtime, lastDecisionAt),
@@ -442,6 +459,7 @@ export class ReviewRegistryService {
 				deferredCount: 0,
 				acceptedCount: 0,
 				rejectedCount: 0,
+				rewrittenCount: 0,
 				status: "cleaned",
 				cleanedAt: existing.cleanedAt ?? now,
 				lastUpdated: existing.cleanedAt ?? now,
@@ -585,7 +603,12 @@ export class ReviewRegistryService {
 		].join("::");
 	}
 
-	private createReviewerSignalRecord(key: string, suggestion: ReviewSuggestion): ReviewerSignalRecord | null {
+	private createReviewerSignalRecord(
+		key: string,
+		suggestion: ReviewSuggestion,
+		sessionId?: string,
+		sessionStartedAt?: number,
+	): ReviewerSignalRecord | null {
 		const reviewerId = suggestion.contributor.reviewerId;
 		if (!reviewerId) {
 			return null;
@@ -599,10 +622,14 @@ export class ReviewRegistryService {
 					? "accepted"
 					: suggestion.status === "rejected"
 						? "rejected"
+						: suggestion.status === "rewritten"
+							? "rewritten"
 						: suggestion.status === "deferred"
 							? "deferred"
 							: "unresolved",
 			operation: suggestion.operation,
+			sessionId,
+			sessionStartedAt,
 		};
 	}
 
@@ -637,6 +664,7 @@ export class ReviewRegistryService {
 			accepted: profile.stats?.accepted ?? 0,
 			deferred: profile.stats?.deferred ?? 0,
 			rejected: profile.stats?.rejected ?? 0,
+			rewritten: profile.stats?.rewritten ?? 0,
 			unresolved: profile.stats?.unresolved ?? 0,
 			acceptedEdits: profile.stats?.acceptedEdits ?? 0,
 			acceptedMoves: profile.stats?.acceptedMoves ?? 0,
@@ -652,6 +680,8 @@ export class ReviewRegistryService {
 			}
 		} else if (record.status === "rejected") {
 			stats.rejected = Math.max(0, stats.rejected + direction);
+		} else if (record.status === "rewritten") {
+			stats.rewritten = Math.max(0, stats.rewritten + direction);
 		} else if (record.status === "deferred") {
 			stats.deferred = Math.max(0, stats.deferred + direction);
 		} else {
@@ -752,6 +782,8 @@ export class ReviewRegistryService {
 						key,
 						status: legacyStatus === "later" ? "deferred" : (legacyStatus as PersistedReviewDecisionRecord["status"] | undefined) ?? "deferred",
 						updatedAt: record?.updatedAt ?? Date.now(),
+						sessionId: record?.sessionId,
+						sessionStartedAt: record?.sessionStartedAt,
 					},
 				];
 			}),
@@ -792,6 +824,7 @@ export class ReviewRegistryService {
 						deferredCount: record?.deferredCount ?? 0,
 						acceptedCount: record?.acceptedCount ?? record?.resolvedCount ?? 0,
 						rejectedCount: record?.rejectedCount ?? 0,
+						rewrittenCount: record?.rewrittenCount ?? 0,
 						status: legacyStatus === "not_started" ? "in_progress" : (legacyStatus as SceneReviewRecord["status"] | undefined) ?? "in_progress",
 						lastUpdated: record?.lastUpdated ?? Date.now(),
 						cleanedAt: record?.cleanedAt,

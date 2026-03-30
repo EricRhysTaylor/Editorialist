@@ -257,7 +257,7 @@ export class MatchEngine {
 	}
 
 	private preserveTerminalStatus(currentStatus: ReviewStatus, nextStatus: ReviewStatus): ReviewStatus {
-		return currentStatus === "accepted" || currentStatus === "rejected" || currentStatus === "deferred"
+		return currentStatus === "accepted" || currentStatus === "rejected" || currentStatus === "deferred" || currentStatus === "rewritten"
 			? currentStatus
 			: nextStatus;
 	}

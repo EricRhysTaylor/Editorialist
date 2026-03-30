@@ -69,11 +69,15 @@ export class ReviewEngine {
 				const reason = targets.some((target) => target?.matchType === "already_applied")
 					? "Already reflected in the manuscript."
 					: "Accepted into the manuscript.";
-				return this.markTerminalSuggestion(suggestion, reason);
+				return this.annotateSuggestionReason(suggestion, reason);
 			}
 
 			if (suggestion.status === "rejected") {
 				return this.markTerminalSuggestion(suggestion, "Rejected for this review session.");
+			}
+
+			if (suggestion.status === "rewritten") {
+				return this.markTerminalSuggestion(suggestion, "Rewritten manually by the author.");
 			}
 
 			return suggestion;
@@ -115,6 +119,38 @@ export class ReviewEngine {
 							targetEnd: undefined,
 							anchorStart: undefined,
 							anchorEnd: undefined,
+							reason,
+						}
+					: undefined,
+			},
+		};
+	}
+
+	private annotateSuggestionReason(suggestion: ReviewSuggestion, reason: string): ReviewSuggestion {
+		return {
+			...suggestion,
+			location: {
+				primary: suggestion.location.primary
+					? {
+							...suggestion.location.primary,
+							reason,
+						}
+					: undefined,
+				target: suggestion.location.target
+					? {
+							...suggestion.location.target,
+							reason,
+						}
+					: undefined,
+				anchor: suggestion.location.anchor
+					? {
+							...suggestion.location.anchor,
+							reason,
+						}
+					: undefined,
+				relocation: suggestion.location.relocation
+					? {
+							...suggestion.location.relocation,
 							reason,
 						}
 					: undefined,

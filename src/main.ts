@@ -36,7 +36,7 @@ import type {
 	SceneReviewRecord,
 	ReviewerStats,
 } from "./models/ReviewerProfile";
-import { ReviewStore, type GuidedSweepState } from "./state/ReviewStore";
+import { ReviewStore, type AppliedReviewChange, type AppliedReviewState, type GuidedSweepState } from "./state/ReviewStore";
 import { ReviewerDirectory } from "./state/ReviewerDirectory";
 import { ReviewRegistryService } from "./services/ReviewRegistryService";
 import { ReviewWorkflowService } from "./services/ReviewWorkflowService";
@@ -96,6 +96,11 @@ interface PanelOnlyReviewState {
 	remainingCount: number;
 	title: string;
 	unitLabel: "note" | "scene";
+}
+
+interface AcceptedReviewPreviewState {
+	currentIndexLabel: string;
+	title: string;
 }
 
 interface ReviewLaunchTarget {
@@ -325,6 +330,7 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
+		this.syncAppliedReviewSelection(id);
 		this.store.selectSuggestion(id);
 		await this.revealSuggestionContext(id);
 	}
@@ -358,6 +364,45 @@ export default class EditorialistPlugin extends Plugin {
 		await this.revealSelectedSuggestion();
 	}
 
+	async selectNextAcceptedSuggestion(): Promise<void> {
+		if (!this.hasActiveReviewSession()) {
+			return;
+		}
+
+		const nextSuggestionId = this.getAdjacentAcceptedSuggestionId("next");
+		if (!nextSuggestionId) {
+			return;
+		}
+
+		this.store.selectSuggestion(nextSuggestionId);
+		await this.revealSelectedSuggestion();
+	}
+
+	async selectPreviousAcceptedSuggestion(): Promise<void> {
+		if (!this.hasActiveReviewSession()) {
+			return;
+		}
+
+		const previousSuggestionId = this.getAdjacentAcceptedSuggestionId("previous");
+		if (!previousSuggestionId) {
+			return;
+		}
+
+		this.store.selectSuggestion(previousSuggestionId);
+		await this.revealSelectedSuggestion();
+	}
+
+	async exitAcceptedReviewMode(): Promise<void> {
+		const session = this.getReviewSession();
+		if (!session) {
+			return;
+		}
+
+		const nextSuggestionId = this.findPreferredSuggestionId(session.suggestions);
+		this.store.selectSuggestion(nextSuggestionId);
+		await this.revealSelectedSuggestion();
+	}
+
 	async acceptSelectedSuggestion(): Promise<boolean> {
 		if (!this.hasActiveReviewSession()) {
 			return false;
@@ -379,6 +424,77 @@ export default class EditorialistPlugin extends Plugin {
 		await this.selectNextSuggestion();
 	}
 
+	async applyAndReviewSceneSuggestions(): Promise<void> {
+		const context = this.getReviewNoteContext();
+		const session = this.getReviewSession();
+		if (!context || !session || session.notePath !== context.filePath) {
+			new Notice("The active note does not match the current review session.");
+			return;
+		}
+
+		const candidateIds = session.suggestions
+			.filter((suggestion) => this.canApplySuggestionInReviewAllMode(suggestion))
+			.map((suggestion) => suggestion.id);
+		if (candidateIds.length === 0) {
+			new Notice("No eligible suggestions are ready to apply and review in this scene.");
+			return;
+		}
+
+		const appliedChanges: AppliedReviewChange[] = [];
+		for (const suggestionId of candidateIds) {
+			const appliedChange = await this.applySuggestionById(suggestionId, {
+				highlightMode: "none",
+				preserveSelection: true,
+				syncSceneInventory: false,
+			});
+			if (appliedChange) {
+				appliedChanges.push(appliedChange);
+			}
+		}
+
+		if (appliedChanges.length === 0) {
+			new Notice("No eligible suggestions could be safely applied.");
+			return;
+		}
+
+		await this.registry.syncSceneInventory();
+		await this.enterAppliedReviewMode(appliedChanges);
+		new Notice(
+			`Applied and queued ${appliedChanges.length} change${appliedChanges.length === 1 ? "" : "s"} for review.`,
+		);
+	}
+
+	async selectNextAppliedReviewChange(): Promise<void> {
+		const appliedReview = this.store.getAppliedReview();
+		if (!appliedReview || appliedReview.entries.length === 0) {
+			return;
+		}
+
+		const nextIndex = (appliedReview.currentIndex + 1) % appliedReview.entries.length;
+		await this.focusAppliedReviewEntry(nextIndex);
+	}
+
+	async selectPreviousAppliedReviewChange(): Promise<void> {
+		const appliedReview = this.store.getAppliedReview();
+		if (!appliedReview || appliedReview.entries.length === 0) {
+			return;
+		}
+
+		const previousIndex =
+			(appliedReview.currentIndex - 1 + appliedReview.entries.length) % appliedReview.entries.length;
+		await this.focusAppliedReviewEntry(previousIndex);
+	}
+
+	async exitAppliedReviewMode(): Promise<void> {
+		if (!this.store.getAppliedReview()) {
+			return;
+		}
+
+		this.store.setAppliedReview(null);
+		this.setDefaultHighlightForSelection();
+		this.syncActiveEditorDecorations();
+	}
+
 	async continueGuidedSweep(): Promise<void> {
 		await this.workflow.advanceGuidedSweep();
 	}
@@ -398,6 +514,19 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		await this.rejectSuggestion(selectedSuggestion.id);
+	}
+
+	async rewriteSelectedSuggestion(): Promise<void> {
+		if (!this.hasActiveReviewSession()) {
+			return;
+		}
+
+		const selectedSuggestion = this.store.getSelectedSuggestion();
+		if (!selectedSuggestion) {
+			return;
+		}
+
+		await this.markSuggestionRewritten(selectedSuggestion.id);
 	}
 
 	deferSelectedSuggestion(): void {
@@ -453,46 +582,13 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async acceptSuggestion(id: string): Promise<boolean> {
-		const context = this.getReviewNoteContext();
-		const session = this.store.getSession();
-		const suggestion = this.getSuggestionById(id);
-
-		if (!context || !session || session.notePath !== context.filePath || !suggestion) {
-			new Notice("The active note does not match the current review session.");
+		const appliedChange = await this.applySuggestionById(id, {
+			highlightMode: "muted",
+		});
+		if (!appliedChange) {
 			return false;
 		}
 
-		if (!this.canAcceptSuggestion(id)) {
-			new Notice("This suggestion cannot be safely accepted yet.");
-			return false;
-		}
-
-		const applyPlan = createSuggestionApplyPlan(context.text, suggestion);
-		if (!applyPlan) {
-			new Notice(`The ${suggestion.operation} suggestion could not be applied safely.`);
-			return false;
-		}
-
-		const from = context.view.editor.offsetToPos(applyPlan.from);
-		const to = context.view.editor.offsetToPos(applyPlan.to);
-		context.view.editor.replaceRange(applyPlan.text, from, to);
-		const appliedEnd = applyPlan.from + applyPlan.text.length;
-		const appliedFrom = context.view.editor.offsetToPos(applyPlan.from);
-		const appliedTo = context.view.editor.offsetToPos(appliedEnd);
-		context.view.editor.setSelection(appliedFrom, appliedTo);
-		context.view.editor.scrollIntoView({ from: appliedFrom, to: appliedTo }, true);
-		context.view.editor.focus();
-
-		await this.registry.clearPersistedReviewDecision(context.filePath, suggestion, { persist: false });
-		this.refreshSessionAfterAcceptedEdit(session, suggestion.id);
-		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), { persist: false });
-		this.lastAppliedChange = {
-			start: applyPlan.from,
-			end: appliedEnd,
-			notePath: context.filePath,
-			suggestionId: suggestion.id,
-		};
-		await this.registry.syncSceneInventory();
 		const refreshedSession = this.store.getSession();
 		if (this.shouldShowGuidedSweepHandoff(refreshedSession)) {
 			await this.enterGuidedSweepHandoff();
@@ -507,12 +603,6 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		this.store.selectSuggestion(id);
-		this.activeHighlightRange = {
-			start: applyPlan.from,
-			end: appliedEnd,
-		};
-		this.activeHighlightTone = "muted";
-		this.syncActiveEditorDecorations();
 		return true;
 	}
 
@@ -523,13 +613,23 @@ export default class EditorialistPlugin extends Plugin {
 
 		const session = this.getReviewSession();
 		const suggestion = this.getSuggestionById(id);
+		const sessionId = this.getCurrentBatchId() ?? undefined;
+		const sessionStartedAt = this.getSweepRegistryEntry(sessionId)?.importedAt;
 		if (session && suggestion) {
-			await this.registry.persistReviewDecision(session.notePath, suggestion, "rejected", { persist: false });
+			await this.registry.persistReviewDecision(session.notePath, suggestion, "rejected", {
+				persist: false,
+				sessionId,
+				sessionStartedAt,
+			});
 		}
 
 		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next", id);
 		this.store.updateSuggestionStatus(id, "rejected");
-		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), { persist: false });
+		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), {
+			persist: false,
+			sessionId,
+			sessionStartedAt,
+		});
 		await this.registry.syncSceneInventory();
 		if (nextSuggestionId) {
 			this.store.selectSuggestion(nextSuggestionId);
@@ -542,6 +642,121 @@ export default class EditorialistPlugin extends Plugin {
 		}
 	}
 
+	async markSuggestionRewritten(id: string): Promise<void> {
+		if (!this.canMarkSuggestionRewritten(id)) {
+			return;
+		}
+
+		const session = this.getReviewSession();
+		const suggestion = this.getSuggestionById(id);
+		const sessionId = this.getCurrentBatchId() ?? undefined;
+		const sessionStartedAt = this.getSweepRegistryEntry(sessionId)?.importedAt;
+		if (session && suggestion) {
+			await this.registry.persistReviewDecision(session.notePath, suggestion, "rewritten", {
+				persist: false,
+				sessionId,
+				sessionStartedAt,
+			});
+		}
+
+		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next", id);
+		this.store.updateSuggestionStatus(id, "rewritten");
+		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), {
+			persist: false,
+			sessionId,
+			sessionStartedAt,
+		});
+		await this.registry.syncSceneInventory();
+		if (nextSuggestionId) {
+			this.store.selectSuggestion(nextSuggestionId);
+			await this.revealSelectedSuggestion();
+			return;
+		}
+
+		if (this.shouldShowGuidedSweepHandoff(this.store.getSession())) {
+			await this.enterGuidedSweepHandoff();
+			return;
+		}
+
+		this.store.selectSuggestion(this.findPreferredSuggestionId(this.store.getSession()?.suggestions ?? []));
+		await this.revealSelectedSuggestion();
+	}
+
+	private async applySuggestionById(
+		id: string,
+		options?: {
+			highlightMode?: "muted" | "none";
+			preserveSelection?: boolean;
+			syncSceneInventory?: boolean;
+		},
+	): Promise<AppliedReviewChange | null> {
+		const context = this.getReviewNoteContext();
+		const session = this.store.getSession();
+		const suggestion = this.getSuggestionById(id);
+
+		if (!context || !session || session.notePath !== context.filePath || !suggestion) {
+			new Notice("The active note does not match the current review session.");
+			return null;
+		}
+
+		if (!this.canAcceptSuggestion(id)) {
+			new Notice("This suggestion cannot be safely accepted yet.");
+			return null;
+		}
+
+		const applyPlan = createSuggestionApplyPlan(context.text, suggestion);
+		if (!applyPlan) {
+			new Notice(`The ${suggestion.operation} suggestion could not be applied safely.`);
+			return null;
+		}
+
+		const from = context.view.editor.offsetToPos(applyPlan.from);
+		const to = context.view.editor.offsetToPos(applyPlan.to);
+		context.view.editor.replaceRange(applyPlan.text, from, to);
+		const appliedEnd = applyPlan.from + applyPlan.text.length;
+		const appliedFrom = context.view.editor.offsetToPos(applyPlan.from);
+		const appliedTo = context.view.editor.offsetToPos(appliedEnd);
+		context.view.editor.setSelection(appliedFrom, appliedTo);
+		context.view.editor.scrollIntoView({ from: appliedFrom, to: appliedTo }, true);
+		context.view.editor.focus();
+
+		await this.registry.clearPersistedReviewDecision(context.filePath, suggestion, { persist: false });
+		this.refreshSessionAfterAcceptedEdit(session, suggestion.id);
+		const sessionId = this.getCurrentBatchId() ?? undefined;
+		const sessionStartedAt = this.getSweepRegistryEntry(sessionId)?.importedAt;
+		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), {
+			persist: false,
+			sessionId,
+			sessionStartedAt,
+		});
+		this.lastAppliedChange = {
+			start: applyPlan.from,
+			end: appliedEnd,
+			notePath: context.filePath,
+			suggestionId: suggestion.id,
+		};
+		if (options?.syncSceneInventory !== false) {
+			await this.registry.syncSceneInventory();
+		}
+		if (!options?.preserveSelection) {
+			this.store.selectSuggestion(id);
+		}
+		if (options?.highlightMode === "muted") {
+			this.activeHighlightRange = {
+				start: applyPlan.from,
+				end: appliedEnd,
+			};
+			this.activeHighlightTone = "muted";
+			this.syncActiveEditorDecorations();
+		}
+
+		return {
+			start: applyPlan.from,
+			end: appliedEnd,
+			suggestionId: suggestion.id,
+		};
+	}
+
 	async deferSuggestion(id: string): Promise<void> {
 		if (!this.hasActiveReviewSession()) {
 			return;
@@ -549,13 +764,23 @@ export default class EditorialistPlugin extends Plugin {
 
 		const session = this.getReviewSession();
 		const suggestion = this.getSuggestionById(id);
+		const sessionId = this.getCurrentBatchId() ?? undefined;
+		const sessionStartedAt = this.getSweepRegistryEntry(sessionId)?.importedAt;
 		if (session && suggestion) {
-			await this.registry.persistReviewDecision(session.notePath, suggestion, "deferred", { persist: false });
+			await this.registry.persistReviewDecision(session.notePath, suggestion, "deferred", {
+				persist: false,
+				sessionId,
+				sessionStartedAt,
+			});
 		}
 
 		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next", id, true);
 		this.store.updateSuggestionStatus(id, "deferred");
-		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), { persist: false });
+		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), {
+			persist: false,
+			sessionId,
+			sessionStartedAt,
+		});
 		await this.registry.syncSceneInventory();
 		if (nextSuggestionId) {
 			this.store.selectSuggestion(nextSuggestionId);
@@ -687,6 +912,7 @@ export default class EditorialistPlugin extends Plugin {
 		inProgressSweeps: number;
 		pending: number;
 		rejected: number;
+		rewritten: number;
 		totalSuggestions: number;
 		totalSweeps: number;
 		unresolved: number;
@@ -742,13 +968,17 @@ export default class EditorialistPlugin extends Plugin {
 		const acceptedCount = session.suggestions.filter((suggestion) => suggestion.status === "accepted").length;
 		const rejectedCount = session.suggestions.filter((suggestion) => suggestion.status === "rejected").length;
 		const deferredCount = session.suggestions.filter((suggestion) => suggestion.status === "deferred").length;
-		const reviewedCount = acceptedCount + rejectedCount;
+		const rewrittenCount = session.suggestions.filter((suggestion) => suggestion.status === "rewritten").length;
+		const reviewedCount = acceptedCount + rejectedCount + rewrittenCount;
 		const summaryParts = [`${reviewedCount} reviewed`];
 		if (acceptedCount > 0) {
 			summaryParts.push(`${acceptedCount} accepted`);
 		}
 		if (rejectedCount > 0) {
 			summaryParts.push(`${rejectedCount} rejected`);
+		}
+		if (rewrittenCount > 0) {
+			summaryParts.push(`${rewrittenCount} rewritten`);
 		}
 		if (deferredCount > 0) {
 			summaryParts.push(`${deferredCount} deferred`);
@@ -842,7 +1072,7 @@ export default class EditorialistPlugin extends Plugin {
 			title: "Manage contributor",
 			description: `Choose how to update ${profile.displayName}.`,
 			choices: [
-				{ label: "Edit strengths", value: "strengths" },
+				{ label: "Edit contributor", value: "strengths" },
 				{ label: "Reassign contributor", value: "reassign" },
 				{ label: "Merge into another contributor", value: "merge" },
 			],
@@ -870,19 +1100,16 @@ export default class EditorialistPlugin extends Plugin {
 			return false;
 		}
 
+		this.reviewerDirectory.setReviewerType(reviewerId, result.reviewerType);
 		const updatedProfile = this.reviewerDirectory.setStrengths(reviewerId, result.strengths);
 		if (!updatedProfile) {
-			new Notice("Could not update contributor strengths.");
+			new Notice("Could not update contributor.");
 			return false;
 		}
 
 		await this.savePluginData();
 		this.refreshReviewPanel();
-		new Notice(
-			updatedProfile.strengths && updatedProfile.strengths.length > 0
-				? `Updated strengths for ${updatedProfile.displayName}.`
-				: `Cleared strengths for ${updatedProfile.displayName}.`,
-		);
+		new Notice(`Updated ${updatedProfile.displayName}.`);
 		return true;
 	}
 
@@ -1071,7 +1298,12 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		const suggestion = this.getSuggestionById(id);
-		return Boolean(suggestion && suggestion.status !== "accepted" && suggestion.status !== "rejected");
+		return Boolean(
+			suggestion &&
+			suggestion.status !== "accepted" &&
+			suggestion.status !== "rejected" &&
+			suggestion.status !== "rewritten",
+		);
 	}
 
 	canRejectSelectedSuggestion(): boolean {
@@ -1085,7 +1317,31 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		const suggestion = this.getSuggestionById(id);
-		return Boolean(suggestion && suggestion.status !== "accepted" && suggestion.status !== "rejected");
+		return Boolean(
+			suggestion &&
+			suggestion.status !== "accepted" &&
+			suggestion.status !== "rejected" &&
+			suggestion.status !== "rewritten",
+		);
+	}
+
+	canMarkSuggestionRewritten(id: string): boolean {
+		if (!this.hasReviewSessionContext()) {
+			return false;
+		}
+
+		const suggestion = this.getSuggestionById(id);
+		return Boolean(
+			suggestion &&
+			suggestion.status !== "accepted" &&
+			suggestion.status !== "rejected" &&
+			suggestion.status !== "rewritten",
+		);
+	}
+
+	canRewriteSelectedSuggestion(): boolean {
+		const selected = this.store.getSelectedSuggestion();
+		return selected ? this.canMarkSuggestionRewritten(selected.id) : false;
 	}
 
 	canDeferSelectedSuggestion(): boolean {
@@ -1096,6 +1352,11 @@ export default class EditorialistPlugin extends Plugin {
 	canUndoLastAppliedSuggestion(): boolean {
 		const context = this.getReviewNoteContext();
 		return Boolean(this.lastAppliedChange && context && context.filePath === this.lastAppliedChange.notePath);
+	}
+
+	canApplyAndReviewSceneSuggestions(): boolean {
+		const session = this.getReviewSession();
+		return Boolean(session?.suggestions.some((suggestion) => this.canApplySuggestionInReviewAllMode(suggestion)));
 	}
 
 	private shouldShowUndoForSelectedSuggestion(selectedId: string): boolean {
@@ -1114,6 +1375,10 @@ export default class EditorialistPlugin extends Plugin {
 
 	getSuggestionPresentationRank(suggestion: ReviewSuggestion): number {
 		return getSuggestionStatusRank(suggestion.status);
+	}
+
+	getAppliedReviewState(): AppliedReviewState | null {
+		return this.store.getAppliedReview();
 	}
 
 	canJumpToSuggestionTarget(id: string): boolean {
@@ -1266,6 +1531,24 @@ export default class EditorialistPlugin extends Plugin {
 			return null;
 		}
 
+		const appliedReview = this.store.getAppliedReview();
+		if (appliedReview && appliedReview.entries.length > 0) {
+			return {
+				mode: "applied_review",
+				currentIndexLabel: `${appliedReview.currentIndex + 1} of ${appliedReview.entries.length}`,
+				title: "Review applied changes",
+			};
+		}
+
+		const acceptedReview = this.getAcceptedReviewPreviewState(session);
+		if (acceptedReview) {
+			return {
+				mode: "accepted_review",
+				currentIndexLabel: acceptedReview.currentIndexLabel,
+				title: acceptedReview.title,
+			};
+		}
+
 		const handoff = this.getGuidedSweepHandoffState();
 		if (handoff) {
 			return {
@@ -1284,8 +1567,8 @@ export default class EditorialistPlugin extends Plugin {
 			return {
 				mode: "panel",
 				progressLabel: panelOnlyState.progressLabel,
-				remainingLabel: `${panelOnlyState.remainingCount} remaining`,
-				title: "Panel review remaining",
+				remainingLabel: `${panelOnlyState.remainingCount} ${panelOnlyState.remainingCount === 1 ? "item" : "items"}`,
+				title: "Continue review in panel",
 			};
 		}
 
@@ -1301,6 +1584,7 @@ export default class EditorialistPlugin extends Plugin {
 		const acceptedCount = suggestions.filter((suggestion) => suggestion.status === "accepted").length;
 		const rejectedCount = suggestions.filter((suggestion) => suggestion.status === "rejected").length;
 		const deferredCount = suggestions.filter((suggestion) => suggestion.status === "deferred").length;
+		const rewrittenCount = suggestions.filter((suggestion) => suggestion.status === "rewritten").length;
 		const canUndoLastAccept = this.shouldShowUndoForSelectedSuggestion(selected.id);
 		const guidedSweep = this.getGuidedSweep();
 		const unitLabel = this.getSweepUnitLabel(guidedSweep?.notePaths.length ?? 0, session.notePath);
@@ -1317,12 +1601,14 @@ export default class EditorialistPlugin extends Plugin {
 			acceptedCount,
 			rejectedCount,
 			deferredCount,
+			rewrittenCount,
 			sceneProgressLabel,
 			selectedIndexLabel:
 				selectedIndex === -1 ? `${suggestions.length} total` : `${selectedIndex + 1} of ${suggestions.length}`,
 			unresolvedCount,
 			canApply: this.canAcceptSelectedSuggestion(),
 			canDefer: this.canDeferSelectedSuggestion(),
+			canRewrite: this.canRewriteSelectedSuggestion(),
 			canNext: this.getAdjacentRevealableSuggestionId("next") !== null,
 			canPrevious: this.getAdjacentRevealableSuggestionId("previous") !== null,
 			canReject: this.canRejectSelectedSuggestion(),
@@ -1386,10 +1672,7 @@ export default class EditorialistPlugin extends Plugin {
 		const highlight = this.hasReviewSessionContext() ? this.activeHighlightRange : null;
 		const toolbarState = this.getToolbarState(hasReviewBlock);
 
-		syncReviewDecorations(editorView, {
-			highlight,
-			highlightTone: this.activeHighlightTone,
-		});
+		syncReviewDecorations(editorView, this.getReviewDecorationSnapshot(highlight));
 		this.syncToolbarOverlay(editorView, toolbarState, highlight);
 	}
 
@@ -1397,6 +1680,7 @@ export default class EditorialistPlugin extends Plugin {
 		const context = this.getReviewNoteContext() ?? this.getActiveNoteContext();
 		const session = this.store.getSession();
 		if (!context || !session || session.notePath !== context.filePath) {
+			this.store.setAppliedReview(null);
 			this.activeHighlightRange = null;
 			this.activeHighlightTone = "active";
 			this.lastAppliedChange = null;
@@ -1407,6 +1691,7 @@ export default class EditorialistPlugin extends Plugin {
 		const hydratedSession = this.registry.applyPersistedReviewState(refreshedSession);
 		void this.persistContributorProfilesIfNeeded();
 		if (!hydratedSession.hasReviewBlock) {
+			this.store.setAppliedReview(null);
 			this.activeHighlightRange = null;
 			this.activeHighlightTone = "active";
 			this.lastAppliedChange = null;
@@ -1631,14 +1916,14 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		if (suggestion.operation === "move") {
-			if (await this.focusResolvedTarget(getSuggestionPrimaryTarget(suggestion))) {
+			if (await this.focusResolvedTarget(getSuggestionPrimaryTarget(suggestion), this.getSuggestionHighlightTone(suggestion))) {
 				return;
 			}
 
-			if (await this.focusResolvedTarget(getSuggestionAnchorTarget(suggestion))) {
+			if (await this.focusResolvedTarget(getSuggestionAnchorTarget(suggestion), this.getSuggestionHighlightTone(suggestion))) {
 				return;
 			}
-		} else if (await this.focusResolvedTarget(getSuggestionPrimaryTarget(suggestion))) {
+		} else if (await this.focusResolvedTarget(getSuggestionPrimaryTarget(suggestion), this.getSuggestionHighlightTone(suggestion))) {
 			return;
 		}
 		this.activeHighlightRange = null;
@@ -1646,7 +1931,10 @@ export default class EditorialistPlugin extends Plugin {
 		this.syncActiveEditorDecorations();
 	}
 
-	private async focusResolvedTarget(target?: ReviewTargetRef): Promise<boolean> {
+	private async focusResolvedTarget(
+		target?: ReviewTargetRef,
+		tone: "active" | "muted" = "active",
+	): Promise<boolean> {
 		if (!target || !this.hasResolvedRange(target)) {
 			return false;
 		}
@@ -1657,7 +1945,7 @@ export default class EditorialistPlugin extends Plugin {
 			return false;
 		}
 
-		await this.focusEditorRange(start, end);
+		await this.focusEditorRange(start, end, tone);
 		return true;
 	}
 
@@ -1778,6 +2066,58 @@ export default class EditorialistPlugin extends Plugin {
 		return suggestions.some((suggestion) => this.isSuggestionOpen(suggestion));
 	}
 
+	private canApplySuggestionInReviewAllMode(suggestion: ReviewSuggestion): boolean {
+		return suggestion.status !== "unresolved" && suggestion.operation !== "move" && this.canAcceptSuggestion(suggestion.id);
+	}
+
+	private getAcceptedReviewPreviewState(session?: ReviewSession | null): AcceptedReviewPreviewState | null {
+		const targetSession = session ?? this.getReviewSession();
+		const selectedSuggestion = this.store.getSelectedSuggestion();
+		if (!targetSession || !selectedSuggestion || !this.isAcceptedReviewSuggestion(selectedSuggestion)) {
+			return null;
+		}
+
+		const acceptedSuggestions = targetSession.suggestions.filter((suggestion) => this.isAcceptedReviewSuggestion(suggestion));
+		const currentIndex = acceptedSuggestions.findIndex((suggestion) => suggestion.id === selectedSuggestion.id);
+		if (currentIndex === -1) {
+			return null;
+		}
+
+		return {
+			currentIndexLabel: `${currentIndex + 1} of ${acceptedSuggestions.length}`,
+			title: "Review accepted changes",
+		};
+	}
+
+	private getAdjacentAcceptedSuggestionId(
+		direction: "next" | "previous",
+		fromId?: string,
+	): string | null {
+		const session = this.getReviewSession();
+		if (!session) {
+			return null;
+		}
+
+		const acceptedSuggestions = session.suggestions.filter((suggestion) => this.isAcceptedReviewSuggestion(suggestion));
+		if (acceptedSuggestions.length === 0) {
+			return null;
+		}
+
+		const currentId = fromId ?? this.store.getState().selectedSuggestionId;
+		const currentIndex = currentId
+			? acceptedSuggestions.findIndex((suggestion) => suggestion.id === currentId)
+			: -1;
+		if (currentIndex === -1) {
+			return acceptedSuggestions[0]?.id ?? null;
+		}
+
+		const nextIndex =
+			direction === "next"
+				? (currentIndex + 1) % acceptedSuggestions.length
+				: (currentIndex - 1 + acceptedSuggestions.length) % acceptedSuggestions.length;
+		return acceptedSuggestions[nextIndex]?.id ?? null;
+	}
+
 	private getPanelOnlyReviewStateForSession(session?: ReviewSession | null): PanelOnlyReviewState | null {
 		const targetSession = session ?? this.getReviewSession();
 		if (!targetSession) {
@@ -1802,7 +2142,7 @@ export default class EditorialistPlugin extends Plugin {
 				: undefined;
 
 		return {
-			description: "The remaining revision notes don't map to a specific line.",
+			description: "The remaining revision notes now refer to other text in this scene, so review continues here in the panel.",
 			progressLabel,
 			remainingCount: openSuggestions.length,
 			title: "Continue review in the panel",
@@ -1830,7 +2170,27 @@ export default class EditorialistPlugin extends Plugin {
 		return suggestion.status === "pending" || suggestion.status === "deferred" || suggestion.status === "unresolved";
 	}
 
+	private isAcceptedReviewSuggestion(suggestion: ReviewSuggestion): boolean {
+		return suggestion.status === "accepted" && this.hasRevealableAcceptedRange(suggestion);
+	}
+
+	private hasRevealableAcceptedRange(suggestion: ReviewSuggestion): boolean {
+		if (this.hasResolvedRange(getSuggestionPrimaryTarget(suggestion))) {
+			return true;
+		}
+
+		return this.hasResolvedRange(getSuggestionAnchorTarget(suggestion));
+	}
+
+	private getSuggestionHighlightTone(suggestion: ReviewSuggestion): "active" | "muted" {
+		return suggestion.status === "accepted" ? "muted" : "active";
+	}
+
 	private setDefaultHighlightForSelection(): void {
+		if (this.store.getAppliedReview()) {
+			return;
+		}
+
 		const selectedSuggestion = this.store.getSelectedSuggestion();
 		if (!selectedSuggestion) {
 			this.activeHighlightRange = null;
@@ -1848,10 +2208,15 @@ export default class EditorialistPlugin extends Plugin {
 					end: target?.endOffset as number,
 				}
 			: null;
-		this.activeHighlightTone = "active";
+		this.activeHighlightTone = this.getSuggestionHighlightTone(selectedSuggestion);
 	}
 
 	private syncSelectionForSession(session: ReviewSession, preferredSelectionId?: string | null): void {
+		const appliedReview = this.store.getAppliedReview();
+		if (appliedReview && appliedReview.notePath !== session.notePath) {
+			this.store.setAppliedReview(null);
+		}
+
 		if (this.shouldShowGuidedSweepHandoff(session)) {
 			this.store.selectSuggestion(null);
 			this.activeHighlightRange = null;
@@ -1863,10 +2228,87 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private async enterGuidedSweepHandoff(): Promise<void> {
+		this.store.setAppliedReview(null);
 		this.store.selectSuggestion(null);
 		this.activeHighlightRange = null;
 		this.activeHighlightTone = "active";
 		this.syncActiveEditorDecorations();
+	}
+
+	private async enterAppliedReviewMode(entries: AppliedReviewChange[]): Promise<void> {
+		const session = this.getReviewSession();
+		if (!session || entries.length === 0) {
+			return;
+		}
+
+		this.store.setAppliedReview({
+			currentIndex: 0,
+			entries,
+			notePath: session.notePath,
+		});
+		await this.focusAppliedReviewEntry(0);
+	}
+
+	private async focusAppliedReviewEntry(index: number): Promise<void> {
+		const appliedReview = this.store.getAppliedReview();
+		if (!appliedReview || appliedReview.entries.length === 0) {
+			return;
+		}
+
+		const safeIndex = Math.max(0, Math.min(index, appliedReview.entries.length - 1));
+		const entry = appliedReview.entries[safeIndex];
+		if (!entry) {
+			return;
+		}
+
+		this.store.updateAppliedReviewCurrentIndex(safeIndex);
+		this.store.selectSuggestion(entry.suggestionId);
+		await this.focusEditorRange(entry.start, entry.end);
+	}
+
+	private syncAppliedReviewSelection(suggestionId: string | null): void {
+		const appliedReview = this.store.getAppliedReview();
+		if (!appliedReview) {
+			return;
+		}
+
+		if (!suggestionId) {
+			this.store.setAppliedReview(null);
+			return;
+		}
+
+		const nextIndex = appliedReview.entries.findIndex((entry) => entry.suggestionId === suggestionId);
+		if (nextIndex === -1) {
+			this.store.setAppliedReview(null);
+			return;
+		}
+
+		this.store.updateAppliedReviewCurrentIndex(nextIndex);
+	}
+
+	private getReviewDecorationSnapshot(highlight: OffsetRange | null): Parameters<typeof syncReviewDecorations>[1] {
+		const appliedReview = this.store.getAppliedReview();
+		if (appliedReview && appliedReview.entries.length > 0) {
+			return {
+				highlights: appliedReview.entries.map((entry, index) => ({
+					start: entry.start,
+					end: entry.end,
+					tone: index === appliedReview.currentIndex ? "applied-active" : "applied",
+				})),
+			};
+		}
+
+		return {
+			highlights: highlight
+				? [
+						{
+							start: highlight.start,
+							end: highlight.end,
+							tone: this.activeHighlightTone,
+						},
+					]
+				: [],
+		};
 	}
 
 	private getSweepUnitLabel(count: number, notePath?: string): string {
@@ -1883,7 +2325,11 @@ export default class EditorialistPlugin extends Plugin {
 		return value.charAt(0).toUpperCase() + value.slice(1);
 	}
 
-	private async focusEditorRange(start: number, end: number): Promise<void> {
+	private async focusEditorRange(
+		start: number,
+		end: number,
+		tone: "active" | "muted" = "active",
+	): Promise<void> {
 		const context = this.getReviewNoteContext();
 		if (!context) {
 			return;
@@ -1891,7 +2337,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		await this.focusReviewLeaf(context.view);
 		this.activeHighlightRange = { start, end };
-		this.activeHighlightTone = "active";
+		this.activeHighlightTone = tone;
 		const from = context.view.editor.offsetToPos(start);
 		const to = context.view.editor.offsetToPos(end);
 		context.view.editor.setSelection(from, to);
@@ -1976,7 +2422,7 @@ export default class EditorialistPlugin extends Plugin {
 		const left = editorRect.left + editorRect.width / 2;
 		let clampedTop = editorRect.top + 8;
 
-		if (this.toolbarOverlayState.mode === "review") {
+		if (this.toolbarOverlayState.mode === "review" || this.toolbarOverlayState.mode === "applied_review") {
 			if (!this.activeHighlightRange) {
 				this.toolbarOverlayEl.style.display = "none";
 				return;

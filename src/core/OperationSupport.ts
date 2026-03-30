@@ -260,6 +260,10 @@ export function getSuggestionReason(suggestion: ReviewSuggestion): string {
 		return "Rejected for this review session.";
 	}
 
+	if (suggestion.status === "rewritten") {
+		return "Rewritten manually by the author.";
+	}
+
 	if (suggestion.status === "deferred") {
 		return "Deferred in this review pass.";
 	}
@@ -272,7 +276,7 @@ export function getSuggestionCopyBlocks(suggestion: ReviewSuggestion): ReviewCop
 }
 
 export function isSuggestionResolved(suggestion: ReviewSuggestion): boolean {
-	if (suggestion.status === "accepted") {
+	if (suggestion.status === "accepted" || suggestion.status === "rewritten") {
 		return true;
 	}
 
@@ -284,7 +288,7 @@ export function isSuggestionResolved(suggestion: ReviewSuggestion): boolean {
 }
 
 export function getSuggestionPresentationTone(suggestion: ReviewSuggestion): ReviewSuggestionPresentationTone {
-	return suggestion.status === "accepted" || suggestion.status === "rejected" ? "muted" : "active";
+	return suggestion.status === "accepted" || suggestion.status === "rejected" || suggestion.status === "rewritten" ? "muted" : "active";
 }
 
 export function getSuggestionStatusRank(status: ReviewStatus): number {
@@ -296,8 +300,10 @@ export function getSuggestionStatusRank(status: ReviewStatus): number {
 			return 1;
 		case "accepted":
 			return 2;
-		case "rejected":
+		case "rewritten":
 			return 3;
+		case "rejected":
+			return 4;
 	}
 }
 

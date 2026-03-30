@@ -2,13 +2,19 @@ import { type Extension, RangeSetBuilder, StateEffect, StateField } from "@codem
 import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
 
 export interface ReviewDecorationSnapshot {
-	highlight: { end: number; start: number } | null;
-	highlightTone: "active" | "muted";
+	highlights: Array<{
+		end: number;
+		start: number;
+		tone: "active" | "muted" | "applied" | "applied-active";
+	}>;
 }
 
 interface ReviewDecorationState {
-	highlight: { end: number; start: number } | null;
-	highlightTone: "active" | "muted";
+	highlights: Array<{
+		end: number;
+		start: number;
+		tone: "active" | "muted" | "applied" | "applied-active";
+	}>;
 }
 
 const syncReviewDecorationsEffect = StateEffect.define<ReviewDecorationSnapshot>();
@@ -16,31 +22,24 @@ const syncReviewDecorationsEffect = StateEffect.define<ReviewDecorationSnapshot>
 const reviewDecorationsField = StateField.define<ReviewDecorationState>({
 	create() {
 		return {
-			highlight: null,
-			highlightTone: "active",
+			highlights: [],
 		};
 	},
 	update(value, transaction) {
-		let highlight = value.highlight;
-		let highlightTone = value.highlightTone;
-
-		if (highlight) {
-			highlight = {
-				start: transaction.changes.mapPos(highlight.start, 1),
-				end: transaction.changes.mapPos(highlight.end, -1),
-			};
-		}
+		let highlights = value.highlights.map((highlight) => ({
+			...highlight,
+			start: transaction.changes.mapPos(highlight.start, 1),
+			end: transaction.changes.mapPos(highlight.end, -1),
+		}));
 
 		for (const effect of transaction.effects) {
 			if (effect.is(syncReviewDecorationsEffect)) {
-				highlight = effect.value.highlight;
-				highlightTone = effect.value.highlightTone;
+				highlights = effect.value.highlights;
 			}
 		}
 
 		return {
-			highlight,
-			highlightTone,
+			highlights,
 		};
 	},
 	provide: (field) => EditorView.decorations.from(field, buildDecorations),
@@ -59,15 +58,16 @@ export function syncReviewDecorations(editorView: EditorView, snapshot: ReviewDe
 function buildDecorations(state: ReviewDecorationState): DecorationSet {
 	const builder = new RangeSetBuilder<Decoration>();
 
-	if (state.highlight && state.highlight.end > state.highlight.start) {
+	for (const highlight of state.highlights) {
+		if (highlight.end <= highlight.start) {
+			continue;
+		}
+
 		builder.add(
-			state.highlight.start,
-			state.highlight.end,
+			highlight.start,
+			highlight.end,
 			Decoration.mark({
-				class:
-					state.highlightTone === "muted"
-						? "editorialist-match-highlight editorialist-match-highlight--muted"
-						: "editorialist-match-highlight editorialist-match-highlight--active",
+				class: `editorialist-match-highlight editorialist-match-highlight--${highlight.tone}`,
 			}),
 		);
 	}

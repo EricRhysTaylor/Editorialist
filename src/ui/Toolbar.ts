@@ -1,6 +1,10 @@
 import { ButtonComponent, setIcon } from "obsidian";
 import type EditorialistPlugin from "../main";
 
+let shiftKeyPressed = false;
+let shiftTrackingAbort: AbortController | null = null;
+const shiftSubscribers = new Set<(shiftPressed: boolean) => void>();
+
 export interface ReviewToolbarState {
 	mode: "review";
 	canApply: boolean;
@@ -39,7 +43,24 @@ export interface PanelToolbarState {
 	title: string;
 }
 
-export type ToolbarState = ReviewToolbarState | HandoffToolbarState | PanelToolbarState;
+export interface AppliedReviewToolbarState {
+	mode: "applied_review";
+	currentIndexLabel: string;
+	title: string;
+}
+
+export interface AcceptedReviewToolbarState {
+	mode: "accepted_review";
+	currentIndexLabel: string;
+	title: string;
+}
+
+export type ToolbarState =
+	| ReviewToolbarState
+	| HandoffToolbarState
+	| PanelToolbarState
+	| AppliedReviewToolbarState
+	| AcceptedReviewToolbarState;
 
 export function createReviewToolbarElement(
 	plugin: EditorialistPlugin,
@@ -97,6 +118,48 @@ export function createReviewToolbarElement(
 		return overlay;
 	}
 
+	if (state.mode === "applied_review") {
+		toolbar.addClass("editorialist-toolbar--panel");
+		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
+		markAsNonEditorSurface(meta);
+		renderMetaSegment(meta, state.title, "editorialist-toolbar__meta-segment--positive");
+		renderMetaSeparator(meta);
+		renderMetaSegment(meta, state.currentIndexLabel);
+
+		const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
+		buildButton(actions, "Previous", "arrow-left", () => {
+			void plugin.selectPreviousAppliedReviewChange();
+		}, false);
+		buildButton(actions, "Next", "arrow-right", () => {
+			void plugin.selectNextAppliedReviewChange();
+		}, false);
+		buildButton(actions, "Exit", "x", () => {
+			void plugin.exitAppliedReviewMode();
+		}, false);
+		return overlay;
+	}
+
+	if (state.mode === "accepted_review") {
+		toolbar.addClass("editorialist-toolbar--panel");
+		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
+		markAsNonEditorSurface(meta);
+		renderMetaSegment(meta, state.title, "editorialist-toolbar__meta-segment--positive");
+		renderMetaSeparator(meta);
+		renderMetaSegment(meta, state.currentIndexLabel);
+
+		const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
+		buildButton(actions, "Previous", "arrow-left", () => {
+			void plugin.selectPreviousAcceptedSuggestion();
+		}, false);
+		buildButton(actions, "Next", "arrow-right", () => {
+			void plugin.selectNextAcceptedSuggestion();
+		}, false);
+		buildButton(actions, "Exit", "x", () => {
+			void plugin.exitAcceptedReviewMode();
+		}, false);
+		return overlay;
+	}
+
 	const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
 	markAsNonEditorSurface(meta);
 	renderMetaSegment(meta, state.operationLabel);
@@ -151,6 +214,9 @@ export function createReviewToolbarElement(
 			},
 		},
 	);
+	buildButton(actions, "Apply and review", "check-check", () => {
+		void plugin.applyAndReviewSceneSuggestions();
+	}, !plugin.canApplyAndReviewSceneSuggestions());
 	buildButton(actions, "Defer", "clock", () => {
 		plugin.deferSelectedSuggestion();
 	}, !state.canDefer);
@@ -189,13 +255,13 @@ function buildButton(
 	markAsNonEditorSurface(button.buttonEl);
 	const iconEl = button.buttonEl.createSpan({ cls: "editorialist-toolbar__button-icon" });
 	markAsNonEditorSurface(iconEl);
-	let trackingDepth = 0;
-	let modifierTracking: AbortController | null = null;
+	let unsubscribeShiftTracking: (() => void) | null = null;
 	let removalObserver: MutationObserver | null = null;
 	if (alternateAction) {
 		removalObserver = new MutationObserver(() => {
 			if (!button.buttonEl.isConnected) {
-				stopModifierTracking();
+				unsubscribeShiftTracking?.();
+				unsubscribeShiftTracking = null;
 				removalObserver?.disconnect();
 			}
 		});
@@ -214,54 +280,15 @@ function buildButton(
 		applyPresentation(Boolean(alternateAction) && shiftPressed);
 	};
 
-	const stopModifierTracking = (): void => {
-		modifierTracking?.abort();
-		modifierTracking = null;
-		syncModifierPresentation(false);
-	};
-
-	const startModifierTracking = (): void => {
-		if (!alternateAction || modifierTracking) {
-			return;
-		}
-
-		modifierTracking = new AbortController();
-		const { signal } = modifierTracking;
-		window.addEventListener("keydown", (event) => {
-			syncModifierPresentation(event.shiftKey);
-		}, { signal });
-		window.addEventListener("keyup", (event) => {
-			syncModifierPresentation(event.shiftKey);
-		}, { signal });
-		window.addEventListener("blur", () => {
-			syncModifierPresentation(false);
-		}, { signal });
-	};
-
-	const beginModifierAwareness = (): void => {
-		trackingDepth += 1;
-		if (trackingDepth === 1) {
-			startModifierTracking();
-		}
-	};
-
-	const endModifierAwareness = (): void => {
-		trackingDepth = Math.max(0, trackingDepth - 1);
-		if (trackingDepth === 0) {
-			stopModifierTracking();
-		}
-	};
-
-	button.buttonEl.addEventListener("pointerenter", beginModifierAwareness);
-	button.buttonEl.addEventListener("pointerleave", endModifierAwareness);
-	button.buttonEl.addEventListener("focus", beginModifierAwareness);
-	button.buttonEl.addEventListener("blur", endModifierAwareness);
+	if (alternateAction) {
+		unsubscribeShiftTracking = subscribeToShiftKey(syncModifierPresentation);
+	}
 	removalObserver?.observe(document.body, {
 		childList: true,
 		subtree: true,
 	});
 
-	applyPresentation(false);
+	applyPresentation(Boolean(alternateAction) && shiftKeyPressed);
 	bindImmediateAction(button.buttonEl, (event) => {
 		if (alternateAction && event.shiftKey) {
 			alternateAction.onClick();
@@ -339,6 +366,51 @@ function bindImmediateAction(
 
 		onClick(event);
 	});
+}
+
+function subscribeToShiftKey(callback: (shiftPressed: boolean) => void): () => void {
+	ensureShiftTracking();
+	shiftSubscribers.add(callback);
+	callback(shiftKeyPressed);
+	return () => {
+		shiftSubscribers.delete(callback);
+		if (shiftSubscribers.size === 0) {
+			teardownShiftTracking();
+		}
+	};
+}
+
+function ensureShiftTracking(): void {
+	if (shiftTrackingAbort) {
+		return;
+	}
+
+	shiftTrackingAbort = new AbortController();
+	const { signal } = shiftTrackingAbort;
+	window.addEventListener("keydown", (event) => {
+		updateShiftKeyState(event.shiftKey);
+	}, { signal });
+	window.addEventListener("keyup", (event) => {
+		updateShiftKeyState(event.shiftKey);
+	}, { signal });
+	window.addEventListener("blur", () => {
+		updateShiftKeyState(false);
+	}, { signal });
+}
+
+function teardownShiftTracking(): void {
+	shiftTrackingAbort?.abort();
+	shiftTrackingAbort = null;
+	updateShiftKeyState(false);
+}
+
+function updateShiftKeyState(nextValue: boolean): void {
+	if (shiftKeyPressed === nextValue) {
+		return;
+	}
+
+	shiftKeyPressed = nextValue;
+	shiftSubscribers.forEach((subscriber) => subscriber(shiftKeyPressed));
 }
 
 function markAsNonEditorSurface(element: HTMLElement): void {

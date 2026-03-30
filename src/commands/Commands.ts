@@ -78,6 +78,14 @@ export function registerCommands(plugin: EditorialistPlugin): void {
 	});
 
 	plugin.addCommand({
+		id: "apply-and-review-scene-suggestions",
+		name: "Apply and review scene suggestions",
+		callback: () => {
+			void plugin.applyAndReviewSceneSuggestions();
+		},
+	});
+
+	plugin.addCommand({
 		id: "undo-applied-suggestion",
 		name: "Undo applied suggestion",
 		callback: () => {

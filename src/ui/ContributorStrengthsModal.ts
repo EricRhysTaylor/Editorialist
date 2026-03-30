@@ -1,17 +1,25 @@
-import { ButtonComponent, Modal, TextAreaComponent, type App } from "obsidian";
+import { ButtonComponent, Modal, setIcon, type App } from "obsidian";
 import { formatReviewerTypeLabel } from "../core/ContributorIdentity";
-import type { ReviewerProfile } from "../models/ReviewerProfile";
+import {
+	CONTRIBUTOR_ROLE_DEFINITIONS,
+	CONTRIBUTOR_STRENGTH_DEFINITIONS,
+	type ContributorRoleDefinition,
+	type ContributorStrengthDefinition,
+} from "../core/ContributorStrengths";
+import type { ContributorStrength, ReviewerProfile, ReviewerType } from "../models/ReviewerProfile";
 
 interface ContributorStrengthsModalOptions {
 	profile: ReviewerProfile;
 }
 
 export interface ContributorStrengthsModalResult {
-	strengths: string[];
+	strengths: ContributorStrength[];
+	reviewerType: ReviewerType;
 }
 
 class ContributorStrengthsModal extends Modal {
-	private strengthsValue = "";
+	private selectedStrengths = new Set<ContributorStrength>();
+	private selectedRole: ReviewerType;
 	private saveButton: ButtonComponent | null = null;
 
 	constructor(
@@ -20,54 +28,67 @@ class ContributorStrengthsModal extends Modal {
 		private readonly resolveResult: (result: ContributorStrengthsModalResult | null) => void,
 	) {
 		super(app);
+		this.selectedRole = options.profile.reviewerType;
 	}
 
 	onOpen(): void {
 		this.contentEl.empty();
 		this.contentEl.addClass("editorialist-contributor-modal");
 
-		this.contentEl.createEl("h3", { text: "Edit contributor strengths" });
-		this.contentEl.createDiv({
-			cls: "editorialist-contributor-modal__description",
-			text: "Add a few focus areas to describe what this contributor is especially useful for. Separate strengths with commas or place one per line.",
-		});
+		this.contentEl.createEl("h3", { text: "Edit contributor" });
 
-		const currentRow = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__row" });
-		currentRow.createDiv({
-			cls: "editorialist-contributor-modal__label",
-			text: "Contributor",
+		const identity = this.contentEl.createDiv({
+			cls: "editorialist-contributor-modal__identity",
 		});
-		currentRow.createDiv({
-			cls: "editorialist-contributor-modal__value",
+		identity.createSpan({
+			cls: "editorialist-contributor-modal__identity-name",
 			text: this.options.profile.displayName,
 		});
-
-		const roleRow = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__row" });
-		roleRow.createDiv({
-			cls: "editorialist-contributor-modal__label",
-			text: "Role",
+		identity.createSpan({
+			cls: "editorialist-contributor-modal__identity-separator",
+			text: " \u00b7 ",
 		});
-		roleRow.createDiv({
-			cls: "editorialist-contributor-modal__value",
+		identity.createSpan({
+			cls: "editorialist-contributor-modal__identity-role",
 			text: formatReviewerTypeLabel(this.options.profile.reviewerType),
 		});
 
-		const strengthsRow = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__create" });
-		strengthsRow.createDiv({
+		const roleSection = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__section" });
+		roleSection.createDiv({
 			cls: "editorialist-contributor-modal__label",
-			text: "Strengths",
+			text: "How do you use this contributor?",
 		});
-		const control = strengthsRow.createDiv({ cls: "editorialist-contributor-modal__control" });
-		const input = new TextAreaComponent(control);
-		input.inputEl.addClass("editorialist-control-modal__textarea");
-		input.inputEl.rows = 4;
-		input.setPlaceholder("Clarity, Tone, Pacing");
-		input.setValue((this.options.profile.strengths ?? []).join(", "));
-		input.onChange((value) => {
-			this.strengthsValue = value;
-			this.syncSaveState();
+		this.selectedRole = this.options.profile.reviewerType;
+		const roleGrid = roleSection.createDiv({ cls: "editorialist-contributor-modal__tile-grid" });
+		const roleSyncCallbacks: Array<() => void> = [];
+		for (const definition of CONTRIBUTOR_ROLE_DEFINITIONS) {
+			roleSyncCallbacks.push(this.createRoleTile(roleGrid, definition, roleSyncCallbacks));
+		}
+
+		const detailSection = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__section" });
+		const detailToggle = detailSection.createEl("button", {
+			cls: "editorialist-contributor-modal__detail-toggle",
+			attr: { type: "button" },
 		});
-		this.strengthsValue = input.getValue();
+		const detailChevron = detailToggle.createSpan({ cls: "editorialist-contributor-modal__detail-chevron" });
+		setIcon(detailChevron, "chevron-right");
+		detailToggle.createSpan({ text: "More detail (optional)" });
+
+		this.selectedStrengths = new Set(this.options.profile.strengths ?? []);
+		const detailContent = detailSection.createDiv({
+			cls: "editorialist-contributor-modal__detail-content is-collapsed",
+		});
+		const strengthGrid = detailContent.createDiv({ cls: "editorialist-contributor-modal__tile-grid" });
+		for (const definition of CONTRIBUTOR_STRENGTH_DEFINITIONS) {
+			this.createStrengthTile(strengthGrid, definition);
+		}
+
+		let detailOpen = false;
+		detailToggle.addEventListener("click", () => {
+			detailOpen = !detailOpen;
+			detailContent.toggleClass("is-collapsed", !detailOpen);
+			detailToggle.toggleClass("is-open", detailOpen);
+		});
 
 		const actions = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__actions" });
 		const cancel = new ButtonComponent(actions).setButtonText("Cancel");
@@ -77,15 +98,15 @@ class ContributorStrengthsModal extends Modal {
 		});
 
 		this.saveButton = new ButtonComponent(actions)
-			.setButtonText("Save strengths")
+			.setButtonText("Save")
 			.setCta();
 		this.saveButton.onClick(() => {
 			this.resolveResult({
-				strengths: this.parseStrengths(this.strengthsValue),
+				strengths: [...this.selectedStrengths],
+				reviewerType: this.selectedRole,
 			});
 			this.close();
 		});
-		this.syncSaveState();
 	}
 
 	onClose(): void {
@@ -93,15 +114,62 @@ class ContributorStrengthsModal extends Modal {
 		this.resolveResult(null);
 	}
 
-	private syncSaveState(): void {
-		this.saveButton?.setDisabled(false);
+	private createRoleTile(
+		parent: HTMLElement,
+		definition: ContributorRoleDefinition,
+		allSyncCallbacks: Array<() => void>,
+	): () => void {
+		const tile = parent.createEl("button", {
+			cls: "editorialist-contributor-modal__tile",
+			attr: { type: "button", title: definition.label, "aria-label": definition.label },
+		});
+		const icon = tile.createSpan({ cls: "editorialist-contributor-modal__tile-icon" });
+		setIcon(icon, definition.icon);
+		tile.createSpan({
+			cls: "editorialist-contributor-modal__tile-label",
+			text: definition.label,
+		});
+
+		const syncState = () => {
+			tile.toggleClass("is-selected", this.selectedRole === definition.value);
+		};
+		syncState();
+
+		tile.addEventListener("click", () => {
+			this.selectedRole = definition.value;
+			for (const sync of allSyncCallbacks) {
+				sync();
+			}
+		});
+
+		return syncState;
 	}
 
-	private parseStrengths(value: string): string[] {
-		return value
-			.split(/[\n,]/)
-			.map((item) => item.trim())
-			.filter(Boolean);
+	private createStrengthTile(parent: HTMLElement, definition: ContributorStrengthDefinition): void {
+		const tile = parent.createEl("button", {
+			cls: "editorialist-contributor-modal__tile",
+			attr: { type: "button", title: definition.label, "aria-label": definition.label },
+		});
+		const icon = tile.createSpan({ cls: "editorialist-contributor-modal__tile-icon" });
+		setIcon(icon, definition.icon);
+		tile.createSpan({
+			cls: "editorialist-contributor-modal__tile-label",
+			text: definition.label,
+		});
+
+		const syncState = () => {
+			tile.toggleClass("is-selected", this.selectedStrengths.has(definition.value));
+		};
+		syncState();
+
+		tile.addEventListener("click", () => {
+			if (this.selectedStrengths.has(definition.value)) {
+				this.selectedStrengths.delete(definition.value);
+			} else {
+				this.selectedStrengths.add(definition.value);
+			}
+			syncState();
+		});
 	}
 }
 

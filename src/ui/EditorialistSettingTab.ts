@@ -2,6 +2,7 @@ import { ButtonComponent, Notice, PluginSettingTab, setIcon, type App } from "ob
 import {
 	formatReviewerTypeLabel,
 } from "../core/ContributorIdentity";
+import { getContributorStrengthDefinition } from "../core/ContributorStrengths";
 import type { SceneReviewRecord } from "../models/ReviewerProfile";
 import type EditorialistPlugin from "../main";
 
@@ -12,6 +13,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private static readonly RADIAL_TIMELINE_WIKI_URL = "https://github.com/EricRhysTaylor/Obsidian-Manuscript-Timeline/wiki";
 	private activeBookOnly = true;
 	private activeTab: "core" | "reviewer" = "core";
+	private displayRunId = 0;
 
 	constructor(
 		app: App,
@@ -25,6 +27,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	}
 
 	private async displayAsync(refreshMetadata: boolean): Promise<void> {
+		const runId = ++this.displayRunId;
 		const { containerEl } = this;
 		containerEl.empty();
 		containerEl.addClass("editorialist-settings");
@@ -32,10 +35,17 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		if (refreshMetadata) {
 			await this.plugin.syncOperationalMetadata();
 		}
+		if (runId !== this.displayRunId) {
+			return;
+		}
 		const summary = this.plugin.getReviewActivitySummary();
 		const activeBook = this.plugin.getActiveBookScopeInfo();
 		if (!activeBook.label) {
 			this.activeBookOnly = false;
+		}
+
+		if (runId !== this.displayRunId) {
+			return;
 		}
 
 		const shell = containerEl.createDiv({ cls: "editorialist-settings__shell" });
@@ -277,10 +287,10 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const sceneGradient = this.buildSceneProgressGradient(trackedScenes);
 		if (sceneGradient) {
 			ring.style.setProperty("--editorialist-settings-scene-gradient", sceneGradient);
-			ring.addClass("has-scene-slices");
+			ring.addClass("editorialist-settings__hero-ring--has-scene-slices");
 		} else {
 			ring.style.removeProperty("--editorialist-settings-scene-gradient");
-			ring.removeClass("has-scene-slices");
+			ring.removeClass("editorialist-settings__hero-ring--has-scene-slices");
 		}
 		ring.createDiv({ cls: "editorialist-settings__hero-ring-value", text: `${processedCount}/${summary.totalSuggestions}` });
 		progressCard.createDiv({
@@ -477,10 +487,21 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				text: formatReviewerTypeLabel(profile.reviewerType),
 			});
 			if (profile.strengths && profile.strengths.length > 0) {
-				text.createDiv({
-					cls: "editorialist-settings__contributor-strengths",
-					text: `Strengths: ${profile.strengths.join(" · ")}`,
-				});
+				const strengths = text.createDiv({ cls: "editorialist-settings__contributor-strengths" });
+				for (const strength of profile.strengths) {
+					const definition = getContributorStrengthDefinition(strength);
+					if (!definition) {
+						continue;
+					}
+					const strengthIcon = strengths.createSpan({
+						cls: "editorialist-settings__contributor-strength-icon",
+						attr: {
+							"aria-label": definition.label,
+							title: definition.label,
+						},
+					});
+					setIcon(strengthIcon, definition.icon);
+				}
 			}
 
 			card.createDiv({
@@ -522,7 +543,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			setIcon(manageIcon, "ellipsis");
 		}
 
-		const fillerCount = (4 - (profiles.length % 4)) % 4;
+		const fillerCount = (3 - (profiles.length % 3)) % 3;
 		for (let index = 0; index < fillerCount; index += 1) {
 			list.createDiv({
 				cls: "editorialist-settings__contributor editorialist-settings__contributor--filler",

@@ -48,6 +48,7 @@ export interface EditorialistMetadataExport {
 		unresolvedCount: number;
 		rejectedCount: number;
 		acceptedCount: number;
+		rewrittenCount: number;
 		sceneId?: string;
 		status: "completed" | "cleaned" | "in_progress";
 	}[];

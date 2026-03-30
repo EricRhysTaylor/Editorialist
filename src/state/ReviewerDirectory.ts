@@ -3,8 +3,10 @@ import {
 	normalizeContributorValue,
 	reviewerTypeToKind,
 } from "../core/ContributorIdentity";
+import { normalizeContributorStrengths } from "../core/ContributorStrengths";
 import type { ReviewContributor } from "../models/ReviewSuggestion";
 import type {
+	ContributorStrength,
 	ParsedReviewerReference,
 	ReviewerProfile,
 	ReviewerResolutionStatus,
@@ -84,10 +86,11 @@ export class ReviewerDirectory {
 			return this.toContributor(this.mergeProfileIdentity(displayMatch, seed), raw, "exact");
 		}
 
-		const aliasMatch = seed.aliasCandidates.length > 0
+		const aliasCandidates = [seed.displayName, ...seed.aliasCandidates];
+		const aliasMatch = aliasCandidates.length > 0
 			? this.findUniqueProfile(
 					(profile) =>
-						seed.aliasCandidates.some((candidate) =>
+						aliasCandidates.some((candidate) =>
 							profile.aliases.some((alias) => this.normalizeValue(alias) === this.normalizeValue(candidate)),
 						),
 					raw,
@@ -179,7 +182,7 @@ export class ReviewerDirectory {
 		return profile;
 	}
 
-	setStrengths(reviewerId: string, strengths: string[]): ReviewerProfile | null {
+	setStrengths(reviewerId: string, strengths: ContributorStrength[]): ReviewerProfile | null {
 		const profile = this.getProfileById(reviewerId);
 		if (!profile) {
 			return null;
@@ -192,6 +195,23 @@ export class ReviewerDirectory {
 		}
 
 		profile.strengths = normalizedStrengths.length > 0 ? normalizedStrengths : undefined;
+		profile.updatedAt = Date.now();
+		this.didChange = true;
+		return profile;
+	}
+
+	setReviewerType(reviewerId: string, reviewerType: ReviewerType): ReviewerProfile | null {
+		const profile = this.getProfileById(reviewerId);
+		if (!profile) {
+			return null;
+		}
+
+		if (profile.reviewerType === reviewerType) {
+			return profile;
+		}
+
+		profile.reviewerType = reviewerType;
+		profile.kind = reviewerTypeToKind(reviewerType);
 		profile.updatedAt = Date.now();
 		this.didChange = true;
 		return profile;
@@ -448,32 +468,20 @@ export class ReviewerDirectory {
 			accepted: sourceStats.accepted + targetStats.accepted,
 			deferred: sourceStats.deferred + targetStats.deferred,
 			rejected: sourceStats.rejected + targetStats.rejected,
+			rewritten: sourceStats.rewritten + targetStats.rewritten,
 			unresolved: sourceStats.unresolved + targetStats.unresolved,
 			acceptedEdits: (sourceStats.acceptedEdits ?? 0) + (targetStats.acceptedEdits ?? 0),
 			acceptedMoves: (sourceStats.acceptedMoves ?? 0) + (targetStats.acceptedMoves ?? 0),
 		};
 	}
 
-	private mergeStrengths(source?: string[], target?: string[]): string[] | undefined {
+	private mergeStrengths(source?: ContributorStrength[], target?: ContributorStrength[]): ContributorStrength[] | undefined {
 		const merged = this.normalizeStrengths([...(target ?? []), ...(source ?? [])]);
 		return merged.length > 0 ? merged : undefined;
 	}
 
-	private normalizeStrengths(strengths: string[]): string[] {
-		const unique: string[] = [];
-		for (const strength of strengths) {
-			const normalized = strength
-				.trim()
-				.replace(/\s+/g, " ");
-			if (!normalized) {
-				continue;
-			}
-			if (unique.some((item) => this.normalizeValue(item) === this.normalizeValue(normalized))) {
-				continue;
-			}
-			unique.push(normalized);
-		}
-		return unique;
+	private normalizeStrengths(strengths: Array<string | ContributorStrength>): ContributorStrength[] {
+		return normalizeContributorStrengths(strengths);
 	}
 
 	private createStableId(displayName: string, kind: ReviewerProfile["kind"], provider?: string, model?: string): string {
@@ -505,6 +513,7 @@ export class ReviewerDirectory {
 			accepted: 0,
 			deferred: 0,
 			rejected: 0,
+			rewritten: 0,
 			unresolved: 0,
 			acceptedEdits: 0,
 			acceptedMoves: 0,

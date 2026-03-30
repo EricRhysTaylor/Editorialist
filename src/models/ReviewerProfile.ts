@@ -19,12 +19,22 @@ export type AiReviewerType =
 	| "ai-line-editor"
 	| "ai-copy-editor";
 export type ReviewerType = HumanReviewerType | AiReviewerType;
+export type ContributorStrength =
+	| "clarity"
+	| "tone"
+	| "pacing"
+	| "dialogue"
+	| "structure"
+	| "character"
+	| "worldbuilding"
+	| "tightening";
 
 export interface ReviewerStats {
 	totalSuggestions: number;
 	accepted: number;
 	deferred: number;
 	rejected: number;
+	rewritten: number;
 	unresolved: number;
 	acceptedEdits?: number;
 	acceptedMoves?: number;
@@ -36,7 +46,7 @@ export interface ContributorProfile {
 	kind: ContributorKind;
 	reviewerType: ReviewerType;
 	aliases: string[];
-	strengths?: string[];
+	strengths?: ContributorStrength[];
 	provider?: string;
 	model?: string;
 	isStarred?: boolean;
@@ -68,14 +78,18 @@ export type ReviewerResolution = ContributorResolution;
 export interface ReviewerSignalRecord {
 	key: string;
 	reviewerId: string;
-	status: "accepted" | "deferred" | "rejected" | "unresolved";
+	status: "accepted" | "deferred" | "rejected" | "rewritten" | "unresolved";
 	operation: ReviewOperationType;
+	sessionId?: string;
+	sessionStartedAt?: number;
 }
 
 export interface PersistedReviewDecisionRecord {
 	key: string;
-	status: "accepted" | "deferred" | "rejected";
+	status: "accepted" | "deferred" | "rejected" | "rewritten";
 	updatedAt: number;
+	sessionId?: string;
+	sessionStartedAt?: number;
 }
 
 export interface SceneReviewRecord {
@@ -90,6 +104,7 @@ export interface SceneReviewRecord {
 	deferredCount: number;
 	acceptedCount: number;
 	rejectedCount: number;
+	rewrittenCount: number;
 	status: "completed" | "cleaned" | "in_progress";
 	lastUpdated: number;
 	cleanedAt?: number;

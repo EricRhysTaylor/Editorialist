@@ -340,12 +340,35 @@ export class ReviewPanel extends ItemView {
 	): HTMLElement {
 		const statusName = suggestion.status;
 		const tone = this.plugin.getSuggestionPresentationTone(suggestion);
+		const isCollapsed = !selected && this.reviewerMenuSuggestionId !== suggestion.id && this.jumpMenuSuggestionId !== suggestion.id;
 
 		const card = parent.createDiv({
-			cls: `editorialist-suggestion editorialist-suggestion--${statusName} editorialist-suggestion--tone-${tone}${selected ? " is-selected" : ""}${panelPrimary ? " is-panel-primary" : ""}`,
+			cls: `editorialist-suggestion editorialist-suggestion--${statusName} editorialist-suggestion--tone-${tone}${selected ? " is-selected" : ""}${panelPrimary ? " is-panel-primary" : ""}${isCollapsed ? " is-collapsed" : ""}`,
 		});
 		this.bindImmediateAction(card, () => {
 			void this.plugin.selectSuggestion(suggestion.id);
+		});
+
+		const summary = card.createDiv({ cls: "editorialist-suggestion__summary" });
+		const summaryStatus = summary.createDiv({
+			cls: `editorialist-suggestion__label editorialist-suggestion__label--${statusName}`,
+			attr: {
+				title: `${this.toSentenceCase(suggestion.operation)} suggestion`,
+			},
+		});
+		const summaryStatusIcon = summaryStatus.createSpan({ cls: "editorialist-suggestion__label-icon" });
+		setIcon(summaryStatusIcon, this.getOperationIcon(suggestion));
+		summaryStatus.createSpan({
+			cls: "editorialist-suggestion__label-separator",
+			text: "•",
+		});
+		summaryStatus.createSpan({
+			cls: "editorialist-suggestion__label-text",
+			text: this.getStatusLabel(suggestion),
+		});
+		summary.createDiv({
+			cls: "editorialist-suggestion__summary-preview",
+			text: this.getCollapsedPreview(suggestion),
 		});
 
 		const meta = card.createDiv({ cls: "editorialist-suggestion__meta" });
@@ -364,7 +387,7 @@ export class ReviewPanel extends ItemView {
 		});
 		status.createSpan({
 			cls: "editorialist-suggestion__label-text",
-			text: this.toSentenceCase(statusName),
+			text: this.getStatusLabel(suggestion),
 		});
 		metaPrimary.createDiv({
 			cls: "editorialist-suggestion__position",
@@ -454,6 +477,23 @@ export class ReviewPanel extends ItemView {
 		});
 		if (suggestion.why) {
 			this.renderCopyBlock(copy, "WHY", suggestion.why);
+		}
+	}
+
+	private getCollapsedPreview(suggestion: ReviewSuggestion): string {
+		if (this.isOtherTextSuggestion(suggestion)) {
+			return "Other text in scene";
+		}
+
+		switch (suggestion.operation) {
+			case "edit":
+				return suggestion.payload.revised;
+			case "cut":
+				return suggestion.payload.target;
+			case "condense":
+				return suggestion.payload.suggestion ?? suggestion.payload.target;
+			case "move":
+				return suggestion.payload.target;
 		}
 	}
 
@@ -608,6 +648,10 @@ export class ReviewPanel extends ItemView {
 	}
 
 	private getSuggestionReason(suggestion: ReviewSuggestion): string {
+		if (this.isOtherTextSuggestion(suggestion)) {
+			return "This revision note now points to other text in the scene.";
+		}
+
 		return getOperationSuggestionReason(suggestion);
 	}
 
@@ -849,6 +893,26 @@ export class ReviewPanel extends ItemView {
 
 	private isOpenSuggestion(suggestion: ReviewSuggestion): boolean {
 		return suggestion.status === "pending" || suggestion.status === "deferred" || suggestion.status === "unresolved";
+	}
+
+	private getStatusLabel(suggestion: ReviewSuggestion): string {
+		return this.isOtherTextSuggestion(suggestion) ? "Other text" : this.toSentenceCase(suggestion.status);
+	}
+
+	private isOtherTextSuggestion(suggestion: ReviewSuggestion): boolean {
+		if (!this.isOpenSuggestion(suggestion)) {
+			return false;
+		}
+
+		if (
+			this.plugin.canJumpToSuggestionTarget(suggestion.id) ||
+			this.plugin.canJumpToSuggestionAnchor(suggestion.id)
+		) {
+			return false;
+		}
+
+		const target = suggestion.location.primary ?? suggestion.location.target;
+		return target?.matchType === "none" || target?.reason?.toLowerCase().includes("not found") === true;
 	}
 
 	private toSentenceCase(value: string): string {
