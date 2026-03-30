@@ -91,6 +91,7 @@ interface EditorialistLaunchState {
 }
 
 interface PanelOnlyReviewState {
+	contextLabel?: string;
 	description: string;
 	progressLabel?: string;
 	remainingCount: number;
@@ -951,6 +952,10 @@ export default class EditorialistPlugin extends Plugin {
 		};
 	}
 
+	usesSceneTerminology(notePath?: string): boolean {
+		return this.registry.usesSceneTerminology(notePath);
+	}
+
 	getGuidedSweepHandoffState(): GuidedSweepHandoffState | null {
 		const guidedSweep = this.getGuidedSweep();
 		const session = this.getReviewSession() ?? this.store.getSession();
@@ -963,24 +968,6 @@ export default class EditorialistPlugin extends Plugin {
 		const isFinal = !nextPath;
 		const unitLabel = this.registry.usesSceneTerminology(currentPath) ? "scene" : "note";
 		const unitTitle = this.toTitleCase(unitLabel);
-		const acceptedCount = session.suggestions.filter((suggestion) => suggestion.status === "accepted").length;
-		const rejectedCount = session.suggestions.filter((suggestion) => suggestion.status === "rejected").length;
-		const deferredCount = session.suggestions.filter((suggestion) => suggestion.status === "deferred").length;
-		const rewrittenCount = session.suggestions.filter((suggestion) => suggestion.status === "rewritten").length;
-		const reviewedCount = acceptedCount + rejectedCount + rewrittenCount;
-		const summaryParts = [`${reviewedCount} reviewed`];
-		if (acceptedCount > 0) {
-			summaryParts.push(`${acceptedCount} accepted`);
-		}
-		if (rejectedCount > 0) {
-			summaryParts.push(`${rejectedCount} rejected`);
-		}
-		if (rewrittenCount > 0) {
-			summaryParts.push(`${rewrittenCount} rewritten`);
-		}
-		if (deferredCount > 0) {
-			summaryParts.push(`${deferredCount} deferred`);
-		}
 
 		return {
 			currentLabel: this.getNoteDisplayLabel(currentPath),
@@ -989,11 +976,15 @@ export default class EditorialistPlugin extends Plugin {
 			nextLabel: nextPath ? this.getNoteDisplayLabel(nextPath) : undefined,
 			nextPath,
 			primaryActionLabel: isFinal ? "Finish sweep" : `Next ${unitLabel}`,
-			progressLabel: `${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`,
+			progressLabel: isFinal
+				? "You're done with this pass."
+				: `${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`,
 			panelProgressLabel: `${unitTitle} ${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`,
 			secondaryActionLabel: isFinal ? undefined : "Finish sweep",
-			summary: summaryParts.join(" · "),
-			title: `${unitTitle} complete`,
+			summary: isFinal
+				? "You're done with this pass."
+				: `All revision notes in this ${unitLabel} are resolved.`,
+			title: isFinal ? "All revision notes are resolved" : `${unitTitle} complete`,
 			unitLabel,
 		};
 	}
@@ -1568,8 +1559,8 @@ export default class EditorialistPlugin extends Plugin {
 			return {
 				mode: "panel",
 				progressLabel: panelOnlyState.progressLabel,
-				remainingLabel: `${panelOnlyState.remainingCount} ${panelOnlyState.remainingCount === 1 ? "item" : "items"}`,
-				title: "Continue review in panel",
+				remainingLabel: `${panelOnlyState.remainingCount} remaining`,
+				title: `Continue in ${panelOnlyState.unitLabel === "scene" ? "this scene" : "this note"}`,
 			};
 		}
 
@@ -2152,16 +2143,20 @@ export default class EditorialistPlugin extends Plugin {
 		const guidedSweep = this.getGuidedSweep();
 		const unitLabel = this.registry.usesSceneTerminology(targetSession.notePath) ? "scene" : "note";
 		const unitTitle = this.toTitleCase(unitLabel);
+		const contextLabel = unitLabel === "scene"
+			? this.formatSceneContextLabel(targetSession.notePath)
+			: undefined;
 		const progressLabel =
 			guidedSweep && guidedSweep.notePaths.length > 1
 				? `${unitTitle} ${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`
 				: undefined;
 
 		return {
-			description: "The remaining revision notes now refer to other text in this scene, so review continues here in the panel.",
+			contextLabel,
+			description: `The remaining revision notes apply elsewhere in ${unitLabel === "scene" ? "this scene" : "this note"}.`,
 			progressLabel,
 			remainingCount: openSuggestions.length,
-			title: "Continue review in the panel",
+			title: contextLabel ? `Continue review in ${contextLabel}` : `Continue review in this ${unitLabel}`,
 			unitLabel,
 		};
 	}
@@ -2335,6 +2330,10 @@ export default class EditorialistPlugin extends Plugin {
 	private getNoteDisplayLabel(notePath: string): string {
 		const file = this.app.vault.getAbstractFileByPath(notePath);
 		return file instanceof TFile ? file.basename : notePath.split("/").pop() ?? notePath;
+	}
+
+	private formatSceneContextLabel(notePath: string): string {
+		return `Scene ${this.getNoteDisplayLabel(notePath).replace(/^[Ss]cene\s+/u, "")}`;
 	}
 
 	private toTitleCase(value: string): string {

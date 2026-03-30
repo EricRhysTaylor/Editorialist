@@ -261,7 +261,7 @@ export function getSuggestionReason(suggestion: ReviewSuggestion): string {
 	}
 
 	if (suggestion.status === "rewritten") {
-		return "Rewritten manually by the author.";
+		return "Rewritten by the author.";
 	}
 
 	if (suggestion.status === "deferred") {

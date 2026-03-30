@@ -281,7 +281,7 @@ export class ReviewPanel extends ItemView {
 			const next = card.createDiv({ cls: "editorialist-panel__handoff-next" });
 			next.createSpan({
 				cls: "editorialist-panel__handoff-next-label",
-				text: `Up next: ${handoff.nextLabel}`,
+				text: `Next ${handoff.unitLabel} → ${handoff.nextLabel}`,
 			});
 		}
 
@@ -315,7 +315,7 @@ export class ReviewPanel extends ItemView {
 		const header = card.createDiv({ cls: "editorialist-panel__panel-only-header" });
 		const title = header.createDiv({ cls: "editorialist-panel__panel-only-title" });
 		const titleIcon = title.createSpan({ cls: "editorialist-panel__panel-only-title-icon" });
-		setIcon(titleIcon, "panel-right-open");
+		setIcon(titleIcon, "list-todo");
 		title.createSpan({ text: panelOnlyState.title });
 		if (panelOnlyState.progressLabel) {
 			header.createDiv({
@@ -405,7 +405,7 @@ export class ReviewPanel extends ItemView {
 
 		const hasReviewerMenu = this.needsReviewerMenu(suggestion);
 		const actions = meta.createDiv({ cls: "editorialist-suggestion__actions" });
-		this.renderControlButton(
+		const sourceButton = this.renderControlButton(
 			actions,
 			this.getSourceLabel(suggestion),
 			() => {
@@ -418,6 +418,7 @@ export class ReviewPanel extends ItemView {
 				tooltip: this.getSourceLabel(suggestion),
 			},
 		);
+		sourceButton.addClass("editorialist-suggestion__control--source");
 		this.renderControlButton(
 			actions,
 			"",
@@ -497,7 +498,7 @@ export class ReviewPanel extends ItemView {
 
 	private getCollapsedPreview(suggestion: ReviewSuggestion): string {
 		if (this.isOtherTextSuggestion(suggestion)) {
-			return "Other text in scene";
+			return "Applies elsewhere";
 		}
 
 		switch (suggestion.operation) {
@@ -664,7 +665,9 @@ export class ReviewPanel extends ItemView {
 
 	private getSuggestionReason(suggestion: ReviewSuggestion): string {
 		if (this.isOtherTextSuggestion(suggestion)) {
-			return "This revision note now points to other text in the scene.";
+			const session = this.plugin.store.getSession();
+			const unitLabel = this.plugin.usesSceneTerminology(session?.notePath) ? "scene" : "note";
+			return `This revision note now applies elsewhere in this ${unitLabel}.`;
 		}
 
 		return getOperationSuggestionReason(suggestion);
@@ -779,7 +782,7 @@ export class ReviewPanel extends ItemView {
 			tooltip?: string;
 			trailingIcon?: string;
 		},
-	): void {
+	): HTMLElement {
 		const button = parent.createEl("button", {
 			cls: "editorialist-suggestion__control",
 			attr: {
@@ -812,12 +815,16 @@ export class ReviewPanel extends ItemView {
 			setIcon(trailingIcon, options.trailingIcon);
 		}
 		this.bindImmediateAction(button, onClick);
+		return button;
 	}
 
 	private bindImmediateAction(element: HTMLElement, onClick: () => void): void {
 		let handledPointerDown = false;
 
 		element.addEventListener("pointerdown", (event) => {
+			if (element instanceof HTMLButtonElement && element.disabled) {
+				return;
+			}
 			if (this.shouldIgnoreImmediateActionEvent(element, event.target)) {
 				return;
 			}
@@ -832,6 +839,9 @@ export class ReviewPanel extends ItemView {
 		});
 
 		element.addEventListener("click", (event) => {
+			if (element instanceof HTMLButtonElement && element.disabled) {
+				return;
+			}
 			if (this.shouldIgnoreImmediateActionEvent(element, event.target)) {
 				return;
 			}
@@ -948,6 +958,6 @@ export class ReviewPanel extends ItemView {
 	}
 
 	private getSourceLabel(suggestion: ReviewSuggestion): string {
-		return `Contributor: ${formatContributorIdentityLabel(suggestion.contributor)}`;
+		return formatContributorIdentityLabel(suggestion.contributor);
 	}
 }

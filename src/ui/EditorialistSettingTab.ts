@@ -60,7 +60,9 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 		const inventory = this.plugin.getSceneReviewRecords({ activeBookOnly: this.activeBookOnly });
 		this.renderCoreHero(coreContent);
-		this.renderRadialTimelineCard(coreContent);
+		if (!this.isRadialTimelineInstalled()) {
+			this.renderRadialTimelineCard(coreContent);
+		}
 		this.renderHero(coreContent, summary, inventory);
 		this.renderActivitySection(coreContent, summary);
 		this.renderInventorySection(coreContent, inventory, activeBook.label);
@@ -188,6 +190,22 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		this.createHeroFeature(featureList, "users", "Contributor directory — see everyone who has helped shape your revisions, from editors to AI tools.");
 		this.createHeroFeature(featureList, "shuffle", "Refine your sources — update or combine names so your contributor history stays clear and accurate.");
 		this.createHeroFeature(featureList, "star", "See what works — compare how often suggestions are accepted to understand which feedback improves your writing.");
+	}
+
+	private isRadialTimelineInstalled(): boolean {
+		const plugins = this.app as App & {
+			plugins?: {
+				enabledPlugins?: Set<string>;
+				manifests?: Record<string, { id?: string; name?: string }>;
+			};
+		};
+		const enabledPlugins = plugins.plugins?.enabledPlugins;
+		if (enabledPlugins?.has("radial-timeline")) {
+			return true;
+		}
+
+		const manifests = Object.values(plugins.plugins?.manifests ?? {});
+		return manifests.some((manifest) => manifest.id === "radial-timeline");
 	}
 
 	private renderRadialTimelineCard(parent: HTMLElement): void {
@@ -427,9 +445,20 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			});
 			setIcon(completionIcon, openCount === 0 ? "square-check" : "square");
 
-			row.createEl("td", {
+			const sceneCell = row.createEl("td", {
 				cls: "editorialist-settings__inventory-col-scene",
+			});
+			const sceneLink = sceneCell.createEl("a", {
+				cls: "editorialist-settings__inventory-note-link",
 				text: record.noteTitle,
+				attr: {
+					href: "#",
+					"aria-label": `Open ${record.noteTitle}`,
+				},
+			});
+			sceneLink.addEventListener("click", (event) => {
+				event.preventDefault();
+				void this.plugin.openSceneNote(record.notePath);
 			});
 			row.createEl("td", {
 				cls: "editorialist-settings__inventory-col-number",
