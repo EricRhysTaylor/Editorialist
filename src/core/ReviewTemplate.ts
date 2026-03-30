@@ -1,11 +1,26 @@
 import { REVIEW_BLOCK_FENCE } from "./ReviewBlockFormat";
+import {
+	SUPPORTED_REVIEW_OPERATION_LABELS,
+	SUPPORTED_REVIEW_OPERATIONS,
+} from "../models/ReviewSuggestion";
+
+const ADVANCED_REVIEW_TEMPLATE_MODEL = "GPT-5.4";
+
+export const ADVANCED_REVIEW_TEMPLATE_YEAR = new Date().getFullYear();
+export const ADVANCED_REVIEW_TEMPLATE_TITLE = `Advanced template (${ADVANCED_REVIEW_TEMPLATE_YEAR})`;
+export const SUPPORTED_REVIEW_OPERATION_SUMMARY = SUPPORTED_REVIEW_OPERATIONS
+	.map((operation) => SUPPORTED_REVIEW_OPERATION_LABELS[operation])
+	.join(", ");
 
 export const REVIEW_TEMPLATE_BLOCK = [
 	"```" + REVIEW_BLOCK_FENCE,
-	"Reviewer: GPT-5.3",
+	"Template: Editorialist advanced",
+	`TemplateYear: ${ADVANCED_REVIEW_TEMPLATE_YEAR}`,
+	`SupportedOperations: ${SUPPORTED_REVIEW_OPERATION_SUMMARY}`,
+	`Reviewer: ${ADVANCED_REVIEW_TEMPLATE_MODEL}`,
 	"ReviewerType: ai-editor",
 	"Provider: OpenAI",
-	"Model: GPT-5.3",
+	`Model: ${ADVANCED_REVIEW_TEMPLATE_MODEL}`,
 	"",
 	"=== EDIT ===",
 	"SceneId: scn_xxxxxxxx",

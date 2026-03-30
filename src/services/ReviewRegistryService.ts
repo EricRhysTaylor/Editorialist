@@ -381,9 +381,15 @@ export class ReviewRegistryService {
 		const activeKeys = new Set<string>();
 
 		for (const suggestion of session.suggestions) {
-			const key = this.createReviewerSignalKey(session.notePath, suggestion);
+			const candidateKeys = this.createReviewerSignalKeys(session.notePath, suggestion);
+			const key = candidateKeys[0];
+			if (!key) {
+				continue;
+			}
 			activeKeys.add(key);
-			const existingRecord = nextIndex[key];
+			const existingRecord = candidateKeys
+				.map((candidate) => nextIndex[candidate])
+				.find((record): record is ReviewerSignalRecord => Boolean(record));
 			const desiredRecord = this.createReviewerSignalRecord(
 				key,
 				suggestion,
@@ -397,7 +403,17 @@ export class ReviewRegistryService {
 
 			if (existingRecord) {
 				this.applyReviewerSignalDelta(existingRecord, -1);
-				delete nextIndex[key];
+				delete nextIndex[existingRecord.key];
+				didChange = true;
+			}
+
+			for (const candidate of candidateKeys) {
+				if (candidate === key || !nextIndex[candidate]) {
+					continue;
+				}
+
+				this.applyReviewerSignalDelta(nextIndex[candidate] as ReviewerSignalRecord, -1);
+				delete nextIndex[candidate];
 				didChange = true;
 			}
 
@@ -408,8 +424,9 @@ export class ReviewRegistryService {
 			}
 		}
 
+		const keyPrefixes = this.getReviewerSignalKeyPrefixes(session.notePath);
 		for (const [key, existingRecord] of Object.entries(nextIndex)) {
-			if (!key.startsWith(`${session.notePath}::`) || activeKeys.has(key)) {
+			if (!keyPrefixes.some((prefix) => key.startsWith(prefix)) || activeKeys.has(key)) {
 				continue;
 			}
 
@@ -543,8 +560,13 @@ export class ReviewRegistryService {
 			};
 		}
 
+		const currentSceneIds = new Set(
+			Object.values(nextIndex)
+				.map((record) => record.sceneId?.trim())
+				.filter((sceneId): sceneId is string => Boolean(sceneId)),
+		);
 		for (const existing of Object.values(this.sceneReviewIndex)) {
-			if (nextIndex[existing.notePath]) {
+			if (nextIndex[existing.notePath] || (existing.sceneId && currentSceneIds.has(existing.sceneId))) {
 				continue;
 			}
 
@@ -564,7 +586,7 @@ export class ReviewRegistryService {
 			};
 		}
 
-		const nextRegistry = this.buildSweepRegistryFromSceneInventory(batchPresence, now);
+		const nextRegistry = this.buildSweepRegistryFromSceneInventory(batchPresence, nextIndex, now);
 		const inventoryChanged = !this.sameJsonValue(this.sceneReviewIndex, nextIndex);
 		const registryChanged = !this.sameJsonValue(this.sweepRegistry, nextRegistry);
 		if (!inventoryChanged && !registryChanged) {
@@ -724,27 +746,35 @@ export class ReviewRegistryService {
 	}
 
 	private createPersistedReviewDecisionKeys(notePath: string, suggestion: ReviewSuggestion): string[] {
-		const stableKey = [
-			notePath,
-			suggestion.operation,
-			suggestion.executionMode,
-			suggestion.contributor.raw.rawName ?? "",
-			suggestion.contributor.raw.rawType ?? "",
-			suggestion.contributor.raw.rawProvider ?? "",
-			suggestion.contributor.raw.rawModel ?? "",
-			...getSuggestionSignatureParts(suggestion),
-			suggestion.why ?? "",
-		].join("::");
-		const legacyKey = [
-			notePath,
-			suggestion.operation,
-			suggestion.executionMode,
-			suggestion.contributor.displayName,
-			getLegacyContributorSignatureKind(suggestion.contributor),
-			...getSuggestionSignatureParts(suggestion),
-			suggestion.why ?? "",
-		].join("::");
-		return stableKey === legacyKey ? [stableKey] : [stableKey, legacyKey];
+		const keys: string[] = [];
+		for (const noteIdentity of this.getNoteIdentityKeys(notePath)) {
+			keys.push(
+				[
+					noteIdentity,
+					suggestion.operation,
+					suggestion.executionMode,
+					suggestion.contributor.raw.rawName ?? "",
+					suggestion.contributor.raw.rawType ?? "",
+					suggestion.contributor.raw.rawProvider ?? "",
+					suggestion.contributor.raw.rawModel ?? "",
+					...getSuggestionSignatureParts(suggestion),
+					suggestion.why ?? "",
+				].join("::"),
+			);
+			keys.push(
+				[
+					noteIdentity,
+					suggestion.operation,
+					suggestion.executionMode,
+					suggestion.contributor.displayName,
+					getLegacyContributorSignatureKind(suggestion.contributor),
+					...getSuggestionSignatureParts(suggestion),
+					suggestion.why ?? "",
+				].join("::"),
+			);
+		}
+
+		return keys.filter((key, index) => keys.indexOf(key) === index);
 	}
 
 	private getPersistedReviewDecisionRecord(
@@ -761,15 +791,17 @@ export class ReviewRegistryService {
 		return undefined;
 	}
 
-	private createReviewerSignalKey(notePath: string, suggestion: ReviewSuggestion): string {
-		return [
-			notePath,
-			suggestion.source.blockIndex,
-			suggestion.source.entryIndex,
-			suggestion.operation,
-			suggestion.executionMode,
-			...getSuggestionSignatureParts(suggestion),
-		].join("::");
+	private createReviewerSignalKeys(notePath: string, suggestion: ReviewSuggestion): string[] {
+		return this.getNoteIdentityKeys(notePath).map((noteIdentity) =>
+			[
+				noteIdentity,
+				suggestion.source.blockIndex,
+				suggestion.source.entryIndex,
+				suggestion.operation,
+				suggestion.executionMode,
+				...getSuggestionSignatureParts(suggestion),
+			].join("::"),
+		);
 	}
 
 	private createReviewerSignalRecord(
@@ -869,26 +901,51 @@ export class ReviewRegistryService {
 
 	private buildSweepRegistryFromSceneInventory(
 		batchPresence: Map<string, Set<string>>,
+		sceneIndex: Record<string, SceneReviewRecord>,
 		now: number,
 	): Record<string, ReviewSweepRegistryEntry> {
 		const nextRegistry: Record<string, ReviewSweepRegistryEntry> = {};
 		for (const entry of Object.values(this.sweepRegistry)) {
 			const currentPaths = [...(batchPresence.get(entry.batchId) ?? new Set<string>())].sort();
-			const sceneOrder = entry.sceneOrder.filter((path) => currentPaths.includes(path));
-			const nextSceneOrder = sceneOrder.length > 0 ? sceneOrder : currentPaths;
-			const currentNotePath =
-				entry.currentNotePath && currentPaths.includes(entry.currentNotePath)
-					? entry.currentNotePath
-					: nextSceneOrder[0];
+			const resolveCurrentPath = (previousPath: string | undefined): string | undefined => {
+				if (!previousPath) {
+					return undefined;
+				}
+				if (currentPaths.includes(previousPath)) {
+					return previousPath;
+				}
+
+				const previousSceneId = this.sceneReviewIndex[previousPath]?.sceneId?.trim();
+				if (!previousSceneId) {
+					return undefined;
+				}
+
+				return currentPaths.find((path) => sceneIndex[path]?.sceneId?.trim() === previousSceneId);
+			};
+
+			const nextSceneOrder = entry.sceneOrder
+				.map((path) => resolveCurrentPath(path))
+				.filter((path): path is string => Boolean(path))
+				.filter((path, index, paths) => paths.indexOf(path) === index);
+			for (const path of currentPaths) {
+				if (!nextSceneOrder.includes(path)) {
+					nextSceneOrder.push(path);
+				}
+			}
+
+			const currentNotePath = resolveCurrentPath(entry.currentNotePath) ?? nextSceneOrder[0];
+			const editorialRevisionUpdatedNotePaths = [...new Set(
+				(entry.editorialRevisionUpdatedNotePaths ?? [])
+					.map((path) => resolveCurrentPath(path))
+					.filter((path): path is string => Boolean(path)),
+			)];
 
 			nextRegistry[entry.batchId] = {
 				...entry,
 				activeBookLabel: entry.activeBookLabel ?? this.activeBookScope.label ?? undefined,
 				activeBookSourceFolder: entry.activeBookSourceFolder ?? this.activeBookScope.sourceFolder ?? undefined,
 				cleanedAt: currentPaths.length === 0 ? entry.cleanedAt ?? now : undefined,
-				editorialRevisionUpdatedNotePaths: [...(entry.editorialRevisionUpdatedNotePaths ?? [])].filter((path) =>
-					currentPaths.includes(path),
-				),
+				editorialRevisionUpdatedNotePaths,
 				importedNotePaths: currentPaths,
 				currentNotePath,
 				sceneOrder: nextSceneOrder,
@@ -922,6 +979,28 @@ export class ReviewRegistryService {
 		}
 
 		return null;
+	}
+
+	private getNoteIdentityKeys(notePath: string): string[] {
+		const sceneId = this.getSceneIdForNotePath(notePath);
+		if (!sceneId) {
+			return [notePath];
+		}
+
+		return [`scene:${sceneId}`, notePath];
+	}
+
+	private getReviewerSignalKeyPrefixes(notePath: string): string[] {
+		return this.getNoteIdentityKeys(notePath).map((identity) => `${identity}::`);
+	}
+
+	private getSceneIdForNotePath(notePath: string): string | undefined {
+		const file = this.app.vault.getAbstractFileByPath(notePath);
+		if (!(file instanceof TFile)) {
+			return undefined;
+		}
+
+		return getSceneIdForFile(this.app, file)?.trim() || undefined;
 	}
 
 	private isSceneClassNote(notePath: string): boolean {

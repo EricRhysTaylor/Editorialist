@@ -1,6 +1,10 @@
 import { ButtonComponent, Modal, Notice, TextAreaComponent, setIcon, type App } from "obsidian";
 import { getReviewBlockFenceLabel } from "../core/ReviewBlockFormat";
-import { REVIEW_TEMPLATE_BLOCK } from "../core/ReviewTemplate";
+import {
+	ADVANCED_REVIEW_TEMPLATE_TITLE,
+	REVIEW_TEMPLATE_BLOCK,
+	SUPPORTED_REVIEW_OPERATION_SUMMARY,
+} from "../core/ReviewTemplate";
 import type { ReviewImportBatch } from "../models/ReviewImport";
 
 export interface ClipboardReviewBatch {
@@ -341,7 +345,7 @@ export class EditorialistModal extends Modal {
 		const header = example.createDiv({ cls: "editorialist-control-modal__example-header" });
 		header.createDiv({
 			cls: "editorialist-control-modal__section-title",
-			text: "Formatting instructions",
+			text: ADVANCED_REVIEW_TEMPLATE_TITLE,
 		});
 
 		const actions = header.createDiv({ cls: "editorialist-control-modal__example-actions" });
@@ -370,7 +374,7 @@ export class EditorialistModal extends Modal {
 
 		example.createDiv({
 			cls: "editorialist-control-modal__example-description",
-			text: "Use these formatting instructions with your AI. Return only the fenced block. No extra text.",
+			text: `Use this advanced template with your AI. Supported operations: ${SUPPORTED_REVIEW_OPERATION_SUMMARY}. Return only the fenced block. No extra text.`,
 		});
 
 		example.createEl("pre", {
@@ -677,7 +681,7 @@ export class EditorialistModal extends Modal {
 				icon: "copy",
 				id: "template",
 				label: "Copy instructions",
-				description: "Get formatting instructions",
+				description: `${ADVANCED_REVIEW_TEMPLATE_TITLE} for ${SUPPORTED_REVIEW_OPERATION_SUMMARY}`,
 				tone: "success",
 			},
 			{

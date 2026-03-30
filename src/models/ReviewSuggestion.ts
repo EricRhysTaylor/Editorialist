@@ -5,9 +5,18 @@ import type {
 	ReviewerType,
 } from "./ReviewerProfile";
 
-export type ReviewOperationType = "edit" | "move" | "cut" | "condense" | "insert" | "split" | "merge" | "advisory";
+export const SUPPORTED_REVIEW_OPERATIONS = ["edit", "move", "cut", "condense"] as const;
 
-export type SupportedReviewOperationType = "edit" | "move" | "cut" | "condense";
+export type SupportedReviewOperationType = (typeof SUPPORTED_REVIEW_OPERATIONS)[number];
+
+export const SUPPORTED_REVIEW_OPERATION_LABELS: Record<SupportedReviewOperationType, string> = {
+	edit: "Edit",
+	move: "Move",
+	cut: "Cut",
+	condense: "Condense",
+};
+
+export type ReviewOperationType = SupportedReviewOperationType | "insert" | "split" | "merge" | "advisory";
 
 export type ReviewStatus = "pending" | "accepted" | "rejected" | "deferred" | "unresolved" | "rewritten";
 

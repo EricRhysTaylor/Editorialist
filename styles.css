@@ -1353,7 +1353,7 @@
 	display: inline-flex;
 }
 
-@media (max-width: 720px) {
+@media (width <= 720px) {
 	.editorialist-suggestion__structure-split {
 		grid-template-columns: minmax(0, 1fr);
 	}
