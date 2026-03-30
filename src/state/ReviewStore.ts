@@ -29,6 +29,7 @@ export interface CompletedSweepState {
 }
 
 export interface ReviewStoreState {
+	acknowledgedCompletedSweepBatchId: string | null;
 	appliedReview: AppliedReviewState | null;
 	completedSweep: CompletedSweepState | null;
 	guidedSweep: GuidedSweepState | null;
@@ -42,6 +43,7 @@ export class ReviewStore {
 	private readonly listeners = new Set<Listener>();
 
 	private state: ReviewStoreState = {
+		acknowledgedCompletedSweepBatchId: null,
 		appliedReview: null,
 		completedSweep: null,
 		guidedSweep: null,
@@ -59,6 +61,7 @@ export class ReviewStore {
 
 	getState(): ReviewStoreState {
 		return {
+			acknowledgedCompletedSweepBatchId: this.state.acknowledgedCompletedSweepBatchId,
 			appliedReview: this.state.appliedReview
 				? {
 						...this.state.appliedReview,
@@ -99,6 +102,10 @@ export class ReviewStore {
 		return this.state.completedSweep;
 	}
 
+	getAcknowledgedCompletedSweepBatchId(): string | null {
+		return this.state.acknowledgedCompletedSweepBatchId;
+	}
+
 	getAppliedReview(): AppliedReviewState | null {
 		return this.state.appliedReview;
 	}
@@ -125,6 +132,7 @@ export class ReviewStore {
 				: firstOpenSuggestion?.id ?? session.suggestions[0]?.id ?? null;
 
 		this.state = {
+			acknowledgedCompletedSweepBatchId: firstOpenSuggestion ? null : this.state.acknowledgedCompletedSweepBatchId,
 			appliedReview: this.state.appliedReview,
 			completedSweep:
 				this.state.completedSweep &&
@@ -141,6 +149,7 @@ export class ReviewStore {
 
 	clearSession(): void {
 		this.state = {
+			acknowledgedCompletedSweepBatchId: this.state.acknowledgedCompletedSweepBatchId,
 			appliedReview: null,
 			completedSweep: this.state.completedSweep,
 			guidedSweep: this.state.guidedSweep,
@@ -175,6 +184,7 @@ export class ReviewStore {
 			: suggestions[0]?.id ?? null;
 
 		this.state = {
+			acknowledgedCompletedSweepBatchId: this.state.acknowledgedCompletedSweepBatchId,
 			appliedReview: this.state.appliedReview,
 			completedSweep: this.state.completedSweep,
 			guidedSweep: this.state.guidedSweep,
@@ -188,6 +198,7 @@ export class ReviewStore {
 		this.state = {
 			...this.state,
 			guidedSweep,
+			acknowledgedCompletedSweepBatchId: guidedSweep ? null : this.state.acknowledgedCompletedSweepBatchId,
 			completedSweep: guidedSweep ? null : this.state.completedSweep,
 		};
 		this.emit();
@@ -196,7 +207,19 @@ export class ReviewStore {
 	setCompletedSweep(completedSweep: CompletedSweepState | null): void {
 		this.state = {
 			...this.state,
+			acknowledgedCompletedSweepBatchId:
+				completedSweep && this.state.acknowledgedCompletedSweepBatchId === completedSweep.batchId
+					? null
+					: this.state.acknowledgedCompletedSweepBatchId,
 			completedSweep,
+		};
+		this.emit();
+	}
+
+	acknowledgeCompletedSweep(batchId: string | null): void {
+		this.state = {
+			...this.state,
+			acknowledgedCompletedSweepBatchId: batchId,
 		};
 		this.emit();
 	}

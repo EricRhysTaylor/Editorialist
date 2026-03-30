@@ -121,6 +121,11 @@ interface CompletedSweepPanelState {
 	title: string;
 }
 
+interface PostCompletionIdleState {
+	description: string;
+	title: string;
+}
+
 interface ReviewLaunchTarget {
 	label: string;
 	notePath: string;
@@ -536,13 +541,20 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async closeActiveReviewContext(): Promise<void> {
+		const completedSweep = this.getResolvedCompletedSweepState();
 		this.store.setAppliedReview(null);
 		this.store.setCompletedSweep(null);
 		this.store.clearSession();
+		this.store.acknowledgeCompletedSweep(completedSweep?.batchId ?? this.store.getAcknowledgedCompletedSweepBatchId());
 		this.activeHighlightRange = null;
 		this.activeHighlightTone = "active";
 		this.lastAppliedChange = null;
 		this.syncActiveEditorDecorations();
+	}
+
+	async closeReviewPanel(): Promise<void> {
+		await this.closeActiveReviewContext();
+		this.app.workspace.detachLeavesOfType(REVIEW_PANEL_VIEW_TYPE);
 	}
 
 	async continueGuidedSweep(): Promise<void> {
@@ -1104,6 +1116,10 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	getNextLogicalReviewLaunchTarget(): ReviewLaunchTarget | null {
+		if (this.getPostCompletionIdleState()) {
+			return null;
+		}
+
 		const context = this.getActiveNoteContext();
 		const launchState = this.getEditorialistLaunchState(context);
 		if (context && launchState.currentNoteHasReviewBlock && launchState.currentNoteStatus === "ready") {
@@ -1155,6 +1171,9 @@ export default class EditorialistPlugin extends Plugin {
 		if (!completedSweep) {
 			return null;
 		}
+		if (this.store.getAcknowledgedCompletedSweepBatchId() === completedSweep.batchId) {
+			return null;
+		}
 
 		const entry = this.getSweepRegistryEntry(completedSweep.batchId);
 		const unitLabel = this.getSweepUnitLabel(
@@ -1176,6 +1195,29 @@ export default class EditorialistPlugin extends Plugin {
 			description: "You've finished this revision pass.",
 			durationLabel: this.getCompletedSweepDurationLabel(completedSweep),
 			nextSteps,
+		};
+	}
+
+	getPostCompletionIdleState(): PostCompletionIdleState | null {
+		const completedSweep = this.getResolvedCompletedSweepState();
+		if (!completedSweep) {
+			return null;
+		}
+
+		const summary = this.getReviewActivitySummary();
+		const remainingCount = summary.pending + summary.unresolved + summary.deferred;
+		if (remainingCount > 0 || summary.inProgressSweeps > 0) {
+			return null;
+		}
+
+		if (this.store.getAcknowledgedCompletedSweepBatchId() !== completedSweep.batchId) {
+			return null;
+		}
+
+		return {
+			title: "This revision pass is complete",
+			description:
+				"Editorialist keeps revision notes, decisions, and contributor history together so you can review changes in context. Use Editorialist begin when you're ready to import a new pass.",
 		};
 	}
 

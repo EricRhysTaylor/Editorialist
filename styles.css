@@ -316,6 +316,19 @@
 	min-width: 0;
 }
 
+.editorialist-panel__launch-idle-title {
+	color: var(--text-normal);
+	font-size: var(--font-ui-medium);
+	font-weight: 600;
+	line-height: 1.35;
+}
+
+.editorialist-panel__launch-idle-description {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	line-height: 1.55;
+}
+
 .editorialist-panel__launch-section--next {
 	align-items: flex-end;
 	text-align: right;
@@ -629,7 +642,7 @@
 	width: 18.75rem;
 	height: 18.75rem;
 	color: color-mix(in srgb, var(--color-green) 28%, transparent);
-	opacity: 0.04;
+	opacity: 0.08;
 	pointer-events: none;
 }
 
@@ -732,19 +745,26 @@
 }
 
 .editorialist-panel__completion-step-link {
+	text-decoration: none;
+}
+
+.editorialist-panel__completion-link-text {
 	text-decoration-line: underline;
 	text-decoration-style: dashed;
 	text-decoration-thickness: 1px;
 	text-underline-offset: 0.14em;
 }
 
-.editorialist-panel__completion-step-link:hover,
-.editorialist-panel__completion-step-link:focus-visible {
+.editorialist-panel__completion-step-link:hover .editorialist-panel__completion-link-text,
+.editorialist-panel__completion-step-link:focus-visible .editorialist-panel__completion-link-text {
 	text-decoration-style: solid;
 }
 
 .editorialist-panel__completion-step.is-primary .editorialist-panel__completion-step-link {
 	color: color-mix(in srgb, var(--color-green) 64%, var(--text-normal));
+}
+
+.editorialist-panel__completion-step.is-primary .editorialist-panel__completion-link-text {
 	text-decoration-thickness: 1.5px;
 }
 
@@ -757,15 +777,16 @@
 .editorialist-panel__completion-close-link {
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
-	text-decoration-line: underline;
-	text-decoration-style: dashed;
-	text-decoration-thickness: 1px;
-	text-underline-offset: 0.14em;
+	text-decoration: none;
 }
 
 .editorialist-panel__completion-close-link:hover,
 .editorialist-panel__completion-close-link:focus-visible {
 	color: var(--text-normal);
+}
+
+.editorialist-panel__completion-close-link:hover .editorialist-panel__completion-link-text,
+.editorialist-panel__completion-close-link:focus-visible .editorialist-panel__completion-link-text {
 	text-decoration-style: solid;
 }
 

@@ -75,8 +75,33 @@ export class ReviewPanel extends ItemView {
 		}
 
 		if (!session) {
+			const postCompletionIdle = this.plugin.getPostCompletionIdleState();
 			const actionStrip = header.createDiv({ cls: "editorialist-panel__launch-strip" });
 			const intro = actionStrip.createDiv({ cls: "editorialist-panel__launch-section editorialist-panel__launch-section--intro" });
+			if (postCompletionIdle) {
+				const title = intro.createDiv({ cls: "editorialist-panel__launch-idle-title" });
+				title.setText(postCompletionIdle.title);
+				const description = intro.createDiv({ cls: "editorialist-panel__launch-idle-description" });
+				description.appendText("Import formatted revision notes using ");
+				const launchLink = description.createEl("a", {
+					cls: "editorialist-panel__command-link",
+					attr: {
+						href: "#",
+						title: "Open Editorialist begin",
+					},
+				});
+				launchLink.createSpan({
+					cls: "editorialist-panel__command-name",
+					text: "Editorialist begin",
+				});
+				this.bindImmediateAction(launchLink, () => {
+					void this.plugin.openEditorialistModal();
+				});
+				description.appendText(". ");
+				description.appendText(postCompletionIdle.description);
+				return;
+			}
+
 			const sentence = intro.createDiv({ cls: "editorialist-panel__empty" });
 			sentence.appendText("Import formatted revision notes using ");
 			const launchLink = sentence.createEl("a", {
@@ -270,7 +295,10 @@ export class ReviewPanel extends ItemView {
 						title: step.label,
 					},
 				});
-				link.createSpan({ text: step.label });
+				link.createSpan({
+					cls: "editorialist-panel__completion-link-text",
+					text: step.label,
+				});
 				this.bindImmediateAction(link, () => {
 					void this.plugin.openEditorialistModal();
 				});
@@ -285,7 +313,10 @@ export class ReviewPanel extends ItemView {
 						title: step.label,
 					},
 				});
-				link.createSpan({ text: step.label });
+				link.createSpan({
+					cls: "editorialist-panel__completion-link-text",
+					text: step.label,
+				});
 				this.bindImmediateAction(link, () => {
 					void this.plugin.resumeCompletedReviewMode();
 				});
@@ -300,7 +331,10 @@ export class ReviewPanel extends ItemView {
 						title: step.label,
 					},
 				});
-				link.createSpan({ text: step.label });
+				link.createSpan({
+					cls: "editorialist-panel__completion-link-text",
+					text: step.label,
+				});
 				this.bindImmediateAction(link, () => {
 					void this.plugin.cleanupCompletedSweepReviewBlocks();
 				});
@@ -321,9 +355,13 @@ export class ReviewPanel extends ItemView {
 				title: completedSweep.closeLabel,
 			},
 		});
-		closeLink.createSpan({ text: `→ ${completedSweep.closeLabel}` });
+		closeLink.createSpan({ text: "→ " });
+		closeLink.createSpan({
+			cls: "editorialist-panel__completion-link-text",
+			text: completedSweep.closeLabel,
+		});
 		this.bindImmediateAction(closeLink, () => {
-			void this.plugin.closeActiveReviewContext();
+			void this.plugin.closeReviewPanel();
 		});
 	}
 
