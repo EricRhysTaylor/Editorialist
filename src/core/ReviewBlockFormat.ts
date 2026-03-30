@@ -199,8 +199,7 @@ function extractFencedBlocks(noteText: string): ExtractedReviewBlock[] {
 			continue;
 		}
 
-		const bodyStart = blockStart + bodyStartOffset;
-		const rangeKey = `${bodyStart}:${blockStart + fullMatch.length}`;
+		const rangeKey = `${blockStart}:${blockStart + fullMatch.length}`;
 		if (seenRanges.has(rangeKey)) {
 			continue;
 		}
@@ -208,7 +207,7 @@ function extractFencedBlocks(noteText: string): ExtractedReviewBlock[] {
 		seenRanges.add(rangeKey);
 		blocks.push({
 			bodyText: rawBody,
-			startOffset: bodyStart,
+			startOffset: blockStart,
 			endOffset: blockStart + fullMatch.length,
 			source: "fenced",
 		});

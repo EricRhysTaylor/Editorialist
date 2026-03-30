@@ -20,10 +20,15 @@ export interface ContributorStrengthsModalResult {
 
 class ContributorStrengthsModal extends Modal {
 	private displayName: string;
-	private identityNameEl: HTMLSpanElement | null = null;
+	private identityNameEl: HTMLElement | null = null;
 	private identityRoleEl: HTMLSpanElement | null = null;
+	private identitySeparatorEl: HTMLSpanElement | null = null;
+	private identityUseIconsEl: HTMLElement | null = null;
+	private nameInput: TextComponent | null = null;
+	private nameEditorEl: HTMLElement | null = null;
+	private nameTriggerEl: HTMLElement | null = null;
 	private selectedStrengths = new Set<ContributorStrength>();
-	private selectedRole: ReviewerType;
+	private selectedRole: ReviewerType | null;
 	private saveButton: ButtonComponent | null = null;
 
 	constructor(
@@ -45,33 +50,61 @@ class ContributorStrengthsModal extends Modal {
 		const identity = this.contentEl.createDiv({
 			cls: "editorialist-contributor-modal__identity",
 		});
-		this.identityNameEl = identity.createSpan({
-			cls: "editorialist-contributor-modal__identity-name",
-			text: this.options.profile.displayName,
+		this.identityNameEl = identity.createEl("button", {
+			cls: "editorialist-contributor-modal__identity-name-link",
+			attr: {
+				type: "button",
+				title: "Rename contributor",
+			},
 		});
-		identity.createSpan({
+		this.identitySeparatorEl = identity.createSpan({
 			cls: "editorialist-contributor-modal__identity-separator",
 			text: " \u00b7 ",
 		});
 		this.identityRoleEl = identity.createSpan({
 			cls: "editorialist-contributor-modal__identity-role",
-			text: formatReviewerTypeLabel(this.options.profile.reviewerType),
+		});
+		this.identityUseIconsEl = identity.createDiv({
+			cls: "editorialist-contributor-modal__identity-icons",
 		});
 
 		const nameSection = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__row" });
-		nameSection.createDiv({
-			cls: "editorialist-contributor-modal__label",
-			text: "Contributor name",
+		this.nameTriggerEl = nameSection.createEl("button", {
+			cls: "editorialist-contributor-modal__rename-link",
+			attr: {
+				type: "button",
+				title: "Rename contributor",
+			},
 		});
-		const nameControl = nameSection.createDiv({ cls: "editorialist-contributor-modal__control" });
-		const nameInput = new TextComponent(nameControl);
-		nameInput.inputEl.addClass("editorialist-contributor-modal__input");
-		nameInput.setPlaceholder("Enter contributor name");
-		nameInput.setValue(this.displayName);
-		nameInput.onChange((value) => {
+		this.nameTriggerEl.createSpan({
+			cls: "editorialist-contributor-modal__rename-link-text",
+			text: this.displayName,
+		});
+		this.nameEditorEl = nameSection.createDiv({
+			cls: "editorialist-contributor-modal__rename-editor is-collapsed",
+		});
+		this.nameInput = new TextComponent(this.nameEditorEl);
+		this.nameInput.inputEl.addClass("editorialist-contributor-modal__input");
+		this.nameInput.inputEl.addClass("editorialist-contributor-modal__input--rename");
+		this.nameInput.setPlaceholder("Enter contributor name");
+		this.nameInput.setValue(this.displayName);
+		this.nameInput.onChange((value) => {
 			this.displayName = value;
-			this.identityNameEl?.setText(value.trim() || this.options.profile.displayName);
+			this.syncIdentityPreview();
 			this.syncSaveState();
+		});
+		this.identityNameEl.addEventListener("click", () => this.openRenameEditor());
+		this.nameTriggerEl.addEventListener("click", () => this.openRenameEditor());
+		this.nameInput.inputEl.addEventListener("blur", () => this.closeRenameEditor());
+		this.nameInput.inputEl.addEventListener("keydown", (event) => {
+			if (event.key === "Enter") {
+				event.preventDefault();
+				this.closeRenameEditor();
+			}
+			if (event.key === "Escape") {
+				event.preventDefault();
+				this.closeRenameEditor();
+			}
 		});
 
 		const roleSection = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__section" });
@@ -116,6 +149,9 @@ class ContributorStrengthsModal extends Modal {
 			.setButtonText("Save")
 			.setCta();
 		this.saveButton.onClick(() => {
+			if (!this.selectedRole) {
+				return;
+			}
 			this.resolveResult({
 				displayName: this.displayName.trim(),
 				strengths: [...this.selectedStrengths],
@@ -129,6 +165,7 @@ class ContributorStrengthsModal extends Modal {
 			this.resolveResult(null);
 			this.close();
 		});
+		this.syncIdentityPreview();
 		this.syncSaveState();
 	}
 
@@ -159,11 +196,12 @@ class ContributorStrengthsModal extends Modal {
 		syncState();
 
 		tile.addEventListener("click", () => {
-			this.selectedRole = definition.value;
-			this.identityRoleEl?.setText(formatReviewerTypeLabel(this.selectedRole));
+			this.selectedRole = this.selectedRole === definition.value ? null : definition.value;
+			this.syncIdentityPreview();
 			for (const sync of allSyncCallbacks) {
 				sync();
 			}
+			this.syncSaveState();
 		});
 
 		return syncState;
@@ -192,12 +230,65 @@ class ContributorStrengthsModal extends Modal {
 			} else {
 				this.selectedStrengths.add(definition.value);
 			}
+			this.syncIdentityPreview();
 			syncState();
 		});
 	}
 
+	private syncIdentityPreview(): void {
+		const fallbackName = this.options.profile.displayName;
+		const displayName = this.displayName.trim() || fallbackName;
+		this.identityNameEl?.setText(displayName);
+		this.nameTriggerEl?.setText(displayName);
+
+		const hasRole = Boolean(this.selectedRole);
+		if (this.identitySeparatorEl) {
+			this.identitySeparatorEl.toggleClass("is-hidden", !hasRole);
+		}
+		this.identityRoleEl?.setText(hasRole && this.selectedRole ? formatReviewerTypeLabel(this.selectedRole) : "");
+		if (this.identityUseIconsEl) {
+			this.identityUseIconsEl.empty();
+			const selectedDefinitions: Array<{ icon: string; label: string }> = [];
+			const roleDefinition = CONTRIBUTOR_ROLE_DEFINITIONS.find((definition) => definition.value === this.selectedRole);
+			if (roleDefinition) {
+				selectedDefinitions.push({ icon: roleDefinition.icon, label: roleDefinition.label });
+			}
+			for (const strength of this.selectedStrengths) {
+				const definition = CONTRIBUTOR_STRENGTH_DEFINITIONS.find((item) => item.value === strength);
+				if (!definition) {
+					continue;
+				}
+				selectedDefinitions.push({ icon: definition.icon, label: definition.label });
+			}
+			for (const definition of selectedDefinitions) {
+				const iconEl = this.identityUseIconsEl.createSpan({
+					cls: "editorialist-contributor-modal__identity-icon",
+					attr: {
+						"aria-label": definition.label,
+						title: definition.label,
+					},
+				});
+				setIcon(iconEl, definition.icon);
+			}
+		}
+	}
+
+	private openRenameEditor(): void {
+		this.nameTriggerEl?.addClass("is-collapsed");
+		this.nameEditorEl?.removeClass("is-collapsed");
+		window.setTimeout(() => {
+			this.nameInput?.inputEl.focus();
+			this.nameInput?.inputEl.select();
+		}, 0);
+	}
+
+	private closeRenameEditor(): void {
+		this.nameEditorEl?.addClass("is-collapsed");
+		this.nameTriggerEl?.removeClass("is-collapsed");
+	}
+
 	private syncSaveState(): void {
-		this.saveButton?.setDisabled(this.displayName.trim().length === 0);
+		this.saveButton?.setDisabled(this.displayName.trim().length === 0 || !this.selectedRole);
 	}
 }
 

@@ -530,6 +530,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		inventory: SceneReviewRecord[],
 		activeBookLabel: string | null,
 	): void {
+		const liveInventory = inventory.filter((record) => record.batchCount > 0);
 		const activeBook = this.plugin.getActiveBookScopeInfo();
 		const vocabulary = this.getInventoryVocabulary(activeBook);
 		const showRtSceneGlyphs = this.shouldRenderRtSceneGlyphs(activeBook);
@@ -572,7 +573,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			}
 		}
 
-		if (inventory.length === 0) {
+		if (liveInventory.length === 0) {
 			body.createDiv({
 				cls: "editorialist-settings__empty",
 				text: this.activeBookOnly && activeBookLabel
@@ -603,7 +604,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 
 		const bodyEl = table.createTBody();
-		for (const record of inventory) {
+		for (const record of liveInventory) {
 			const openCount = record.pendingCount + record.unresolvedCount + record.deferredCount;
 			const row = bodyEl.insertRow();
 			const completionCell = row.createEl("td", { cls: "editorialist-settings__inventory-col-completion" });
@@ -809,6 +810,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				cls: "editorialist-settings__contributor-role",
 				text: formatReviewerTypeLabel(profile.reviewerType),
 			});
+			this.renderContributorUseIcons(roleLine, profile, { inline: true });
 
 			card.createDiv({
 				cls: "editorialist-settings__contributor-stats",
@@ -848,8 +850,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			manageButton.buttonEl.addClass("editorialist-settings__contributor-menu-button");
 			const manageIcon = manageButton.buttonEl.createSpan({ cls: "editorialist-settings__action-button-icon" });
 			setIcon(manageIcon, "ellipsis");
-
-			this.renderContributorUseIcons(footer, profile);
 		}
 
 		const fillerCount = (3 - (profiles.length % 3)) % 3;
@@ -1267,14 +1267,18 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private renderContributorUseIcons(
 		parent: HTMLElement,
 		profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number],
+		options?: { inline?: boolean },
 	): void {
-		const icons = parent.createDiv({ cls: "editorialist-settings__contributor-use-icons" });
+		const icons = parent.createDiv({
+			cls: `editorialist-settings__contributor-use-icons${options?.inline ? " editorialist-settings__contributor-use-icons--inline" : ""}`,
+		});
 		const roleDefinition = CONTRIBUTOR_ROLE_DEFINITIONS.find((definition) => definition.value === profile.reviewerType);
 		if (roleDefinition) {
 			const roleIcon = icons.createSpan({
-				cls: "editorialist-settings__contributor-use-icon editorialist-settings__contributor-use-icon--role-button",
+				cls: `editorialist-settings__contributor-use-icon${options?.inline ? " editorialist-settings__contributor-use-icon--inline" : " editorialist-settings__contributor-use-icon--role-button"}`,
 				attr: {
 					"aria-label": roleDefinition.label,
+					title: roleDefinition.label,
 				},
 			});
 			setIcon(roleIcon, roleDefinition.icon);
@@ -1291,9 +1295,10 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			}
 
 			const strengthIcon = icons.createSpan({
-				cls: "editorialist-settings__contributor-use-icon",
+				cls: `editorialist-settings__contributor-use-icon${options?.inline ? " editorialist-settings__contributor-use-icon--inline" : ""}`,
 				attr: {
 					"aria-label": definition.label,
+					title: definition.label,
 				},
 			});
 			setIcon(strengthIcon, definition.icon);

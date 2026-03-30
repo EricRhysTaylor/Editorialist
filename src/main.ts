@@ -1237,12 +1237,15 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	getPostCompletionIdleState(): PostCompletionIdleState | null {
-		const completedSweep = this.getResolvedCompletedSweepState();
-		if (!completedSweep) {
-			return null;
+		const activeSceneRecords = this.getSceneReviewRecords().filter((record) => record.batchCount > 0);
+		if (activeSceneRecords.length === 0) {
+			return {
+				title: "Editorialist review",
+				description:
+					"Editorialist keeps revision notes, decisions, and contributor history together in one side-panel workspace so you can review changes in context across your manuscript.",
+			};
 		}
 
-		const activeSceneRecords = this.getSceneReviewRecords().filter((record) => record.batchCount > 0);
 		const remainingCount = activeSceneRecords.reduce(
 			(total, record) => total + record.pendingCount + record.unresolvedCount + record.deferredCount,
 			0,
@@ -1254,14 +1257,10 @@ export default class EditorialistPlugin extends Plugin {
 			return null;
 		}
 
-		if (this.store.getAcknowledgedCompletedSweepBatchId() !== completedSweep.batchId) {
-			return null;
-		}
-
 		return {
-			title: "This revision pass is complete",
+			title: "Editorialist review",
 			description:
-				"Editorialist keeps revision notes, decisions, and contributor history together so you can review changes in context. Use Editorialist begin when you're ready to import a new pass.",
+				"Editorialist keeps revision notes, decisions, and contributor history together in one side-panel workspace so you can review changes in context across your manuscript.",
 		};
 	}
 

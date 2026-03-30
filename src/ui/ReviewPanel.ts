@@ -28,11 +28,11 @@ export class ReviewPanel extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Editorialist Review";
+		return "Editorialist review";
 	}
 
 	getIcon(): string {
-		return "check-square";
+		return "list-todo";
 	}
 
 	async onOpen(): Promise<void> {
@@ -52,7 +52,7 @@ export class ReviewPanel extends ItemView {
 		const titleRow = header.createDiv({ cls: "editorialist-panel__title-row" });
 		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__title-icon" });
 		setIcon(titleIcon, "list-todo");
-		titleRow.createEl("h2", { text: "Editorialist Review" });
+		titleRow.createEl("h2", { text: "Editorialist review" });
 		const settingsButton = titleRow.createEl("button", {
 			cls: "editorialist-panel__settings-button",
 			attr: {
@@ -76,32 +76,14 @@ export class ReviewPanel extends ItemView {
 
 		if (!session) {
 			const postCompletionIdle = this.plugin.getPostCompletionIdleState();
-			const actionStrip = header.createDiv({ cls: "editorialist-panel__launch-strip" });
-			const intro = actionStrip.createDiv({ cls: "editorialist-panel__launch-section editorialist-panel__launch-section--intro" });
 			if (postCompletionIdle) {
-				const title = intro.createDiv({ cls: "editorialist-panel__launch-idle-title" });
-				title.setText(postCompletionIdle.title);
-				const description = intro.createDiv({ cls: "editorialist-panel__launch-idle-description" });
-				description.appendText("Import formatted revision notes using ");
-				const launchLink = description.createEl("a", {
-					cls: "editorialist-panel__command-link",
-					attr: {
-						href: "#",
-						title: "Open Editorialist begin",
-					},
-				});
-				launchLink.createSpan({
-					cls: "editorialist-panel__command-name",
-					text: "Editorialist begin",
-				});
-				this.bindImmediateAction(launchLink, () => {
-					void this.plugin.openEditorialistModal();
-				});
-				description.appendText(". ");
-				description.appendText(postCompletionIdle.description);
+				this.contentEl.createDiv({ cls: "editorialist-panel__divider" });
+				this.renderIdleStateCard(postCompletionIdle);
 				return;
 			}
 
+			const actionStrip = header.createDiv({ cls: "editorialist-panel__launch-strip" });
+			const intro = actionStrip.createDiv({ cls: "editorialist-panel__launch-section editorialist-panel__launch-section--intro" });
 			const sentence = intro.createDiv({ cls: "editorialist-panel__empty" });
 			sentence.appendText("Import formatted revision notes using ");
 			const launchLink = sentence.createEl("a", {
@@ -362,6 +344,73 @@ export class ReviewPanel extends ItemView {
 		});
 		this.bindImmediateAction(closeLink, () => {
 			void this.plugin.closeReviewPanel();
+		});
+	}
+
+	private renderIdleStateCard(postCompletionIdle: ReturnType<EditorialistPlugin["getPostCompletionIdleState"]>): void {
+		if (!postCompletionIdle) {
+			return;
+		}
+
+		const card = this.contentEl.createDiv({
+			cls: "editorialist-panel__completion editorialist-panel__completion--neutral",
+		});
+		const bgIcon = card.createSpan({ cls: "editorialist-panel__completion-bg-icon" });
+		setIcon(bgIcon, "list-todo");
+
+		const titleRow = card.createDiv({ cls: "editorialist-panel__completion-title-row" });
+		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__completion-title-icon" });
+		setIcon(titleIcon, "list-todo");
+		titleRow.createSpan({
+			cls: "editorialist-panel__completion-title",
+			text: postCompletionIdle.title,
+		});
+
+		card.createDiv({
+			cls: "editorialist-panel__completion-summary",
+			text: "No active revision pass right now",
+		});
+		card.createDiv({
+			cls: "editorialist-panel__completion-description",
+			text: postCompletionIdle.description,
+		});
+
+		const steps = card.createDiv({ cls: "editorialist-panel__completion-steps" });
+
+		const importStep = steps.createDiv({
+			cls: "editorialist-panel__completion-step editorialist-panel__completion-step--neutral-primary",
+		});
+		const importBullet = importStep.createSpan({ cls: "editorialist-panel__completion-step-bullet" });
+		setIcon(importBullet, "arrow-right");
+		const importLink = importStep.createEl("a", {
+			cls: "editorialist-panel__completion-step-link",
+			attr: {
+				href: "#",
+				title: "Open Editorialist begin",
+			},
+		});
+		importLink.createSpan({
+			cls: "editorialist-panel__completion-link-text",
+			text: "Import new revision notes",
+		});
+		this.bindImmediateAction(importLink, () => {
+			void this.plugin.openEditorialistModal();
+		});
+
+		const passStep = steps.createDiv({ cls: "editorialist-panel__completion-step" });
+		const passBullet = passStep.createSpan({ cls: "editorialist-panel__completion-step-bullet" });
+		setIcon(passBullet, "arrow-right");
+		passStep.createSpan({
+			cls: "editorialist-panel__completion-step-text",
+			text: "Start another pass when you are ready.",
+		});
+
+		const operationsStep = steps.createDiv({ cls: "editorialist-panel__completion-step" });
+		const operationsBullet = operationsStep.createSpan({ cls: "editorialist-panel__completion-step-bullet" });
+		setIcon(operationsBullet, "arrow-right");
+		operationsStep.createSpan({
+			cls: "editorialist-panel__completion-step-text",
+			text: "Review line edits, moves, cuts, and condenses in context.",
 		});
 	}
 
