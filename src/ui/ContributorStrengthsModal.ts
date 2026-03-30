@@ -1,4 +1,4 @@
-import { ButtonComponent, Modal, setIcon, type App } from "obsidian";
+import { ButtonComponent, Modal, TextComponent, setIcon, type App } from "obsidian";
 import { formatReviewerTypeLabel } from "../core/ContributorIdentity";
 import {
 	CONTRIBUTOR_ROLE_DEFINITIONS,
@@ -13,11 +13,15 @@ interface ContributorStrengthsModalOptions {
 }
 
 export interface ContributorStrengthsModalResult {
+	displayName: string;
 	strengths: ContributorStrength[];
 	reviewerType: ReviewerType;
 }
 
 class ContributorStrengthsModal extends Modal {
+	private displayName: string;
+	private identityNameEl: HTMLSpanElement | null = null;
+	private identityRoleEl: HTMLSpanElement | null = null;
 	private selectedStrengths = new Set<ContributorStrength>();
 	private selectedRole: ReviewerType;
 	private saveButton: ButtonComponent | null = null;
@@ -28,6 +32,7 @@ class ContributorStrengthsModal extends Modal {
 		private readonly resolveResult: (result: ContributorStrengthsModalResult | null) => void,
 	) {
 		super(app);
+		this.displayName = options.profile.displayName;
 		this.selectedRole = options.profile.reviewerType;
 	}
 
@@ -40,7 +45,7 @@ class ContributorStrengthsModal extends Modal {
 		const identity = this.contentEl.createDiv({
 			cls: "editorialist-contributor-modal__identity",
 		});
-		identity.createSpan({
+		this.identityNameEl = identity.createSpan({
 			cls: "editorialist-contributor-modal__identity-name",
 			text: this.options.profile.displayName,
 		});
@@ -48,9 +53,25 @@ class ContributorStrengthsModal extends Modal {
 			cls: "editorialist-contributor-modal__identity-separator",
 			text: " \u00b7 ",
 		});
-		identity.createSpan({
+		this.identityRoleEl = identity.createSpan({
 			cls: "editorialist-contributor-modal__identity-role",
 			text: formatReviewerTypeLabel(this.options.profile.reviewerType),
+		});
+
+		const nameSection = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__row" });
+		nameSection.createDiv({
+			cls: "editorialist-contributor-modal__label",
+			text: "Contributor name",
+		});
+		const nameControl = nameSection.createDiv({ cls: "editorialist-contributor-modal__control" });
+		const nameInput = new TextComponent(nameControl);
+		nameInput.inputEl.addClass("editorialist-contributor-modal__input");
+		nameInput.setPlaceholder("Enter contributor name");
+		nameInput.setValue(this.displayName);
+		nameInput.onChange((value) => {
+			this.displayName = value;
+			this.identityNameEl?.setText(value.trim() || this.options.profile.displayName);
+			this.syncSaveState();
 		});
 
 		const roleSection = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__section" });
@@ -91,22 +112,24 @@ class ContributorStrengthsModal extends Modal {
 		});
 
 		const actions = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__actions" });
-		const cancel = new ButtonComponent(actions).setButtonText("Cancel");
-		cancel.onClick(() => {
-			this.resolveResult(null);
-			this.close();
-		});
-
 		this.saveButton = new ButtonComponent(actions)
 			.setButtonText("Save")
 			.setCta();
 		this.saveButton.onClick(() => {
 			this.resolveResult({
+				displayName: this.displayName.trim(),
 				strengths: [...this.selectedStrengths],
 				reviewerType: this.selectedRole,
 			});
 			this.close();
 		});
+
+		const cancel = new ButtonComponent(actions).setButtonText("Cancel");
+		cancel.onClick(() => {
+			this.resolveResult(null);
+			this.close();
+		});
+		this.syncSaveState();
 	}
 
 	onClose(): void {
@@ -137,6 +160,7 @@ class ContributorStrengthsModal extends Modal {
 
 		tile.addEventListener("click", () => {
 			this.selectedRole = definition.value;
+			this.identityRoleEl?.setText(formatReviewerTypeLabel(this.selectedRole));
 			for (const sync of allSyncCallbacks) {
 				sync();
 			}
@@ -170,6 +194,10 @@ class ContributorStrengthsModal extends Modal {
 			}
 			syncState();
 		});
+	}
+
+	private syncSaveState(): void {
+		this.saveButton?.setDisabled(this.displayName.trim().length === 0);
 	}
 }
 

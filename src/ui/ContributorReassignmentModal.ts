@@ -17,6 +17,8 @@ interface ContributorReassignmentModalOptions {
 
 class ContributorReassignmentModal extends Modal {
 	private createName = "";
+	private confirmButton: ButtonComponent | null = null;
+	private dropdown: DropdownComponent | null = null;
 	private targetValue = "";
 
 	constructor(
@@ -57,7 +59,10 @@ class ContributorReassignmentModal extends Modal {
 			text: "Target contributor",
 		});
 		const targetControl = targetRow.createDiv({ cls: "editorialist-contributor-modal__control" });
+		targetControl.addClass("editorialist-contributor-modal__control--fit");
 		const dropdown = new DropdownComponent(targetControl);
+		this.dropdown = dropdown;
+		dropdown.selectEl.addClass("editorialist-contributor-modal__select--fit");
 		dropdown.addOption("", "Select contributor");
 		for (const profile of this.options.targetProfiles) {
 			dropdown.addOption(profile.id, formatContributorIdentityLabel(profile));
@@ -69,8 +74,10 @@ class ContributorReassignmentModal extends Modal {
 		dropdown.onChange((value) => {
 			this.targetValue = value;
 			this.renderCreateInput();
+			this.syncDropdownWidth();
 			this.syncConfirmState();
 		});
+		this.syncDropdownWidth();
 
 		if (this.options.mode === "reassign") {
 			const createRow = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__create" });
@@ -107,12 +114,6 @@ class ContributorReassignmentModal extends Modal {
 		});
 
 		const actions = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__actions" });
-		const cancel = new ButtonComponent(actions).setButtonText("Cancel");
-		cancel.onClick(() => {
-			this.resolveResult(null);
-			this.close();
-		});
-
 		this.confirmButton = new ButtonComponent(actions)
 			.setButtonText(this.options.mode === "merge" ? "Merge contributor" : "Reassign contributor")
 			.setCta();
@@ -130,6 +131,12 @@ class ContributorReassignmentModal extends Modal {
 			});
 			this.close();
 		});
+
+		const cancel = new ButtonComponent(actions).setButtonText("Cancel");
+		cancel.onClick(() => {
+			this.resolveResult(null);
+			this.close();
+		});
 		this.syncConfirmState();
 	}
 
@@ -138,7 +145,6 @@ class ContributorReassignmentModal extends Modal {
 		this.resolveResult(null);
 	}
 
-	private confirmButton: ButtonComponent | null = null;
 	private renderCreateInput = (): void => undefined;
 
 	private syncConfirmState(): void {
@@ -146,6 +152,16 @@ class ContributorReassignmentModal extends Modal {
 			? this.createName.trim().length > 0
 			: this.targetValue.trim().length > 0;
 		this.confirmButton?.setDisabled(!isValid);
+	}
+
+	private syncDropdownWidth(): void {
+		const selectEl = this.dropdown?.selectEl;
+		if (!selectEl) {
+			return;
+		}
+
+		const selectedLabel = selectEl.selectedOptions[0]?.textContent?.trim() ?? "Select contributor";
+		selectEl.style.setProperty("--editorialist-contributor-select-width-ch", String(Math.max(selectedLabel.length, 1)));
 	}
 }
 

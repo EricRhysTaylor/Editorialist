@@ -46,6 +46,9 @@ export function getSceneIdForFile(app: App, file: TFile): string | undefined {
 		"id",
 		"Id",
 		"ID",
+		"editorial_id",
+		"editorialId",
+		"EditorialId",
 		"sceneid",
 		"sceneId",
 		"SceneId",
@@ -60,7 +63,7 @@ export function matchesSceneId(app: App, file: TFile, sceneId: string): boolean 
 	const normalizedSceneId = sceneId.trim().toLowerCase();
 	const frontmatterCandidates = getFrontmatterStringValues(
 		app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined,
-		["id", "Id", "ID", "sceneid", "sceneId", "SceneId", "scene_id", "Scene_ID"],
+		["id", "Id", "ID", "editorial_id", "editorialId", "EditorialId", "sceneid", "sceneId", "SceneId", "scene_id", "Scene_ID"],
 	).map((value) => value.trim().toLowerCase());
 
 	return (

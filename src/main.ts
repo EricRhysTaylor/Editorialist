@@ -1016,12 +1016,45 @@ export default class EditorialistPlugin extends Plugin {
 		return this.registry.getSceneReviewRecords(options);
 	}
 
+	getTrackingIdentitySummary(options?: { activeBookOnly?: boolean }): {
+		editorialIdCount: number;
+		genericFrontmatterIdCount: number;
+		missingCount: number;
+		mode: "editorial-note-ids" | "frontmatter-ids" | "path-fallback" | "radial-timeline";
+		rtSceneIdCount: number;
+		trackedCount: number;
+	} {
+		return this.registry.getTrackingIdentitySummary(options);
+	}
+
 	getActiveBookScopeInfo(): { label: string | null; sourceFolder: string | null } {
 		return this.registry.getActiveBookScopeInfo();
 	}
 
 	async syncOperationalMetadata(): Promise<void> {
 		await this.registry.syncOperationalMetadata();
+	}
+
+	async injectStableNoteIdsIntoTrackedNotes(activeBookOnly = false): Promise<number> {
+		const notePaths = this.getSceneReviewRecords({ activeBookOnly }).map((record) => record.notePath);
+		const injectedCount = await this.registry.injectStableNoteIds(notePaths);
+		this.resyncSessionForActiveNote();
+		this.refreshReviewPanel();
+		return injectedCount;
+	}
+
+	async resetBatchHistory(batchId: string): Promise<{ removedDecisions: number; removedSignals: number; removedSweep: boolean }> {
+		const result = await this.registry.resetBatchHistory(batchId);
+		this.resyncSessionForActiveNote();
+		this.refreshReviewPanel();
+		return result;
+	}
+
+	async resetAllRevisionHistory(): Promise<{ removedDecisions: number; removedSignals: number; removedSweeps: number }> {
+		const result = await this.registry.resetAllRevisionHistory();
+		this.resyncSessionForActiveNote();
+		this.refreshReviewPanel();
+		return result;
 	}
 
 	getReviewActivitySummary(): {
@@ -1245,6 +1278,7 @@ export default class EditorialistPlugin extends Plugin {
 				{ label: "Edit contributor", value: "strengths" },
 				{ label: "Reassign contributor", value: "reassign" },
 				{ label: "Merge into another contributor", value: "merge" },
+				{ label: "Delete contributor", value: "delete" },
 			],
 		});
 		if (!action) {
@@ -1255,7 +1289,79 @@ export default class EditorialistPlugin extends Plugin {
 			return this.editContributorStrengths(reviewerId);
 		}
 
+		if (action === "delete") {
+			return this.deleteContributorById(reviewerId);
+		}
+
 		return this.reassignContributorById(reviewerId, action);
+	}
+
+	async deleteContributorById(reviewerId: string): Promise<boolean> {
+		const profile = this.reviewerDirectory.getProfileById(reviewerId);
+		if (!profile) {
+			new Notice("Contributor not found.");
+			return false;
+		}
+
+		const confirm = await openEditorialistChoiceModal(this.app, {
+			title: "Delete contributor",
+			description: `Delete ${profile.displayName} and remove their saved contributor stats? Revision decisions stay in place, but this contributor will be removed from the directory.`,
+			choices: [
+				{ label: "Delete contributor", value: "delete" },
+				{ label: "Cancel", value: "cancel" },
+			],
+		});
+		if (confirm !== "delete") {
+			return false;
+		}
+
+		await this.registry.removeReviewerSignalsByReviewerId(reviewerId, { persist: false });
+		const deletedProfile = this.reviewerDirectory.deleteProfile(reviewerId);
+		if (!deletedProfile) {
+			new Notice("Contributor not found.");
+			return false;
+		}
+
+		this.removeContributorFromActiveSession(reviewerId);
+		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), {
+			persist: false,
+			...this.getCurrentSessionTrackingContext(),
+		});
+		await this.savePluginData();
+		this.refreshReviewPanel();
+		new Notice(`Deleted ${deletedProfile.displayName}.`);
+		return true;
+	}
+
+	async deleteAllContributors(): Promise<number> {
+		const profiles = this.reviewerDirectory.getProfiles();
+		if (profiles.length === 0) {
+			return 0;
+		}
+
+		const confirm = await openEditorialistChoiceModal(this.app, {
+			title: "Delete all contributors",
+			description: "Delete all contributor profiles and saved contributor stats? Revision decisions stay in place, but the contributor directory will be cleared.",
+			choices: [
+				{ label: "Delete all contributors", value: "delete" },
+				{ label: "Cancel", value: "cancel" },
+			],
+		});
+		if (confirm !== "delete") {
+			return 0;
+		}
+
+		await this.registry.clearAllReviewerSignals({ persist: false });
+		const removedCount = this.reviewerDirectory.clearProfiles();
+		this.removeAllContributorsFromActiveSession();
+		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), {
+			persist: false,
+			...this.getCurrentSessionTrackingContext(),
+		});
+		await this.savePluginData();
+		this.refreshReviewPanel();
+		new Notice(`Deleted ${removedCount} contributor${removedCount === 1 ? "" : "s"}.`);
+		return removedCount;
 	}
 
 	async editContributorStrengths(reviewerId: string): Promise<boolean> {
@@ -1270,13 +1376,13 @@ export default class EditorialistPlugin extends Plugin {
 			return false;
 		}
 
-		this.reviewerDirectory.setReviewerType(reviewerId, result.reviewerType);
-		const updatedProfile = this.reviewerDirectory.setStrengths(reviewerId, result.strengths);
+		const updatedProfile = this.reviewerDirectory.updateProfile(reviewerId, result);
 		if (!updatedProfile) {
-			new Notice("Could not update contributor.");
+			new Notice("Could not update contributor. The name may be blank or already in use.");
 			return false;
 		}
 
+		this.syncContributorProfileInActiveSession(updatedProfile);
 		await this.savePluginData();
 		this.refreshReviewPanel();
 		new Notice(`Updated ${updatedProfile.displayName}.`);
@@ -2029,6 +2135,76 @@ export default class EditorialistPlugin extends Plugin {
 		});
 
 		this.store.replaceSuggestions(nextSuggestions);
+	}
+
+	private syncContributorProfileInActiveSession(profile: ReviewerProfile): void {
+		const session = this.store.getSession();
+		if (!session) {
+			return;
+		}
+
+		this.store.replaceSuggestions(
+			session.suggestions.map((suggestion) =>
+				suggestion.contributor.reviewerId !== profile.id
+					? suggestion
+					: {
+							...suggestion,
+							contributor: {
+								...suggestion.contributor,
+								displayName: profile.displayName,
+								kind: profile.kind,
+								model: profile.model,
+								provider: profile.provider,
+								reviewerType: profile.reviewerType,
+							},
+						},
+			),
+		);
+	}
+
+	private removeContributorFromActiveSession(reviewerId: string): void {
+		const session = this.store.getSession();
+		if (!session) {
+			return;
+		}
+
+		this.store.replaceSuggestions(
+			session.suggestions.map((suggestion) => {
+				const nextSuggestedReviewerIds = suggestion.contributor.suggestedReviewerIds.filter((value) => value !== reviewerId);
+				if (suggestion.contributor.reviewerId !== reviewerId) {
+					if (nextSuggestedReviewerIds.length === suggestion.contributor.suggestedReviewerIds.length) {
+						return suggestion;
+					}
+
+					return {
+						...suggestion,
+						contributor: {
+							...suggestion.contributor,
+							suggestedReviewerIds: nextSuggestedReviewerIds,
+						},
+					};
+				}
+
+				return {
+					...suggestion,
+					contributor: this.createUnresolvedContributor(suggestion.contributor.raw, nextSuggestedReviewerIds),
+				};
+			}),
+		);
+	}
+
+	private removeAllContributorsFromActiveSession(): void {
+		const session = this.store.getSession();
+		if (!session) {
+			return;
+		}
+
+		this.store.replaceSuggestions(
+			session.suggestions.map((suggestion) => ({
+				...suggestion,
+				contributor: this.createUnresolvedContributor(suggestion.contributor.raw, []),
+			})),
+		);
 	}
 
 	private createUnresolvedContributor(

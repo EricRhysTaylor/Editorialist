@@ -7,8 +7,10 @@ import {
 	getContributorStrengthDefinition,
 } from "../core/ContributorStrengths";
 import { getFrontmatterStringValues } from "../core/VaultScope";
+import type { ReviewSweepRegistryEntry } from "../models/ReviewImport";
 import type { SceneReviewRecord } from "../models/ReviewerProfile";
 import type EditorialistPlugin from "../main";
+import { openEditorialistChoiceModal } from "./EditorialistChoiceModal";
 
 export class EditorialistSettingTab extends PluginSettingTab {
 	private static readonly SETTINGS_DOCS_URL = "https://github.com/EricRhysTaylor/Editorialist#readme";
@@ -80,6 +82,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		if (!this.isRadialTimelineInstalled()) {
 			this.renderRadialTimelineCard(coreContent);
 		}
+		this.renderTrackingSection(coreContent, activeBook);
 		this.renderHero(coreContent, summary, inventory);
 		this.renderInventorySection(coreContent, inventory, activeBook.label);
 		this.renderActivitySection(coreContent, summary);
@@ -294,6 +297,89 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		card.createDiv({
 			cls: "editorialist-settings__rt-card-hint",
 			text: 'Find it in Community Plugins -> search "Radial Timeline"',
+		});
+	}
+
+	private renderTrackingSection(
+		parent: HTMLElement,
+		activeBook: { label: string | null; sourceFolder: string | null },
+	): void {
+		const summary = this.plugin.getTrackingIdentitySummary({ activeBookOnly: this.activeBookOnly });
+		const vocabulary = this.getInventoryVocabulary(activeBook);
+		const body = this.createSection(
+			parent,
+			"Tracking identity",
+			"Editorialist uses stable note identity to keep revision history attached to the right scene or note as your manuscript changes.",
+			"fingerprint",
+		);
+		body.parentElement?.addClass("editorialist-settings__section--utility");
+
+		const card = body.createDiv({ cls: "editorialist-settings__maintenance-card" });
+		const row = card.createDiv({ cls: "editorialist-settings__maintenance-row" });
+		const info = row.createDiv({ cls: "editorialist-settings__maintenance-info" });
+
+		const unitLabel = summary.trackedCount === 1 ? vocabulary.singularLabelLower : vocabulary.pluralLabelLower;
+		const trackedLabel = summary.trackedCount > 0 ? `${summary.trackedCount} tracked ${unitLabel}` : `No tracked ${unitLabel} yet`;
+
+		if (summary.mode === "radial-timeline") {
+			info.createDiv({
+				cls: "editorialist-settings__maintenance-title",
+				text: "Using Radial Timeline scene IDs",
+			});
+			info.createDiv({
+				cls: "editorialist-settings__maintenance-description",
+				text: "Editorialist is validating revision history against Radial Timeline scene IDs in the active book, so scene renames and reordering stay attached to the same scene.",
+			});
+			card.createDiv({
+				cls: "editorialist-settings__maintenance-note",
+				text: trackedLabel,
+			});
+			return;
+		}
+
+		if (summary.mode === "editorial-note-ids" || summary.mode === "frontmatter-ids") {
+			info.createDiv({
+				cls: "editorialist-settings__maintenance-title",
+				text: "Using stable note IDs",
+			});
+			info.createDiv({
+				cls: "editorialist-settings__maintenance-description",
+				text:
+					summary.mode === "editorial-note-ids"
+						? "Editorialist is using injected note IDs for rename-safe tracking, so note titles and folder moves do not split revision history."
+						: "Editorialist found stable note IDs in frontmatter, so note renames do not break revision history.",
+			});
+			card.createDiv({
+				cls: "editorialist-settings__maintenance-note",
+				text: trackedLabel,
+			});
+			return;
+		}
+
+		info.createDiv({
+			cls: "editorialist-settings__maintenance-title",
+			text: "Path-based tracking fallback",
+		});
+		info.createDiv({
+			cls: "editorialist-settings__maintenance-description",
+			text: "This vault is currently falling back to note paths. For accurate rename-safe tracking outside Radial Timeline, inject stable note IDs into tracked notes.",
+		});
+		const actions = row.createDiv({ cls: "editorialist-settings__maintenance-actions" });
+		this.createActionButton(actions, "fingerprint", "Inject stable note IDs", async () => {
+			const injectedCount = await this.plugin.injectStableNoteIdsIntoTrackedNotes(this.activeBookOnly);
+			void this.displayAsync(false);
+			new Notice(
+				injectedCount > 0
+					? `Injected stable note IDs into ${injectedCount} tracked ${injectedCount === 1 ? vocabulary.singularLabelLower : vocabulary.pluralLabelLower}.`
+					: "All tracked notes already had stable IDs.",
+			);
+		});
+		card.createDiv({
+			cls: "editorialist-settings__maintenance-note",
+			text:
+				summary.trackedCount > 0
+					? `${trackedLabel} · ${summary.missingCount} still depend on note paths.`
+					: `When you start tracking ${vocabulary.pluralLabelLower}, Editorialist can inject stable note IDs here.`,
 		});
 	}
 
@@ -708,7 +794,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			const manageIcon = manageButton.buttonEl.createSpan({ cls: "editorialist-settings__action-button-icon" });
 			setIcon(manageIcon, "ellipsis");
 
-			this.renderContributorUseIcons(footer, controls, profile);
+			this.renderContributorUseIcons(footer, profile);
 		}
 
 		const fillerCount = (3 - (profiles.length % 3)) % 3;
@@ -725,28 +811,51 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private renderMetadataSection(parent: HTMLElement): void {
 		const body = this.createSection(
 			parent,
-			"Backup",
-			"Save your reviewer history, revision activity, and scene progress without exporting manuscript text.",
-			"database-backup",
+			"Maintenance",
+			"Back up your contributor data, or reset the directory if you need to start fresh after testing or duplicate imports.",
+			"wrench",
 		);
 		body.parentElement?.addClass("editorialist-settings__section--utility");
-		const card = body.createDiv({ cls: "editorialist-settings__maintenance-card" });
-		card.createDiv({
+		const grid = body.createDiv({ cls: "editorialist-settings__maintenance-grid" });
+
+		const backupCard = grid.createDiv({ cls: "editorialist-settings__maintenance-card" });
+		backupCard.createDiv({
 			cls: "editorialist-settings__maintenance-title",
-			text: "Export Editorialist backup",
+			text: "Backup",
 		});
-		card.createDiv({
+		backupCard.createDiv({
 			cls: "editorialist-settings__maintenance-description",
 			text: "Create a backup file with reviewer profiles, alternate names, starred reviewers, revision history, and scene progress.",
 		});
-		const actions = card.createDiv({ cls: "editorialist-settings__maintenance-actions" });
-		this.createActionButton(actions, "download", "Export backup", async () => {
+		const backupActions = backupCard.createDiv({ cls: "editorialist-settings__maintenance-actions" });
+		this.createActionButton(backupActions, "download", "Export backup", async () => {
 			const path = await this.plugin.exportEditorialistMetadata();
 			new Notice(`Exported Editorialist metadata to ${path}.`);
 		});
-		card.createDiv({
+		backupCard.createDiv({
 			cls: "editorialist-settings__maintenance-note",
 			text: "You can keep this backup file and restore the data later if needed.",
+		});
+
+		const resetCard = grid.createDiv({ cls: "editorialist-settings__maintenance-card" });
+		resetCard.createDiv({
+			cls: "editorialist-settings__maintenance-title",
+			text: "Reset",
+		});
+		resetCard.createDiv({
+			cls: "editorialist-settings__maintenance-description",
+			text: "Delete contributor profiles and clear saved contributor stats when you need to unwind duplicate or throwaway contributor data.",
+		});
+		const resetActions = resetCard.createDiv({ cls: "editorialist-settings__maintenance-actions" });
+		this.createActionButton(resetActions, "users", "Delete all contributors", async () => {
+			const removedCount = await this.plugin.deleteAllContributors();
+			if (removedCount > 0) {
+				void this.displayAsync(false);
+			}
+		});
+		resetCard.createDiv({
+			cls: "editorialist-settings__maintenance-note",
+			text: "This clears the contributor directory and saved contributor stats, but leaves revision decisions and scene history in place.",
 		});
 	}
 
@@ -793,6 +902,108 @@ export class EditorialistSettingTab extends PluginSettingTab {
 					: `No completed ${vocabulary.pluralLabelLower} were ready for cleanup.`,
 			);
 		});
+
+		const historyCard = body.createDiv({ cls: "editorialist-settings__maintenance-card" });
+		const historyRow = historyCard.createDiv({
+			cls: "editorialist-settings__maintenance-row",
+		});
+		const historyInfo = historyRow.createDiv({
+			cls: "editorialist-settings__maintenance-info",
+		});
+		historyInfo.createDiv({
+			cls: "editorialist-settings__maintenance-title",
+			text: "Reset saved revision history",
+		});
+		historyInfo.createDiv({
+			cls: "editorialist-settings__maintenance-description",
+			text: "Use this if a pass was imported twice or you need to unwind saved stats. Imported review blocks still inside notes will be discovered again on the next sync.",
+		});
+		const historyActions = historyRow.createDiv({
+			cls: "editorialist-settings__maintenance-actions",
+		});
+		this.createActionButton(historyActions, "history", "Reset one batch", async () => {
+			await this.handleResetSingleBatch();
+		});
+		this.createActionButton(historyActions, "rotate-ccw", "Reset all history", async () => {
+			await this.handleResetAllHistory();
+		});
+		historyCard.createDiv({
+			cls: "editorialist-settings__maintenance-note",
+			text: "Resetting history clears Editorialist’s saved decisions and batch tracking, not the review blocks currently written into notes.",
+		});
+	}
+
+	private async handleResetSingleBatch(): Promise<void> {
+		const entries = this.plugin.getSweepRegistryEntries();
+		if (entries.length === 0) {
+			new Notice("No saved revision batches were found.");
+			return;
+		}
+
+		const batchId = await openEditorialistChoiceModal(this.app, {
+			title: "Reset one batch",
+			description: "Choose which imported revision pass to remove from saved Editorialist history.",
+			choices: entries.slice(0, 12).map((entry) => ({
+				label: this.formatSweepChoiceLabel(entry),
+				value: entry.batchId,
+			})),
+		});
+		if (!batchId) {
+			return;
+		}
+
+		const confirm = await openEditorialistChoiceModal(this.app, {
+			title: "Confirm reset",
+			description: "This removes the saved decisions and stats for that batch. Review blocks still present in notes will be discovered again.",
+			choices: [
+				{ label: "Reset batch", value: "reset" },
+				{ label: "Cancel", value: "cancel" },
+			],
+		});
+		if (confirm !== "reset") {
+			return;
+		}
+
+		const result = await this.plugin.resetBatchHistory(batchId);
+		void this.displayAsync(false);
+		new Notice(
+			result.removedDecisions > 0 || result.removedSignals > 0 || result.removedSweep
+				? "Reset saved history for that batch."
+				: "No saved history was found for that batch.",
+		);
+	}
+
+	private async handleResetAllHistory(): Promise<void> {
+		const confirm = await openEditorialistChoiceModal(this.app, {
+			title: "Reset all revision history",
+			description: "This clears Editorialist’s saved batch history and decision stats. Review blocks still present in notes will be discovered again.",
+			choices: [
+				{ label: "Reset all history", value: "reset" },
+				{ label: "Cancel", value: "cancel" },
+			],
+		});
+		if (confirm !== "reset") {
+			return;
+		}
+
+		const result = await this.plugin.resetAllRevisionHistory();
+		void this.displayAsync(false);
+		new Notice(
+			result.removedDecisions > 0 || result.removedSignals > 0 || result.removedSweeps > 0
+				? "Reset all saved revision history."
+				: "No saved revision history was found.",
+		);
+	}
+
+	private formatSweepChoiceLabel(entry: ReviewSweepRegistryEntry): string {
+		const dateLabel = new Date(entry.importedAt).toLocaleDateString(undefined, {
+			month: "short",
+			day: "numeric",
+		});
+		const sceneCount = entry.sceneOrder.length;
+		const sceneLabel = sceneCount === 1 ? "scene" : "scenes";
+		const statusLabel = entry.status === "in_progress" ? "In progress" : entry.status === "completed" ? "Complete" : "Cleaned";
+		return `${dateLabel} · ${entry.totalSuggestions} edits · ${sceneCount} ${sceneLabel} · ${statusLabel}`;
 	}
 
 	private createTab(parent: HTMLElement, id: "core" | "reviewer", icon: string, label: string): void {
@@ -1000,12 +1211,12 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 	private renderContributorUseIcons(
 		parent: HTMLElement,
-		controls: HTMLElement,
 		profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number],
 	): void {
+		const icons = parent.createDiv({ cls: "editorialist-settings__contributor-use-icons" });
 		const roleDefinition = CONTRIBUTOR_ROLE_DEFINITIONS.find((definition) => definition.value === profile.reviewerType);
 		if (roleDefinition) {
-			const roleIcon = controls.createSpan({
+			const roleIcon = icons.createSpan({
 				cls: "editorialist-settings__contributor-use-icon editorialist-settings__contributor-use-icon--role-button",
 				attr: {
 					"aria-label": roleDefinition.label,
@@ -1017,8 +1228,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		if ((profile.strengths?.length ?? 0) === 0) {
 			return;
 		}
-
-		const icons = parent.createDiv({ cls: "editorialist-settings__contributor-use-icons" });
 
 		for (const strength of profile.strengths ?? []) {
 			const definition = getContributorStrengthDefinition(strength);

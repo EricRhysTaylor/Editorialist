@@ -44,6 +44,15 @@ interface ReviewActivitySummary {
 	unresolved: number;
 }
 
+interface TrackingIdentitySummary {
+	editorialIdCount: number;
+	genericFrontmatterIdCount: number;
+	missingCount: number;
+	mode: "editorial-note-ids" | "frontmatter-ids" | "path-fallback" | "radial-timeline";
+	rtSceneIdCount: number;
+	trackedCount: number;
+}
+
 export class ReviewRegistryService {
 	private activeBookScope: ActiveBookScopeInfo = {
 		label: null,
@@ -186,6 +195,98 @@ export class ReviewRegistryService {
 		}
 
 		return records;
+	}
+
+	getTrackingIdentitySummary(options?: { activeBookOnly?: boolean }): TrackingIdentitySummary {
+		const records = this.getSceneReviewRecords(options).filter((record) => record.status !== "cleaned");
+		let editorialIdCount = 0;
+		let genericFrontmatterIdCount = 0;
+		let rtSceneIdCount = 0;
+		let missingCount = 0;
+
+		for (const record of records) {
+			const file = this.app.vault.getAbstractFileByPath(record.notePath);
+			if (!(file instanceof TFile)) {
+				missingCount += 1;
+				continue;
+			}
+
+			const frontmatter =
+				this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+			const editorialIds = getFrontmatterStringValues(frontmatter, [
+				"editorial_id",
+				"editorialId",
+				"EditorialId",
+			]);
+			const rtIds = getFrontmatterStringValues(frontmatter, [
+				"id",
+				"Id",
+				"ID",
+				"sceneid",
+				"sceneId",
+				"SceneId",
+				"scene_id",
+				"Scene_ID",
+			]);
+
+			if (editorialIds.length > 0) {
+				editorialIdCount += 1;
+				continue;
+			}
+
+			if (rtIds.length > 0) {
+				if (this.isRadialTimelineScene(record.notePath)) {
+					rtSceneIdCount += 1;
+				} else {
+					genericFrontmatterIdCount += 1;
+				}
+				continue;
+			}
+
+			missingCount += 1;
+		}
+
+		if (rtSceneIdCount > 0 && missingCount === 0 && genericFrontmatterIdCount === 0 && editorialIdCount === 0) {
+			return {
+				trackedCount: records.length,
+				rtSceneIdCount,
+				editorialIdCount,
+				genericFrontmatterIdCount,
+				missingCount,
+				mode: "radial-timeline",
+			};
+		}
+
+		if (editorialIdCount > 0 && missingCount === 0 && genericFrontmatterIdCount === 0 && rtSceneIdCount === 0) {
+			return {
+				trackedCount: records.length,
+				rtSceneIdCount,
+				editorialIdCount,
+				genericFrontmatterIdCount,
+				missingCount,
+				mode: "editorial-note-ids",
+			};
+		}
+
+		if (genericFrontmatterIdCount > 0 && missingCount === 0 && editorialIdCount === 0 && rtSceneIdCount === 0) {
+			return {
+				trackedCount: records.length,
+				rtSceneIdCount,
+				editorialIdCount,
+				genericFrontmatterIdCount,
+				missingCount,
+				mode: "frontmatter-ids",
+			};
+		}
+
+		return {
+			trackedCount: records.length,
+			rtSceneIdCount,
+			editorialIdCount,
+			genericFrontmatterIdCount,
+			missingCount,
+			mode: "path-fallback",
+		};
 	}
 
 	getReviewActivitySummary(reviewerProfiles: ReviewerProfile[]): ReviewActivitySummary {
@@ -707,6 +808,146 @@ export class ReviewRegistryService {
 		return 0;
 	}
 
+	async injectStableNoteIds(notePaths: string[]): Promise<number> {
+		const fileManager = this.app.fileManager as App["fileManager"] & {
+			processFrontMatter?: (
+				file: TFile,
+				fn: (frontmatter: Record<string, unknown>) => void,
+			) => Promise<void>;
+		};
+		if (!fileManager.processFrontMatter) {
+			return 0;
+		}
+
+		let injectedCount = 0;
+		for (const notePath of new Set(notePaths)) {
+			const file = this.app.vault.getAbstractFileByPath(notePath);
+			if (!(file instanceof TFile)) {
+				continue;
+			}
+
+			if (getSceneIdForFile(this.app, file)) {
+				continue;
+			}
+
+			await fileManager.processFrontMatter(file, (frontmatter) => {
+				const existingId = getFrontmatterStringValues(frontmatter, [
+					"id",
+					"Id",
+					"ID",
+					"editorial_id",
+					"editorialId",
+					"EditorialId",
+					"sceneid",
+					"sceneId",
+					"SceneId",
+					"scene_id",
+					"Scene_ID",
+				])[0];
+				if (existingId?.trim()) {
+					return;
+				}
+
+				frontmatter.editorial_id = this.createEditorialNoteId();
+				injectedCount += 1;
+			});
+		}
+
+		if (injectedCount > 0) {
+			await this.syncOperationalMetadata();
+		}
+
+		return injectedCount;
+	}
+
+	async resetBatchHistory(batchId: string): Promise<{ removedDecisions: number; removedSignals: number; removedSweep: boolean }> {
+		let removedDecisions = 0;
+		let removedSignals = 0;
+
+		for (const [key, record] of Object.entries(this.reviewDecisionIndex)) {
+			if (record.sessionId !== batchId) {
+				continue;
+			}
+
+			delete this.reviewDecisionIndex[key];
+			removedDecisions += 1;
+		}
+
+		for (const [key, record] of Object.entries(this.reviewerSignalIndex)) {
+			if (record.sessionId !== batchId) {
+				continue;
+			}
+
+			delete this.reviewerSignalIndex[key];
+			removedSignals += 1;
+		}
+
+		const removedSweep = Boolean(this.sweepRegistry[batchId]);
+		delete this.sweepRegistry[batchId];
+		this.rebuildReviewerStatsFromSignals();
+		await this.syncSceneInventory();
+
+		return {
+			removedDecisions,
+			removedSignals,
+			removedSweep,
+		};
+	}
+
+	async resetAllRevisionHistory(): Promise<{ removedDecisions: number; removedSignals: number; removedSweeps: number }> {
+		const removedDecisions = Object.keys(this.reviewDecisionIndex).length;
+		const removedSignals = Object.keys(this.reviewerSignalIndex).length;
+		const removedSweeps = Object.keys(this.sweepRegistry).length;
+
+		this.reviewDecisionIndex = {};
+		this.reviewerSignalIndex = {};
+		this.sweepRegistry = {};
+		this.rebuildReviewerStatsFromSignals();
+		await this.syncSceneInventory();
+
+		return {
+			removedDecisions,
+			removedSignals,
+			removedSweeps,
+		};
+	}
+
+	async removeReviewerSignalsByReviewerId(reviewerId: string, options?: { persist?: boolean }): Promise<number> {
+		let removedCount = 0;
+		for (const [key, record] of Object.entries(this.reviewerSignalIndex)) {
+			if (record.reviewerId !== reviewerId) {
+				continue;
+			}
+
+			delete this.reviewerSignalIndex[key];
+			removedCount += 1;
+		}
+
+		if (removedCount > 0) {
+			this.rebuildReviewerStatsFromSignals();
+			if (options?.persist !== false) {
+				await this.persistData();
+			}
+		}
+
+		return removedCount;
+	}
+
+	async clearAllReviewerSignals(options?: { persist?: boolean }): Promise<number> {
+		const removedCount = Object.keys(this.reviewerSignalIndex).length;
+		if (removedCount === 0) {
+			return 0;
+		}
+
+		this.reviewerSignalIndex = {};
+		this.rebuildReviewerStatsFromSignals();
+		if (options?.persist !== false) {
+			await this.persistData();
+		}
+
+		return removedCount;
+	}
+
 	buildMetadataExport(reviewerProfiles: ReviewerProfile[]): EditorialistMetadataExport {
 		return {
 			schemaVersion: "2.0.0",
@@ -1140,5 +1381,9 @@ export class ReviewRegistryService {
 
 	private sameJsonValue(left: unknown, right: unknown): boolean {
 		return JSON.stringify(left) === JSON.stringify(right);
+	}
+
+	private createEditorialNoteId(): string {
+		return `edt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 	}
 }

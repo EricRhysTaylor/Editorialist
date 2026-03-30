@@ -1,4 +1,5 @@
 import {
+	canonicalizeModelName,
 	deriveContributorIdentitySeed,
 	normalizeContributorValue,
 	reviewerTypeToKind,
@@ -182,6 +183,82 @@ export class ReviewerDirectory {
 		return profile;
 	}
 
+	updateProfile(
+		reviewerId: string,
+		updates: {
+			displayName: string;
+			reviewerType: ReviewerType;
+			strengths: ContributorStrength[];
+		},
+	): ReviewerProfile | null {
+		const profile = this.getProfileById(reviewerId);
+		if (!profile) {
+			return null;
+		}
+
+		const trimmedDisplayName = updates.displayName.trim();
+		if (!trimmedDisplayName) {
+			return null;
+		}
+
+		const nextKind = reviewerTypeToKind(updates.reviewerType);
+		const nextDisplayName = nextKind === "ai"
+			? canonicalizeModelName(trimmedDisplayName) ?? trimmedDisplayName
+			: trimmedDisplayName;
+		const conflictingProfile = this.profiles.find(
+			(candidate) =>
+				candidate.id !== reviewerId &&
+				this.normalizeValue(candidate.displayName) === this.normalizeValue(nextDisplayName),
+		);
+		if (conflictingProfile) {
+			return null;
+		}
+
+		const nextAliases = [...profile.aliases];
+		if (
+			this.normalizeValue(profile.displayName) !== this.normalizeValue(nextDisplayName) &&
+			!nextAliases.some((alias) => this.normalizeValue(alias) === this.normalizeValue(profile.displayName))
+		) {
+			nextAliases.push(profile.displayName);
+		}
+
+		const normalizedAliases: string[] = [];
+		for (const alias of nextAliases) {
+			const trimmedAlias = alias.trim();
+			if (!trimmedAlias || this.normalizeValue(trimmedAlias) === this.normalizeValue(nextDisplayName)) {
+				continue;
+			}
+			if (normalizedAliases.some((existing) => this.normalizeValue(existing) === this.normalizeValue(trimmedAlias))) {
+				continue;
+			}
+			normalizedAliases.push(trimmedAlias);
+		}
+
+		const nextStrengths = this.normalizeStrengths(updates.strengths);
+		const currentStrengths = this.normalizeStrengths(profile.strengths ?? []);
+		const nextModel = nextKind === "ai" ? nextDisplayName : profile.model;
+		const didChange = profile.displayName !== nextDisplayName
+			|| profile.reviewerType !== updates.reviewerType
+			|| profile.kind !== nextKind
+			|| profile.model !== nextModel
+			|| JSON.stringify(currentStrengths) !== JSON.stringify(nextStrengths)
+			|| JSON.stringify(profile.aliases.map((alias) => this.normalizeValue(alias)))
+				!== JSON.stringify(normalizedAliases.map((alias) => this.normalizeValue(alias)));
+		if (!didChange) {
+			return profile;
+		}
+
+		profile.displayName = nextDisplayName;
+		profile.kind = nextKind;
+		profile.reviewerType = updates.reviewerType;
+		profile.aliases = normalizedAliases;
+		profile.model = nextModel;
+		profile.strengths = nextStrengths.length > 0 ? nextStrengths : undefined;
+		profile.updatedAt = Date.now();
+		this.didChange = true;
+		return profile;
+	}
+
 	setStrengths(reviewerId: string, strengths: ContributorStrength[]): ReviewerProfile | null {
 		const profile = this.getProfileById(reviewerId);
 		if (!profile) {
@@ -227,6 +304,28 @@ export class ReviewerDirectory {
 		profile.updatedAt = Date.now();
 		this.didChange = true;
 		return profile;
+	}
+
+	deleteProfile(reviewerId: string): ReviewerProfile | null {
+		const profile = this.getProfileById(reviewerId);
+		if (!profile) {
+			return null;
+		}
+
+		this.profiles = this.profiles.filter((candidate) => candidate.id !== reviewerId);
+		this.didChange = true;
+		return profile;
+	}
+
+	clearProfiles(): number {
+		const removedCount = this.profiles.length;
+		if (removedCount === 0) {
+			return 0;
+		}
+
+		this.profiles = [];
+		this.didChange = true;
+		return removedCount;
 	}
 
 	setStats(reviewerId: string, stats: ReviewerStats): ReviewerProfile | null {
