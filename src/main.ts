@@ -1045,6 +1045,7 @@ export default class EditorialistPlugin extends Plugin {
 
 	async resetBatchHistory(batchId: string): Promise<{ removedDecisions: number; removedSignals: number; removedSweep: boolean }> {
 		const result = await this.registry.resetBatchHistory(batchId);
+		await this.savePluginData();
 		this.resyncSessionForActiveNote();
 		this.refreshReviewPanel();
 		return result;
@@ -1052,6 +1053,10 @@ export default class EditorialistPlugin extends Plugin {
 
 	async resetAllRevisionHistory(): Promise<{ removedDecisions: number; removedSignals: number; removedSweeps: number }> {
 		const result = await this.registry.resetAllRevisionHistory();
+		await this.closeActiveReviewContext();
+		this.store.setGuidedSweep(null);
+		this.store.acknowledgeCompletedSweep(null);
+		await this.savePluginData();
 		this.resyncSessionForActiveNote();
 		this.refreshReviewPanel();
 		return result;
@@ -1237,9 +1242,15 @@ export default class EditorialistPlugin extends Plugin {
 			return null;
 		}
 
-		const summary = this.getReviewActivitySummary();
-		const remainingCount = summary.pending + summary.unresolved + summary.deferred;
-		if (remainingCount > 0 || summary.inProgressSweeps > 0) {
+		const activeSceneRecords = this.getSceneReviewRecords().filter((record) => record.batchCount > 0);
+		const remainingCount = activeSceneRecords.reduce(
+			(total, record) => total + record.pendingCount + record.unresolvedCount + record.deferredCount,
+			0,
+		);
+		const inProgressSweeps = this.registry
+			.getSweepRegistryEntries()
+			.filter((entry) => entry.status === "in_progress").length;
+		if (remainingCount > 0 || inProgressSweeps > 0) {
 			return null;
 		}
 
@@ -1275,10 +1286,10 @@ export default class EditorialistPlugin extends Plugin {
 			title: "Manage contributor",
 			description: `Choose how to update ${profile.displayName}.`,
 			choices: [
-				{ label: "Edit contributor", value: "strengths" },
-				{ label: "Reassign contributor", value: "reassign" },
-				{ label: "Merge into another contributor", value: "merge" },
-				{ label: "Delete contributor", value: "delete" },
+				{ label: "Edit", value: "strengths" },
+				{ label: "Reassign", value: "reassign" },
+				{ label: "Merge", value: "merge" },
+				{ label: "Delete", value: "delete" },
 			],
 		});
 		if (!action) {
@@ -1785,11 +1796,14 @@ export default class EditorialistPlugin extends Plugin {
 			};
 		}
 
+		const hasActiveTrackedBatches = this.getSceneReviewRecords().some((record) => record.batchCount > 0);
+
 		const batchId = this.registry.resolveCurrentBatchId(this.store.getGuidedSweep()?.batchId ?? null, context.text);
 		const entry = this.registry.getSweepRegistryEntry(batchId ?? undefined);
 		const notePaths = entry ? (entry.sceneOrder.length > 0 ? entry.sceneOrder : entry.importedNotePaths) : [];
 		const currentIndex = notePaths.findIndex((path) => path === context.filePath);
-		const nextNotePath = currentIndex === -1 ? undefined : notePaths[currentIndex + 1];
+		const nextNotePath =
+			hasActiveTrackedBatches && currentIndex !== -1 ? notePaths[currentIndex + 1] : undefined;
 
 		return {
 			currentNoteHasReviewBlock: true,
@@ -2742,8 +2756,9 @@ export default class EditorialistPlugin extends Plugin {
 			return null;
 		}
 
-		const summary = this.getReviewActivitySummary();
-		const remainingCount = summary.pending + summary.unresolved + summary.deferred;
+		const remainingCount = this.getSceneReviewRecords()
+			.filter((record) => record.batchCount > 0)
+			.reduce((total, record) => total + record.pendingCount + record.unresolvedCount + record.deferredCount, 0);
 		if (remainingCount > 0) {
 			return null;
 		}

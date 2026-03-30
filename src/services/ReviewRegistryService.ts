@@ -289,43 +289,30 @@ export class ReviewRegistryService {
 		};
 	}
 
-	getReviewActivitySummary(reviewerProfiles: ReviewerProfile[]): ReviewActivitySummary {
-		const sceneTotals = this.getSceneReviewRecords().reduce(
-			(totals, record) => {
-				totals.totalSuggestions +=
-					record.pendingCount +
-					record.unresolvedCount +
-					record.deferredCount +
-					record.acceptedCount +
-					record.rejectedCount +
-					record.rewrittenCount;
-				totals.accepted += record.acceptedCount;
-				totals.deferred += record.deferredCount;
-				totals.pending += record.pendingCount;
-				totals.rejected += record.rejectedCount;
-				totals.rewritten += record.rewrittenCount;
-				totals.unresolved += record.unresolvedCount;
-				return totals;
-			},
-			{
-				totalSuggestions: 0,
-				accepted: 0,
-				deferred: 0,
-				pending: 0,
-				rejected: 0,
-				rewritten: 0,
-				unresolved: 0,
-			},
-		);
-		const reviewerTotals = reviewerProfiles.reduce(
+	getReviewActivitySummary(_reviewerProfiles: ReviewerProfile[]): ReviewActivitySummary {
+		const signalTotals = Object.values(this.reviewerSignalIndex).reduce(
 			(totals, profile) => {
-				totals.totalSuggestions += profile.stats?.totalSuggestions ?? 0;
-				totals.accepted += profile.stats?.accepted ?? 0;
-				totals.pending += profile.stats?.pending ?? 0;
-				totals.deferred += profile.stats?.deferred ?? 0;
-				totals.rejected += profile.stats?.rejected ?? 0;
-				totals.rewritten += profile.stats?.rewritten ?? 0;
-				totals.unresolved += profile.stats?.unresolved ?? 0;
+				totals.totalSuggestions += 1;
+				switch (profile.status) {
+					case "accepted":
+						totals.accepted += 1;
+						break;
+					case "pending":
+						totals.pending += 1;
+						break;
+					case "deferred":
+						totals.deferred += 1;
+						break;
+					case "rejected":
+						totals.rejected += 1;
+						break;
+					case "rewritten":
+						totals.rewritten += 1;
+						break;
+					case "unresolved":
+						totals.unresolved += 1;
+						break;
+				}
 				return totals;
 			},
 			{
@@ -339,11 +326,10 @@ export class ReviewRegistryService {
 			},
 		);
 		const entries = this.getSweepRegistryEntries();
-		const totals = sceneTotals.totalSuggestions > 0 ? sceneTotals : reviewerTotals;
 
 		return {
-			...totals,
-			processed: totals.accepted + totals.rejected + totals.rewritten,
+			...signalTotals,
+			processed: signalTotals.accepted + signalTotals.rejected + signalTotals.rewritten,
 			totalSweeps: entries.length,
 			inProgressSweeps: entries.filter((entry) => entry.status === "in_progress").length,
 			completedSweeps: entries.filter((entry) => entry.status === "completed").length,

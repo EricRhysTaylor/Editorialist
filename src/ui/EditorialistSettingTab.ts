@@ -82,10 +82,10 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		if (!this.isRadialTimelineInstalled()) {
 			this.renderRadialTimelineCard(coreContent);
 		}
-		this.renderTrackingSection(coreContent, activeBook);
 		this.renderHero(coreContent, summary, inventory);
 		this.renderInventorySection(coreContent, inventory, activeBook.label);
 		this.renderActivitySection(coreContent, summary);
+		this.renderTrackingSection(coreContent, activeBook);
 		this.renderMaintenanceSection(coreContent, activeBook.label);
 
 		this.renderContributorsHero(reviewerContent);
@@ -306,13 +306,13 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	): void {
 		const summary = this.plugin.getTrackingIdentitySummary({ activeBookOnly: this.activeBookOnly });
 		const vocabulary = this.getInventoryVocabulary(activeBook);
+		const hasRtTrackingContext = this.isRadialTimelineInstalled() && Boolean(activeBook.label && activeBook.sourceFolder);
 		const body = this.createSection(
 			parent,
-			"Tracking identity",
+			vocabulary.hasStructuredRtContext ? "Tracking scenes" : "Tracking notes",
 			"Editorialist uses stable note identity to keep revision history attached to the right scene or note as your manuscript changes.",
 			"fingerprint",
 		);
-		body.parentElement?.addClass("editorialist-settings__section--utility");
 
 		const card = body.createDiv({ cls: "editorialist-settings__maintenance-card" });
 		const row = card.createDiv({ cls: "editorialist-settings__maintenance-row" });
@@ -321,18 +321,31 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const unitLabel = summary.trackedCount === 1 ? vocabulary.singularLabelLower : vocabulary.pluralLabelLower;
 		const trackedLabel = summary.trackedCount > 0 ? `${summary.trackedCount} tracked ${unitLabel}` : `No tracked ${unitLabel} yet`;
 
-		if (summary.mode === "radial-timeline") {
+		if (hasRtTrackingContext) {
 			info.createDiv({
 				cls: "editorialist-settings__maintenance-title",
-				text: "Using Radial Timeline scene IDs",
+				text: "Radial Timeline based tracking",
 			});
 			info.createDiv({
 				cls: "editorialist-settings__maintenance-description",
-				text: "Editorialist is validating revision history against Radial Timeline scene IDs in the active book, so scene renames and reordering stay attached to the same scene.",
+				text: "Radial Timeline gives Editorialist stable scene IDs in the active book, so revision history stays attached to the right scene even when titles change or scenes are reordered.",
+			});
+			const actions = row.createDiv({ cls: "editorialist-settings__maintenance-actions" });
+			const badge = actions.createDiv({
+				cls: "editorialist-settings__tracking-badge editorialist-settings__tracking-badge--rt",
+			});
+			const badgeIcon = badge.createSpan({ cls: "editorialist-settings__tracking-badge-icon" });
+			setIcon(badgeIcon, "shell");
+			badge.createSpan({
+				cls: "editorialist-settings__tracking-badge-label",
+				text: "Radial Timeline",
 			});
 			card.createDiv({
 				cls: "editorialist-settings__maintenance-note",
-				text: trackedLabel,
+				text:
+					summary.trackedCount > 0
+						? trackedLabel
+						: "When scenes are tracked in this book, Editorialist will validate them against Radial Timeline scene IDs.",
 			});
 			return;
 		}
@@ -398,10 +411,52 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			text: "See what remains in the current revision pass and whether there is an active sweep in progress.",
 		});
 
-		const processedCount = Math.max(0, summary.processed);
-		const completionRatio = summary.totalSuggestions > 0 ? processedCount / summary.totalSuggestions : 0;
-		const remainingCount = summary.pending + summary.unresolved + summary.deferred;
 		const trackedScenes = inventory.filter((record) => record.batchCount > 0);
+		const currentSummary = trackedScenes.reduce(
+			(totals, record) => {
+				totals.totalSuggestions +=
+					record.pendingCount +
+					record.unresolvedCount +
+					record.deferredCount +
+					record.acceptedCount +
+					record.rejectedCount +
+					record.rewrittenCount;
+				totals.pending += record.pendingCount;
+				totals.unresolved += record.unresolvedCount;
+				totals.deferred += record.deferredCount;
+				totals.accepted += record.acceptedCount;
+				totals.rejected += record.rejectedCount;
+				totals.rewritten += record.rewrittenCount;
+				return totals;
+			},
+			{
+				totalSuggestions: 0,
+				pending: 0,
+				unresolved: 0,
+				deferred: 0,
+				accepted: 0,
+				rejected: 0,
+				rewritten: 0,
+			},
+		);
+		const processedCount = Math.max(
+			0,
+			currentSummary.accepted + currentSummary.rejected + currentSummary.rewritten,
+		);
+		const completionRatio = currentSummary.totalSuggestions > 0 ? processedCount / currentSummary.totalSuggestions : 0;
+		const remainingCount = currentSummary.pending + currentSummary.unresolved + currentSummary.deferred;
+		const currentRevisionStatus = {
+			...summary,
+			totalSuggestions: currentSummary.totalSuggestions,
+			pending: currentSummary.pending,
+			unresolved: currentSummary.unresolved,
+			deferred: currentSummary.deferred,
+			accepted: currentSummary.accepted,
+			rejected: currentSummary.rejected,
+			rewritten: currentSummary.rewritten,
+			processed: processedCount,
+			inProgressSweeps: trackedScenes.length > 0 ? summary.inProgressSweeps : 0,
+		};
 		const heroBody = hero.createDiv({ cls: "editorialist-settings__hero-body" });
 		const progressCard = heroBody.createDiv({ cls: "editorialist-settings__hero-progress" });
 		const ring = progressCard.createDiv({ cls: "editorialist-settings__hero-ring" });
@@ -414,7 +469,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			ring.style.removeProperty("--editorialist-settings-scene-gradient");
 			ring.removeClass("editorialist-settings__hero-ring--has-scene-slices");
 		}
-		ring.createDiv({ cls: "editorialist-settings__hero-ring-value", text: `${processedCount}/${summary.totalSuggestions}` });
+		ring.createDiv({ cls: "editorialist-settings__hero-ring-value", text: `${processedCount}/${currentSummary.totalSuggestions}` });
 		progressCard.createDiv({
 			cls: "editorialist-settings__hero-progress-title",
 			text: "Revisions processed",
@@ -422,11 +477,11 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		progressCard.createDiv({
 			cls: "editorialist-settings__hero-progress-detail",
 			text:
-				summary.totalSuggestions === 0
+				currentSummary.totalSuggestions === 0
 					? "No revision notes imported yet"
 					: remainingCount === 0
-						? summary.rewritten > 0
-							? `Current revision complete · ${summary.rewritten} rewritten by the author`
+						? currentSummary.rewritten > 0
+							? `Current revision complete · ${currentSummary.rewritten} rewritten by the author`
 							: "Current revision complete"
 						: "Current revision progress",
 		});
@@ -437,10 +492,10 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			"Remaining",
 			`${remainingCount}`,
 			remainingCount > 0
-				? `${summary.pending} pending · ${summary.unresolved} unresolved · ${summary.deferred} deferred`
+				? `${currentSummary.pending} pending · ${currentSummary.unresolved} unresolved · ${currentSummary.deferred} deferred`
 				: "All revision notes in this pass are resolved",
 		);
-		this.createHeroMetric(summaryGrid, "Current sweep", ...this.getCurrentRevisionStatus(summary, remainingCount));
+		this.createHeroMetric(summaryGrid, "Current sweep", ...this.getCurrentRevisionStatus(currentRevisionStatus, remainingCount));
 	}
 
 	private renderActivitySection(
@@ -811,9 +866,9 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private renderMetadataSection(parent: HTMLElement): void {
 		const body = this.createSection(
 			parent,
-			"Maintenance",
-			"Back up your contributor data, or reset the directory if you need to start fresh after testing or duplicate imports.",
-			"wrench",
+			"Backup",
+			"Save your reviewer history, revision activity, and scene progress without exporting manuscript text.",
+			"database-backup",
 		);
 		body.parentElement?.addClass("editorialist-settings__section--utility");
 		const grid = body.createDiv({ cls: "editorialist-settings__maintenance-grid" });
