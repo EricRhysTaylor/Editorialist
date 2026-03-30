@@ -64,8 +64,8 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			this.renderRadialTimelineCard(coreContent);
 		}
 		this.renderHero(coreContent, summary, inventory);
-		this.renderActivitySection(coreContent, summary);
 		this.renderInventorySection(coreContent, inventory, activeBook.label);
+		this.renderActivitySection(coreContent, summary);
 		this.renderMaintenanceSection(coreContent, activeBook.label);
 
 		this.renderContributorsHero(reviewerContent);
@@ -288,15 +288,16 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const hero = parent.createDiv({
 			cls: "editorialist-settings__hero editorialist-settings__panel",
 		});
-		const titleRow = this.createSectionTitleRow(hero, "pie-chart", "Editorial progress");
+		const titleRow = this.createSectionTitleRow(hero, "pie-chart", "Current revision");
 		titleRow.addClass("editorialist-settings__section-title-row--hero");
 		hero.createDiv({
 			cls: "editorialist-settings__hero-subtitle",
-			text: "Keep the active queue, completed sweeps, and long-term review metadata in one calm operational view.",
+			text: "See what remains in the current revision pass and whether there is an active sweep in progress.",
 		});
 
 		const processedCount = Math.max(0, summary.processed);
 		const completionRatio = summary.totalSuggestions > 0 ? processedCount / summary.totalSuggestions : 0;
+		const remainingCount = summary.pending + summary.unresolved + summary.deferred;
 		const trackedScenes = inventory.filter((record) => record.batchCount > 0);
 		const heroBody = hero.createDiv({ cls: "editorialist-settings__hero-body" });
 		const progressCard = heroBody.createDiv({ cls: "editorialist-settings__hero-progress" });
@@ -317,20 +318,19 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 		progressCard.createDiv({
 			cls: "editorialist-settings__hero-progress-detail",
-			text: summary.totalSuggestions > 0
-				? `${summary.pending} pending · ${summary.unresolved} unresolved · ${summary.deferred} deferred`
-				: "No review activity yet",
+			text: summary.totalSuggestions > 0 ? "Current revision progress" : "No revision notes imported yet",
 		});
 
 		const summaryGrid = heroBody.createDiv({ cls: "editorialist-settings__hero-summary" });
-		this.createHeroMetric(summaryGrid, "Sweeps", `${summary.totalSweeps}`, `${summary.inProgressSweeps} in progress`);
-		this.createHeroMetric(summaryGrid, "Accepted", `${summary.accepted}`, `${summary.rejected} rejected`);
 		this.createHeroMetric(
 			summaryGrid,
-			"Queue",
-			`${summary.pending + summary.unresolved}`,
-			`${summary.pending} pending · ${summary.unresolved} unresolved`,
+			"Remaining",
+			`${remainingCount}`,
+			remainingCount > 0
+				? `${summary.pending} pending · ${summary.unresolved} unresolved · ${summary.deferred} deferred`
+				: "All revision notes in this pass are resolved",
 		);
+		this.createHeroMetric(summaryGrid, "Current sweep", ...this.getCurrentRevisionStatus(summary, remainingCount));
 	}
 
 	private renderActivitySection(
@@ -339,21 +339,20 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	): void {
 		const body = this.createSection(
 			parent,
-			"Review activity",
-			"Imported sweeps and manuscript decisions across Editorialist.",
+			"Revision history",
+			"See how many revision notes have been reviewed over time and how many sweeps have been completed.",
 			"activity",
 		);
 		const cards = body.createDiv({ cls: "editorialist-settings__stats" });
 
-		this.createStatCard(cards, "Sweeps", `${summary.totalSweeps}`, `${summary.inProgressSweeps} in progress`);
-		this.createStatCard(cards, "Completed", `${summary.completedSweeps}`, `${summary.cleanedSweeps} cleaned`);
-		this.createStatCard(cards, "Suggestions", `${summary.totalSuggestions}`, `${summary.accepted} accepted`);
 		this.createStatCard(
 			cards,
-			"Queue",
-			`${summary.pending + summary.unresolved}`,
-			`${summary.pending} pending · ${summary.unresolved} unresolved`,
+			"Total suggestions",
+			`${summary.totalSuggestions}`,
+			"Across all revision passes",
 		);
+		this.createStatCard(cards, "Accepted / Rejected", `${summary.accepted} / ${summary.rejected}`, "Accepted · Rejected");
+		this.createStatCard(cards, "Completed sweeps", `${summary.completedSweeps}`, `${summary.totalSweeps} total imported`);
 	}
 
 	private renderInventorySection(
@@ -617,7 +616,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const body = this.createSection(
 			parent,
 			"Maintenance",
-			"Use Maintenance to keep your vault tidy while preserving your long-term revision history. A simple workflow is to clean imported review blocks after a scene is done, then leave the history in place so Editorialist can keep tracking how each revision session unfolded over time. None of these actions modify your manuscript text.",
+			"Use Maintenance to keep your notes clean while preserving your revision history. A common workflow is to remove review blocks after finishing a scene, while keeping the underlying history so you can track how revisions evolved over time. Editorialist adds and removes review blocks inside your notes, but your actual writing is only changed when you accept edits.",
 			"wrench",
 		);
 		body.parentElement?.addClass("editorialist-settings__section--maintenance");
@@ -631,8 +630,8 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		cleanupInfo.createDiv({
 			cls: "editorialist-settings__maintenance-description",
 			text: activeBookLabel
-				? `Remove Editorialist's imported review blocks from ${vocabulary.pluralLabelLower} in the active ${vocabulary.scopeLabel}.`
-				: `Remove Editorialist's imported review blocks from ${vocabulary.pluralLabelLower} in the current ${vocabulary.scopeLabel}.`,
+				? "Remove Editorialist review blocks from scenes in the active book."
+				: "Remove Editorialist review blocks from notes in the current vault.",
 		});
 
 		const cleanupActions = cleanupRow.createDiv({ cls: "editorialist-settings__maintenance-actions" });
@@ -747,6 +746,28 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			void onClick();
 		});
 		return button;
+	}
+
+	private getCurrentRevisionStatus(
+		summary: ReturnType<EditorialistPlugin["getReviewActivitySummary"]>,
+		remainingCount: number,
+	): [string, string] {
+		if (remainingCount === 0 && summary.totalSuggestions > 0) {
+			return ["Complete", "No revision notes remain"];
+		}
+
+		if (summary.inProgressSweeps > 0) {
+			return [
+				"In progress",
+				`${summary.inProgressSweeps} active sweep${summary.inProgressSweeps === 1 ? "" : "s"}`,
+			];
+		}
+
+		if (remainingCount > 0) {
+			return ["Ready", "Revision notes remain to review"];
+		}
+
+		return ["Idle", "No active sweep right now"];
 	}
 
 	private formatContributorStats(profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number]): string {
