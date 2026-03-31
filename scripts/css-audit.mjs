@@ -4,7 +4,7 @@ import path from "node:path";
 const ROOT = process.cwd();
 const CSS_FILES = collectCssFiles(ROOT);
 
-const ALLOWED_ROOT_CLASSES = [".editorialist-", ".ert-"];
+const ALLOWED_ROOT_CLASSES = [".editorialist-", ".ert-", ".rt-", ".radial-timeline-"];
 
 const DISALLOWED_BARE_SELECTORS = new Set([
 	"button",
@@ -108,6 +108,9 @@ function checkUnprefixedClasses(file, selector) {
 			className.startsWith(".editorialist-") ||
 			className.startsWith(".ert-") ||
 			className.startsWith(".is-") ||
+			className.startsWith(".has-") ||
+			className.startsWith(".rt-") ||
+			className.startsWith(".radial-timeline-") ||
 			className.startsWith(".mod-") ||
 			className.startsWith(".theme-")
 		) {
@@ -121,7 +124,7 @@ function checkUnprefixedClasses(file, selector) {
 		fail(
 			file,
 			selector,
-			`Unprefixed class "${className}" found. Editorialist-owned classes must use the "editorialist-" prefix, or the canonical "ert-" archetype prefix.`,
+			`Unapproved class "${className}" found. Use an approved namespace such as "editorialist-", "ert-", legacy "rt-"/"radial-timeline-", or state prefixes "is-"/"has-".`,
 		);
 	}
 }

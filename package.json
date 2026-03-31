@@ -6,14 +6,15 @@
 	"type": "module",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
-		"build": "node esbuild.config.mjs production && npm run copy:dev && node scripts/backup-if-stale.mjs",
+		"build": "npm run css-check && npm run css-audit && npm run qa-audit && node esbuild.config.mjs production && npm run copy:dev && node scripts/backup-if-stale.mjs",
 		"copy:dev": "node scripts/copy-to-vault.mjs",
 		"build:dev": "npm run build",
 		"typecheck": "tsc --noEmit",
 		"lint": "eslint \"src/**/*.ts\"",
 		"css-check": "stylelint \"**/*.css\" --allow-empty-input",
 		"css-audit": "node scripts/css-audit.mjs",
-		"check": "npm run typecheck && npm run lint && npm run css-check && npm run css-audit",
+		"qa-audit": "node scripts/qa-audit.mjs",
+		"check": "npm run typecheck && npm run lint && npm run css-check && npm run css-audit && npm run qa-audit",
 		"backup": "npm run check && node scripts/backup.mjs",
 		"backup:msg": "npm run check && node scripts/backup.mjs"
 	},

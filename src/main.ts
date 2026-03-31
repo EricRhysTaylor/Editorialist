@@ -65,6 +65,7 @@ interface LastAppliedChange {
 	notePath: string;
 	start: number;
 	suggestionId: string;
+	textFingerprint: string;
 }
 
 interface GuidedSweepHandoffState {
@@ -883,6 +884,7 @@ export default class EditorialistPlugin extends Plugin {
 			end: appliedEnd,
 			notePath: context.filePath,
 			suggestionId: suggestion.id,
+			textFingerprint: this.getNoteTextFingerprint(context.view.editor.getValue()),
 		};
 		if (options?.syncSceneInventory !== false) {
 			await this.registry.syncSceneInventory();
@@ -1677,7 +1679,7 @@ export default class EditorialistPlugin extends Plugin {
 
 	canUndoLastAppliedSuggestion(): boolean {
 		const context = this.getReviewNoteContext();
-		return Boolean(this.lastAppliedChange && context && context.filePath === this.lastAppliedChange.notePath);
+		return this.hasCurrentLastAppliedChangeForContext(context);
 	}
 
 	canApplyAndReviewSceneSuggestions(): boolean {
@@ -1687,11 +1689,11 @@ export default class EditorialistPlugin extends Plugin {
 
 	private shouldShowUndoForSelectedSuggestion(selectedId: string): boolean {
 		const context = this.getReviewNoteContext();
+		const change = this.lastAppliedChange;
 		return Boolean(
-			this.lastAppliedChange &&
-			context &&
-			context.filePath === this.lastAppliedChange.notePath &&
-			this.lastAppliedChange.suggestionId === selectedId,
+			change &&
+			this.hasCurrentLastAppliedChangeForContext(context) &&
+			change.suggestionId === selectedId,
 		);
 	}
 
@@ -1920,7 +1922,7 @@ export default class EditorialistPlugin extends Plugin {
 			return {
 				mode: "bulk_confirm",
 				countLabel: `${count} ${count === 1 ? "change" : "changes"}`,
-				title: "Apply and review all?",
+				title: "Apply to all?",
 			};
 		}
 
@@ -2050,6 +2052,10 @@ export default class EditorialistPlugin extends Plugin {
 			this.activeHighlightTone = "active";
 			this.lastAppliedChange = null;
 			return;
+		}
+
+		if (!this.hasCurrentLastAppliedChangeForContext(context)) {
+			this.lastAppliedChange = null;
 		}
 
 		const refreshedSession = this.reviewEngine.buildSession(context.filePath, context.text, session);
@@ -2527,7 +2533,12 @@ export default class EditorialistPlugin extends Plugin {
 	private getAcceptedReviewPreviewState(session?: ReviewSession | null): AcceptedReviewPreviewState | null {
 		const targetSession = session ?? this.getReviewSession();
 		const selectedSuggestion = this.store.getSelectedSuggestion();
-		if (!targetSession || !selectedSuggestion || !this.isAcceptedReviewSuggestion(selectedSuggestion)) {
+		if (
+			!targetSession ||
+			!selectedSuggestion ||
+			!this.isAcceptedReviewSuggestion(selectedSuggestion) ||
+			!this.shouldShowUndoForSelectedSuggestion(selectedSuggestion.id)
+		) {
 			return null;
 		}
 
@@ -2689,6 +2700,23 @@ export default class EditorialistPlugin extends Plugin {
 
 	private isAcceptedReviewSuggestion(suggestion: ReviewSuggestion): boolean {
 		return suggestion.status === "accepted" && this.hasRevealableAcceptedRange(suggestion);
+	}
+
+	private hasCurrentLastAppliedChangeForContext(context?: ActiveNoteContext | null): boolean {
+		if (!this.lastAppliedChange || !context || context.filePath !== this.lastAppliedChange.notePath) {
+			return false;
+		}
+
+		return this.getNoteTextFingerprint(context.text) === this.lastAppliedChange.textFingerprint;
+	}
+
+	private getNoteTextFingerprint(text: string): string {
+		let hash = 5381;
+		for (let index = 0; index < text.length; index += 1) {
+			hash = ((hash << 5) + hash) ^ text.charCodeAt(index);
+		}
+
+		return `${text.length}:${hash >>> 0}`;
 	}
 
 	private isCompletedReviewSuggestion(suggestion: ReviewSuggestion): boolean {
@@ -3055,13 +3083,13 @@ export default class EditorialistPlugin extends Plugin {
 
 		if (this.toolbarOverlayState.mode === "review" || this.toolbarOverlayState.mode === "applied_review") {
 			if (!this.activeHighlightRange) {
-				this.toolbarOverlayEl.style.display = "none";
+				this.toolbarOverlayEl.classList.add("is-hidden");
 				return;
 			}
 
 			const coords = this.toolbarOverlayEditorView.coordsAtPos(this.activeHighlightRange.start);
 			if (!coords) {
-				this.toolbarOverlayEl.style.display = "none";
+				this.toolbarOverlayEl.classList.add("is-hidden");
 				return;
 			}
 
@@ -3071,7 +3099,7 @@ export default class EditorialistPlugin extends Plugin {
 			clampedTop = Math.min(Math.max(top, minimumTop), maximumTop);
 
 			if (coords.bottom < editorRect.top || coords.top > editorRect.bottom) {
-				this.toolbarOverlayEl.style.display = "none";
+				this.toolbarOverlayEl.classList.add("is-hidden");
 				return;
 			}
 		} else {
@@ -3080,9 +3108,9 @@ export default class EditorialistPlugin extends Plugin {
 			clampedTop = Math.min(Math.max(editorRect.top + 20, minimumTop), maximumTop);
 		}
 
-		this.toolbarOverlayEl.style.display = "";
-		this.toolbarOverlayEl.style.left = `${left}px`;
-		this.toolbarOverlayEl.style.top = `${clampedTop}px`;
+		this.toolbarOverlayEl.classList.remove("is-hidden");
+		this.toolbarOverlayEl.style.setProperty("--editorialist-toolbar-overlay-left", `${left}px`);
+		this.toolbarOverlayEl.style.setProperty("--editorialist-toolbar-overlay-top", `${clampedTop}px`);
 	}
 
 	private destroyToolbarOverlay(): void {
@@ -3121,8 +3149,7 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		const leaf = this.app.workspace.getMostRecentLeaf() ?? this.app.workspace.getLeaf(true);
-		await leaf.openFile(file);
+		await this.app.workspace.openLinkText(notePath, "", false);
 	}
 
 	async startOrResumeReviewForNote(notePath: string): Promise<void> {

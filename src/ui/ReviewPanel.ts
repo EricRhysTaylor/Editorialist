@@ -82,10 +82,53 @@ export class ReviewPanel extends ItemView {
 				return;
 			}
 
-			const actionStrip = header.createDiv({ cls: "editorialist-panel__launch-strip" });
+			const launchTarget = this.plugin.getNextLogicalReviewLaunchTarget();
+			const actionStrip = header.createDiv({
+				cls: `editorialist-panel__launch-strip${launchTarget ? " editorialist-panel__launch-strip--continuation" : ""}`,
+			});
+
+			if (launchTarget) {
+				const next = actionStrip.createDiv({
+					cls: "editorialist-panel__launch-section editorialist-panel__launch-section--next editorialist-panel__launch-section--next-primary",
+				});
+				const nextLine = next.createDiv({ cls: "editorialist-panel__launch-target editorialist-panel__launch-target--primary" });
+				nextLine.createSpan({
+					cls: "editorialist-panel__launch-target-prefix editorialist-panel__launch-target-prefix--primary",
+					text: `→ Next ${launchTarget.unitLabel} `,
+				});
+				const nextLink = nextLine.createEl("a", {
+					cls: "editorialist-panel__launch-target-link",
+					attr: {
+						href: "#",
+						title: `Open ${launchTarget.label}`,
+					},
+				});
+				nextLink.createSpan({
+					cls: "editorialist-panel__launch-target-text editorialist-panel__launch-target-text--primary",
+					text: launchTarget.label,
+				});
+				this.bindImmediateAction(nextLink, () => {
+					void this.plugin.startOrResumeReviewForNote(launchTarget.notePath);
+				});
+
+				actionStrip.createDiv({ cls: "editorialist-panel__launch-divider" });
+			}
+
 			const intro = actionStrip.createDiv({ cls: "editorialist-panel__launch-section editorialist-panel__launch-section--intro" });
-			const sentence = intro.createDiv({ cls: "editorialist-panel__empty" });
-			sentence.appendText("Import formatted revision notes using ");
+			const sentence = intro.createDiv({ cls: "editorialist-panel__empty editorialist-panel__launch-copy" });
+			if (launchTarget) {
+				sentence.appendText("Continue revision sweep or use ");
+				const shortcut = sentence.createSpan({ cls: "editorialist-panel__command-shortcut" });
+				shortcut.createEl("kbd", { text: "⌘" });
+				shortcut.createEl("kbd", { text: "P" });
+				sentence.appendText(" to open ");
+			} else {
+				sentence.appendText("Use ");
+				const shortcut = sentence.createSpan({ cls: "editorialist-panel__command-shortcut" });
+				shortcut.createEl("kbd", { text: "⌘" });
+				shortcut.createEl("kbd", { text: "P" });
+				sentence.appendText(" to open ");
+			}
 			const launchLink = sentence.createEl("a", {
 				cls: "editorialist-panel__command-link",
 				attr: {
@@ -100,36 +143,7 @@ export class ReviewPanel extends ItemView {
 			this.bindImmediateAction(launchLink, () => {
 				void this.plugin.openEditorialistModal();
 			});
-			sentence.appendText(", or continue your existing revision workflow.");
-			const shortcut = sentence.createSpan({ cls: "editorialist-panel__command-shortcut" });
-			shortcut.createSpan({ cls: "editorialist-panel__command-shortcut-label", text: "Shortcut" });
-			shortcut.createEl("kbd", { text: "⌘" });
-			shortcut.createEl("kbd", { text: "P" });
-
-			const launchTarget = this.plugin.getNextLogicalReviewLaunchTarget();
-			if (launchTarget) {
-				actionStrip.createDiv({ cls: "editorialist-panel__launch-divider" });
-				const next = actionStrip.createDiv({ cls: "editorialist-panel__launch-section editorialist-panel__launch-section--next" });
-				const nextLine = next.createDiv({ cls: "editorialist-panel__launch-target" });
-				nextLine.createSpan({
-					cls: "editorialist-panel__launch-target-prefix",
-					text: `→ Next ${launchTarget.unitLabel} `,
-				});
-				const nextLink = nextLine.createEl("a", {
-					cls: "editorialist-panel__launch-target-link",
-					attr: {
-						href: "#",
-						title: `Open ${launchTarget.label}`,
-					},
-				});
-				nextLink.createSpan({
-					cls: "editorialist-panel__launch-target-text",
-					text: launchTarget.label,
-				});
-				this.bindImmediateAction(nextLink, () => {
-					void this.plugin.startOrResumeReviewForNote(launchTarget.notePath);
-				});
-			}
+			sentence.appendText(launchTarget ? " for further options." : " to import and review a new batch.");
 			return;
 		}
 
@@ -1043,7 +1057,6 @@ export class ReviewPanel extends ItemView {
 			wrapper.addClass("is-copyable");
 			wrapper.setAttribute("role", "button");
 			wrapper.setAttribute("tabindex", "0");
-			wrapper.setAttribute("aria-label", "Click to copy revised text");
 			this.bindImmediateAction(wrapper, () => {
 				void this.plugin.copyTextToClipboard(body, "Revised text copied", "Could not copy the revised text.");
 			});
@@ -1160,12 +1173,12 @@ export class ReviewPanel extends ItemView {
 			trailingIcon?: string;
 		},
 	): HTMLElement {
+		const accessibleLabel = options?.tooltip ?? label;
 		const button = parent.createEl("button", {
 			cls: "editorialist-suggestion__control",
 			attr: {
 				type: "button",
-				title: options?.tooltip ?? label,
-				"aria-label": options?.tooltip ?? label,
+				"aria-label": accessibleLabel,
 			},
 		});
 		if (options?.iconOnly) {

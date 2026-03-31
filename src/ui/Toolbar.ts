@@ -2,8 +2,9 @@ import { ButtonComponent, setIcon } from "obsidian";
 import type EditorialistPlugin from "../main";
 
 let shiftKeyPressed = false;
+let modKeyPressed = false;
 let shiftTrackingAbort: AbortController | null = null;
-const shiftSubscribers = new Set<(shiftPressed: boolean) => void>();
+const modifierSubscribers = new Set<(state: { modPressed: boolean; shiftPressed: boolean }) => void>();
 
 export interface ReviewToolbarState {
 	mode: "review";
@@ -88,7 +89,7 @@ export function createReviewToolbarElement(
 	state: ToolbarState,
 ): HTMLElement {
 	const overlay = document.createElement("div");
-	overlay.className = "editorialist-toolbar-overlay";
+	overlay.classList.add("editorialist-toolbar-overlay");
 	markAsNonEditorSurface(overlay);
 
 	const toolbar = overlay.createDiv({ cls: "editorialist-toolbar" });
@@ -298,13 +299,26 @@ export function createReviewToolbarElement(
 		},
 		!state.canApply,
 		true,
-		{
-			label: "Apply and review all",
-			icon: "triangle-alert",
-			onClick: () => {
-				void plugin.enterApplyAndReviewConfirmMode();
+		[
+			{
+				kind: "bulk",
+				label: "Apply and review all",
+				icon: "list-checks",
+				onClick: () => {
+					void plugin.enterApplyAndReviewConfirmMode();
+				},
+				when: ({ modPressed, shiftPressed }) => shiftPressed && modPressed,
 			},
-		},
+			{
+				kind: "advance",
+				label: "Apply and advance",
+				icon: "list-end",
+				onClick: () => {
+					void plugin.acceptSelectedSuggestionAndAdvance();
+				},
+				when: ({ modPressed, shiftPressed }) => shiftPressed && !modPressed,
+			},
+		],
 	);
 	buildButton(actions, "Defer", "clock", () => {
 		plugin.deferSelectedSuggestion();
@@ -336,7 +350,6 @@ function buildFlatIconButton(
 	});
 	button.type = "button";
 	button.setAttribute("aria-label", label);
-	button.setAttribute("title", label);
 	markAsNonEditorSurface(button);
 	const iconEl = button.createSpan({ cls: "editorialist-toolbar__button-icon" });
 	markAsNonEditorSurface(iconEl);
@@ -353,13 +366,15 @@ function buildButton(
 	onClick: () => void,
 	disabled = false,
 	isApply = false,
-	alternateAction?: {
+	alternateActions?: Array<{
+		kind: "advance" | "bulk";
 		label: string;
 		icon: string;
 		onClick: () => void;
-	},
+		when: (state: { modPressed: boolean; shiftPressed: boolean }) => boolean;
+	}>,
 ): void {
-	const button = new ButtonComponent(parent).setTooltip(label);
+	const button = new ButtonComponent(parent);
 	button.setDisabled(disabled);
 	button.buttonEl.addClass("editorialist-toolbar__button");
 	if (isApply) {
@@ -370,7 +385,7 @@ function buildButton(
 	markAsNonEditorSurface(iconEl);
 	let unsubscribeShiftTracking: (() => void) | null = null;
 	let removalObserver: MutationObserver | null = null;
-	if (alternateAction) {
+	if (alternateActions && alternateActions.length > 0) {
 		removalObserver = new MutationObserver(() => {
 			if (!button.buttonEl.isConnected) {
 				unsubscribeShiftTracking?.();
@@ -380,31 +395,34 @@ function buildButton(
 		});
 	}
 
-	const applyPresentation = (useAlternate: boolean): void => {
-		const nextLabel = useAlternate ? alternateAction?.label ?? label : label;
-		const nextIcon = useAlternate ? alternateAction?.icon ?? icon : icon;
-		button.setTooltip(nextLabel);
+	const getActiveAlternateAction = (state: { modPressed: boolean; shiftPressed: boolean }) =>
+		alternateActions?.find((action) => action.when(state)) ?? null;
+
+	const applyPresentation = (state: { modPressed: boolean; shiftPressed: boolean }): void => {
+		const activeAlternateAction = getActiveAlternateAction(state);
+		const nextLabel = activeAlternateAction?.label ?? label;
+		const nextIcon = activeAlternateAction?.icon ?? icon;
 		button.buttonEl.setAttribute("aria-label", nextLabel);
-		button.buttonEl.setAttribute("data-editorialist-shift-mode", useAlternate ? "true" : "false");
+		button.buttonEl.setAttribute("data-editorialist-modifier-mode", activeAlternateAction?.kind ?? "default");
 		setIcon(iconEl, nextIcon);
 	};
 
-	const syncModifierPresentation = (shiftPressed: boolean): void => {
-		applyPresentation(Boolean(alternateAction) && shiftPressed);
-	};
-
-	if (alternateAction) {
-		unsubscribeShiftTracking = subscribeToShiftKey(syncModifierPresentation);
+	if (alternateActions && alternateActions.length > 0) {
+		unsubscribeShiftTracking = subscribeToModifierKeys(applyPresentation);
 	}
 	removalObserver?.observe(document.body, {
 		childList: true,
 		subtree: true,
 	});
 
-	applyPresentation(Boolean(alternateAction) && shiftKeyPressed);
+	applyPresentation({ modPressed: modKeyPressed, shiftPressed: shiftKeyPressed });
 	bindImmediateAction(button.buttonEl, (event) => {
-		if (alternateAction && event.shiftKey) {
-			alternateAction.onClick();
+		const activeAlternateAction = getActiveAlternateAction({
+			modPressed: event.metaKey || event.ctrlKey,
+			shiftPressed: event.shiftKey,
+		});
+		if (activeAlternateAction) {
+			activeAlternateAction.onClick();
 			return;
 		}
 
@@ -419,7 +437,7 @@ function buildActionButton(
 	onClick: () => void,
 	isSecondary = false,
 ): void {
-	const button = new ButtonComponent(parent).setTooltip(label);
+	const button = new ButtonComponent(parent);
 	button.buttonEl.addClass("editorialist-toolbar__button", "editorialist-toolbar__button--text");
 	if (isSecondary) {
 		button.buttonEl.addClass("editorialist-toolbar__button--secondary");
@@ -481,13 +499,13 @@ function bindImmediateAction(
 	});
 }
 
-function subscribeToShiftKey(callback: (shiftPressed: boolean) => void): () => void {
+function subscribeToModifierKeys(callback: (state: { modPressed: boolean; shiftPressed: boolean }) => void): () => void {
 	ensureShiftTracking();
-	shiftSubscribers.add(callback);
-	callback(shiftKeyPressed);
+	modifierSubscribers.add(callback);
+	callback({ modPressed: modKeyPressed, shiftPressed: shiftKeyPressed });
 	return () => {
-		shiftSubscribers.delete(callback);
-		if (shiftSubscribers.size === 0) {
+		modifierSubscribers.delete(callback);
+		if (modifierSubscribers.size === 0) {
 			teardownShiftTracking();
 		}
 	};
@@ -501,29 +519,30 @@ function ensureShiftTracking(): void {
 	shiftTrackingAbort = new AbortController();
 	const { signal } = shiftTrackingAbort;
 	window.addEventListener("keydown", (event) => {
-		updateShiftKeyState(event.shiftKey);
+		updateModifierKeyState({ modPressed: event.metaKey || event.ctrlKey, shiftPressed: event.shiftKey });
 	}, { signal });
 	window.addEventListener("keyup", (event) => {
-		updateShiftKeyState(event.shiftKey);
+		updateModifierKeyState({ modPressed: event.metaKey || event.ctrlKey, shiftPressed: event.shiftKey });
 	}, { signal });
 	window.addEventListener("blur", () => {
-		updateShiftKeyState(false);
+		updateModifierKeyState({ modPressed: false, shiftPressed: false });
 	}, { signal });
 }
 
 function teardownShiftTracking(): void {
 	shiftTrackingAbort?.abort();
 	shiftTrackingAbort = null;
-	updateShiftKeyState(false);
+	updateModifierKeyState({ modPressed: false, shiftPressed: false });
 }
 
-function updateShiftKeyState(nextValue: boolean): void {
-	if (shiftKeyPressed === nextValue) {
+function updateModifierKeyState(nextValue: { modPressed: boolean; shiftPressed: boolean }): void {
+	if (shiftKeyPressed === nextValue.shiftPressed && modKeyPressed === nextValue.modPressed) {
 		return;
 	}
 
-	shiftKeyPressed = nextValue;
-	shiftSubscribers.forEach((subscriber) => subscriber(shiftKeyPressed));
+	shiftKeyPressed = nextValue.shiftPressed;
+	modKeyPressed = nextValue.modPressed;
+	modifierSubscribers.forEach((subscriber) => subscriber({ modPressed: modKeyPressed, shiftPressed: shiftKeyPressed }));
 }
 
 function markAsNonEditorSurface(element: HTMLElement): void {
