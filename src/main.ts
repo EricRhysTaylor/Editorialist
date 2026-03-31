@@ -200,7 +200,7 @@ export default class EditorialistPlugin extends Plugin {
 		this.registerEditorExtension(createReviewDecorationsExtension());
 		this.registerView(REVIEW_PANEL_VIEW_TYPE, (leaf) => new ReviewPanel(leaf, this));
 		this.addSettingTab(new EditorialistSettingTab(this.app, this));
-		this.addRibbonIcon("list-todo", "Open Editorialist Review", () => {
+		this.addRibbonIcon("pen-tool", "Open Editorialist Review", () => {
 			void this.openReviewPanel();
 		});
 		registerCommands(this);

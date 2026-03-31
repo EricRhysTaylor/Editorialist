@@ -168,7 +168,7 @@ export function createReviewToolbarElement(
 		toolbar.addClass("editorialist-toolbar--panel");
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
 		buildFlatIconButton(leading, "Exit review", "x", () => {
-			void plugin.closeActiveReviewContext();
+			void plugin.closeReviewPanel();
 		});
 
 		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });
@@ -196,7 +196,7 @@ export function createReviewToolbarElement(
 		toolbar.addClass("editorialist-toolbar--panel");
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
 		buildFlatIconButton(leading, "Exit review", "x", () => {
-			void plugin.closeActiveReviewContext();
+			void plugin.closeReviewPanel();
 		});
 
 		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });
@@ -224,7 +224,7 @@ export function createReviewToolbarElement(
 		toolbar.addClass("editorialist-toolbar--completed-review");
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
 		buildFlatIconButton(leading, "Close review", "x", () => {
-			void plugin.closeActiveReviewContext();
+			void plugin.closeReviewPanel();
 		});
 
 		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });
@@ -250,21 +250,26 @@ export function createReviewToolbarElement(
 		return overlay;
 	}
 
-	if (state.mode === "review" && state.anchorDirection) {
+	{
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
-		const indicator = leading.createSpan({
-			cls: "editorialist-toolbar__anchor-indicator",
-			text: state.anchorDirection === "above" ? "↑" : "↓",
+		buildFlatIconButton(leading, "Close review", "x", () => {
+			void plugin.closeReviewPanel();
 		});
-		markAsNonEditorSurface(indicator);
-		indicator.setAttribute(
-			"aria-label",
-			state.anchorDirection === "above" ? "Insert point is above" : "Insert point is below",
-		);
-		indicator.setAttribute(
-			"title",
-			state.anchorDirection === "above" ? "Insert point is above" : "Insert point is below",
-		);
+		if (state.mode === "review" && state.anchorDirection) {
+			const indicator = leading.createSpan({
+				cls: "editorialist-toolbar__anchor-indicator",
+				text: state.anchorDirection === "above" ? "↑" : "↓",
+			});
+			markAsNonEditorSurface(indicator);
+			indicator.setAttribute(
+				"aria-label",
+				state.anchorDirection === "above" ? "Insert point is above" : "Insert point is below",
+			);
+			indicator.setAttribute(
+				"title",
+				state.anchorDirection === "above" ? "Insert point is above" : "Insert point is below",
+			);
+		}
 	}
 
 	const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });

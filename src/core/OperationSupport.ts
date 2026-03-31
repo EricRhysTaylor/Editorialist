@@ -291,20 +291,8 @@ export function getSuggestionPresentationTone(suggestion: ReviewSuggestion): Rev
 	return suggestion.status === "accepted" || suggestion.status === "rejected" || suggestion.status === "rewritten" ? "muted" : "active";
 }
 
-export function getSuggestionStatusRank(status: ReviewStatus): number {
-	switch (status) {
-		case "pending":
-		case "unresolved":
-			return 0;
-		case "deferred":
-			return 1;
-		case "accepted":
-			return 2;
-		case "rewritten":
-			return 3;
-		case "rejected":
-			return 4;
-	}
+export function getSuggestionStatusRank(_status: ReviewStatus): number {
+	return 0;
 }
 
 export function canApplySuggestionDirectly(suggestion: ReviewSuggestion): boolean {

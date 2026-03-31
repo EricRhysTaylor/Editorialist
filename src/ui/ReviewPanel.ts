@@ -41,6 +41,7 @@ export class ReviewPanel extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.contentEl.empty();
+		void this.plugin.closeActiveReviewContext();
 	}
 
 	render(): void {
@@ -813,7 +814,7 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-suggestion__structure editorialist-suggestion__structure--delete",
 		});
 		this.renderStructureBlock(structure, label, text, {
-			icon: "scissors",
+			icon: "scissors-line-dashed",
 			tone: "ghost",
 			state: "delete",
 		});
@@ -1337,7 +1338,7 @@ export class ReviewPanel extends ItemView {
 			case "edit":
 				return "file-pen-line";
 			case "cut":
-				return "scissors";
+				return "scissors-line-dashed";
 			case "condense":
 				return "minimize-2";
 			case "move":
