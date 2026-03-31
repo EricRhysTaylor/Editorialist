@@ -2,9 +2,21 @@ import { getLinesWithOffsets } from "./TextOffsets";
 
 export const REVIEW_BLOCK_FENCE = "editorialist-review";
 const REVIEW_SECTION_PATTERN = /^===\s*(EDIT|MOVE|CUT|CONDENSE)\s*===\s*$/im;
-const REVIEW_METADATA_PATTERN = /^(BatchId|ImportedBy|Reviewer|ReviewerType|Provider|Model)\s*:/im;
+const REVIEW_METADATA_PATTERN =
+	/^(BatchId|ImportedBy|Template|TemplateYear|SupportedOperations|SceneIdSource|Reviewer|ReviewerType|Provider|Model)\s*:/im;
 const GENERAL_FIELD_PATTERN = /^([A-Za-z][A-Za-z ]+):\s*(.*)$/;
-const REVIEW_METADATA_KEYS = new Set(["batchid", "importedby", "reviewer", "reviewertype", "provider", "model"]);
+const REVIEW_METADATA_KEYS = new Set([
+	"batchid",
+	"importedby",
+	"template",
+	"templateyear",
+	"supportedoperations",
+	"sceneidsource",
+	"reviewer",
+	"reviewertype",
+	"provider",
+	"model",
+]);
 
 export interface ExtractedReviewBlock {
 	bodyText: string;
@@ -222,91 +234,90 @@ function extractRawTopReviewBlock(noteText: string): ExtractedReviewBlock | null
 		return null;
 	}
 
-	let startIndex = 0;
-	while (startIndex < lines.length && lines[startIndex]?.text.trim() === "") {
-		startIndex += 1;
-	}
-
-	const firstLine = lines[startIndex];
-	if (!firstLine) {
-		return null;
-	}
-
-	const firstTrimmed = firstLine.text.trim();
-	if (!REVIEW_METADATA_PATTERN.test(firstTrimmed) && !REVIEW_SECTION_PATTERN.test(firstTrimmed)) {
-		return null;
-	}
-
-	let sawSection = false;
-	let currentField: string | null = null;
-	let endOffset = firstLine.endOffset;
-	let lastIncludedIndex = startIndex - 1;
-
-	for (let index = startIndex; index < lines.length; index += 1) {
-		const line = lines[index];
-		if (!line) {
+	for (let startIndex = 0; startIndex < lines.length; startIndex += 1) {
+		const firstLine = lines[startIndex];
+		if (!firstLine || firstLine.text.trim() === "") {
 			continue;
 		}
 
-		const trimmed = line.text.trim();
-		if (trimmed === "") {
-			if (sawSection) {
-				currentField = null;
+		const firstTrimmed = firstLine.text.trim();
+		if (!REVIEW_METADATA_PATTERN.test(firstTrimmed) && !REVIEW_SECTION_PATTERN.test(firstTrimmed)) {
+			continue;
+		}
+
+		let sawSection = false;
+		let currentField: string | null = null;
+		let endOffset = firstLine.endOffset;
+		let lastIncludedIndex = startIndex - 1;
+
+		for (let index = startIndex; index < lines.length; index += 1) {
+			const line = lines[index];
+			if (!line) {
+				continue;
 			}
-			lastIncludedIndex = index;
-			endOffset = line.endOffset;
-			continue;
-		}
 
-		if (REVIEW_SECTION_PATTERN.test(trimmed)) {
-			sawSection = true;
-			currentField = null;
-			lastIncludedIndex = index;
-			endOffset = line.endOffset;
-			continue;
-		}
-
-		const fieldMatch = trimmed.match(GENERAL_FIELD_PATTERN);
-		if (!sawSection) {
-			if (fieldMatch && REVIEW_METADATA_KEYS.has(normalizeFieldKey(fieldMatch[1] ?? ""))) {
+			const trimmed = line.text.trim();
+			if (trimmed === "") {
+				if (sawSection) {
+					currentField = null;
+				}
 				lastIncludedIndex = index;
 				endOffset = line.endOffset;
 				continue;
 			}
+
+			if (REVIEW_SECTION_PATTERN.test(trimmed)) {
+				sawSection = true;
+				currentField = null;
+				lastIncludedIndex = index;
+				endOffset = line.endOffset;
+				continue;
+			}
+
+			const fieldMatch = trimmed.match(GENERAL_FIELD_PATTERN);
+			if (!sawSection) {
+				if (fieldMatch && REVIEW_METADATA_KEYS.has(normalizeFieldKey(fieldMatch[1] ?? ""))) {
+					lastIncludedIndex = index;
+					endOffset = line.endOffset;
+					continue;
+				}
+				break;
+			}
+
+			if (fieldMatch) {
+				currentField = normalizeFieldKey(fieldMatch[1] ?? "");
+				lastIncludedIndex = index;
+				endOffset = line.endOffset;
+				continue;
+			}
+
+			if (currentField) {
+				lastIncludedIndex = index;
+				endOffset = line.endOffset;
+				continue;
+			}
+
 			break;
 		}
 
-		if (fieldMatch) {
-			currentField = normalizeFieldKey(fieldMatch[1] ?? "");
-			lastIncludedIndex = index;
-			endOffset = line.endOffset;
+		if (!sawSection || lastIncludedIndex < startIndex) {
 			continue;
 		}
 
-		if (currentField) {
-			lastIncludedIndex = index;
-			endOffset = line.endOffset;
+		const bodyText = noteText.slice(firstLine.startOffset, endOffset).trim();
+		if (!bodyText) {
 			continue;
 		}
 
-		break;
+		return {
+			bodyText,
+			startOffset: firstLine.startOffset,
+			endOffset,
+			source: "raw",
+		};
 	}
 
-	if (!sawSection || lastIncludedIndex < startIndex) {
-		return null;
-	}
-
-	const bodyText = noteText.slice(firstLine.startOffset, endOffset).trim();
-	if (!bodyText) {
-		return null;
-	}
-
-	return {
-		bodyText,
-		startOffset: firstLine.startOffset,
-		endOffset,
-		source: "raw",
-	};
+	return null;
 }
 
 function looksLikeReviewBody(text: string): boolean {
