@@ -779,18 +779,30 @@ export class ReviewPanel extends ItemView {
 		const structure = parent.createDiv({
 			cls: "editorialist-suggestion__structure editorialist-suggestion__structure--move",
 		});
-		const split = structure.createDiv({ cls: "editorialist-suggestion__structure-split" });
+		const split = structure.createDiv({
+			cls: "editorialist-suggestion__structure-split editorialist-suggestion__structure-split--move",
+		});
 		const sourceColumn = split.createDiv({ cls: "editorialist-suggestion__structure-column" });
+		const bridge = split.createDiv({
+			cls: "editorialist-suggestion__structure-bridge editorialist-suggestion__structure-bridge--move",
+		});
 		const destinationColumn = split.createDiv({ cls: "editorialist-suggestion__structure-column" });
 
-		this.renderStructureBlock(sourceColumn, "Move from here", suggestion.payload.target, {
+		this.renderStructureBlock(sourceColumn, "Move this text", suggestion.payload.target, {
+			accent: "source",
 			icon: "arrow-right-left",
 			tone: "ghost",
 		});
 
-		const placementLabel = suggestion.payload.placement === "after" ? "Insert after this paragraph" : "Insert before this paragraph";
-		this.renderInsertionMarker(destinationColumn, placementLabel, suggestion.payload.target);
-		this.renderStructureBlock(destinationColumn, "Anchor", suggestion.payload.anchor, {
+		const bridgeIcon = bridge.createSpan({ cls: "editorialist-suggestion__structure-bridge-icon" });
+		setIcon(bridgeIcon, "arrow-right");
+		bridge.createSpan({
+			cls: "editorialist-suggestion__structure-bridge-text",
+			text: suggestion.payload.placement === "after" ? "Place it after this" : "Place it before this",
+		});
+
+		this.renderStructureBlock(destinationColumn, "Place it before this", suggestion.payload.anchor, {
+			accent: "anchor",
 			icon: "map-pin",
 			tone: "muted",
 		});
@@ -807,29 +819,12 @@ export class ReviewPanel extends ItemView {
 		});
 	}
 
-	private renderInsertionMarker(parent: HTMLElement, label: string, text: string): void {
-		const insertion = parent.createDiv({ cls: "editorialist-suggestion__insert" });
-		const marker = insertion.createDiv({ cls: "editorialist-suggestion__insert-marker" });
-		const markerIcon = marker.createSpan({ cls: "editorialist-suggestion__insert-marker-icon" });
-		setIcon(markerIcon, "corner-left-down");
-		marker.createSpan({
-			cls: "editorialist-suggestion__insert-marker-text",
-			text: label,
-		});
-		this.renderStructureBlock(insertion, "Inserted content", text, {
-			copyHint: "Click to copy",
-			copyNotice: "Inserted text copied",
-			icon: "plus",
-			tone: "active",
-			state: "insert",
-		});
-	}
-
 	private renderStructureBlock(
 		parent: HTMLElement,
 		label: string,
 		text: string,
 		options: {
+			accent?: "anchor" | "source";
 			copyHint?: string;
 			copyNotice?: string;
 			icon: string;
@@ -840,6 +835,9 @@ export class ReviewPanel extends ItemView {
 		const block = parent.createDiv({
 			cls: `editorialist-suggestion__structure-block editorialist-suggestion__structure-block--${options.tone}${options.state ? ` editorialist-suggestion__structure-block--${options.state}` : ""}`,
 		});
+		if (options.accent) {
+			block.addClass(`editorialist-suggestion__structure-block--${options.accent}`);
+		}
 		if (options.copyHint) {
 			block.addClass("is-copyable");
 			block.setAttribute("role", "button");

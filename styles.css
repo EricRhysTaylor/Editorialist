@@ -93,6 +93,18 @@
 	flex: 0 0 auto;
 }
 
+.editorialist-toolbar__anchor-indicator {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 1rem;
+	padding-inline: 0.15rem;
+	font-size: 1rem;
+	font-weight: 700;
+	line-height: 1;
+	color: color-mix(in srgb, var(--color-cyan) 52%, var(--text-normal));
+}
+
 .ert-btn {
 	display: inline-flex;
 	align-items: center;
@@ -1150,6 +1162,11 @@
 	gap: 0.8rem;
 }
 
+.editorialist-suggestion__structure-split--move {
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	align-items: stretch;
+}
+
 .editorialist-suggestion__structure-column {
 	display: flex;
 	flex-direction: column;
@@ -1165,6 +1182,14 @@
 	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 82%, transparent);
 	border-radius: 12px;
 	background: color-mix(in srgb, var(--background-primary) 82%, var(--background-secondary) 18%);
+}
+
+.editorialist-suggestion__structure-block--source {
+	box-shadow: inset 2px 0 0 color-mix(in srgb, var(--interactive-accent) 52%, transparent);
+}
+
+.editorialist-suggestion__structure-block--anchor {
+	box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-cyan) 46%, transparent);
 }
 
 .editorialist-suggestion__structure-block--active {
@@ -1272,6 +1297,13 @@
 	padding-left: 0.2rem;
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
+}
+
+.editorialist-suggestion__structure-bridge--move {
+	align-self: center;
+	padding-left: 0;
+	padding-inline: 0.15rem;
+	white-space: nowrap;
 }
 
 .editorialist-suggestion__structure-bridge-icon,
@@ -3390,4 +3422,10 @@
 .editorialist-match-highlight--applied-active {
 	background-color: color-mix(in srgb, var(--color-green) 22%, transparent);
 	border-bottom: 2px solid color-mix(in srgb, var(--color-green) 60%, transparent);
+}
+
+.editorialist-match-highlight--anchor {
+	background-color: color-mix(in srgb, var(--color-cyan) 14%, transparent);
+	border-bottom: 2px solid color-mix(in srgb, var(--color-cyan) 44%, transparent);
+	box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-cyan) 50%, transparent);
 }

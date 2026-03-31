@@ -8,6 +8,7 @@ const modifierSubscribers = new Set<(state: { modPressed: boolean; shiftPressed:
 
 export interface ReviewToolbarState {
 	mode: "review";
+	anchorDirection?: "above" | "below";
 	canApply: boolean;
 	canDefer: boolean;
 	canNext: boolean;
@@ -249,6 +250,23 @@ export function createReviewToolbarElement(
 		return overlay;
 	}
 
+	if (state.mode === "review" && state.anchorDirection) {
+		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
+		const indicator = leading.createSpan({
+			cls: "editorialist-toolbar__anchor-indicator",
+			text: state.anchorDirection === "above" ? "↑" : "↓",
+		});
+		markAsNonEditorSurface(indicator);
+		indicator.setAttribute(
+			"aria-label",
+			state.anchorDirection === "above" ? "Insert point is above" : "Insert point is below",
+		);
+		indicator.setAttribute(
+			"title",
+			state.anchorDirection === "above" ? "Insert point is above" : "Insert point is below",
+		);
+	}
+
 	const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
 	markAsNonEditorSurface(meta);
 	renderMetaSegment(meta, state.operationLabel);
@@ -284,6 +302,7 @@ export function createReviewToolbarElement(
 	}
 
 	const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
+	const applyOperationLabel = state.operationLabel.toLowerCase();
 	buildButton(actions, "Previous", "arrow-left", () => {
 		void plugin.selectPreviousSuggestion();
 	}, !state.canPrevious);
@@ -292,7 +311,7 @@ export function createReviewToolbarElement(
 	}, !state.canNext);
 	buildButton(
 		actions,
-		"Apply",
+		`Apply ${applyOperationLabel}`,
 		"check",
 		() => {
 			void plugin.acceptSelectedSuggestion();
@@ -302,7 +321,7 @@ export function createReviewToolbarElement(
 		[
 			{
 				kind: "bulk",
-				label: "Apply and review all",
+				label: "Apply to all",
 				icon: "list-checks",
 				onClick: () => {
 					void plugin.enterApplyAndReviewConfirmMode();
@@ -311,7 +330,7 @@ export function createReviewToolbarElement(
 			},
 			{
 				kind: "advance",
-				label: "Apply and advance",
+				label: `Apply ${applyOperationLabel} and advance`,
 				icon: "list-end",
 				onClick: () => {
 					void plugin.acceptSelectedSuggestionAndAdvance();

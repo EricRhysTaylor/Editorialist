@@ -60,6 +60,8 @@ interface OffsetRange {
 	start: number;
 }
 
+type HighlightTone = "active" | "muted" | "anchor";
+
 interface LastAppliedChange {
 	end: number;
 	notePath: string;
@@ -175,7 +177,8 @@ export default class EditorialistPlugin extends Plugin {
 	private importEngine!: ImportEngine;
 
 	private activeHighlightRange: OffsetRange | null = null;
-	private activeHighlightTone: "active" | "muted" = "active";
+	private activeHighlightTone: HighlightTone = "active";
+	private activeAnchorHighlightRange: OffsetRange | null = null;
 	private bulkApplyConfirmState: BulkApplyConfirmState | null = null;
 	private lastAppliedChange: LastAppliedChange | null = null;
 	private toolbarOverlayEl: HTMLElement | null = null;
@@ -270,8 +273,7 @@ export default class EditorialistPlugin extends Plugin {
 		await this.persistContributorProfilesIfNeeded();
 
 		if (!hydratedSession.hasReviewBlock) {
-			this.activeHighlightRange = null;
-			this.activeHighlightTone = "active";
+			this.clearActiveHighlights();
 			this.lastAppliedChange = null;
 			this.store.clearSession();
 			if (!suppressNotice) {
@@ -584,8 +586,7 @@ export default class EditorialistPlugin extends Plugin {
 		this.store.setCompletedSweep(null);
 		this.store.clearSession();
 		this.store.acknowledgeCompletedSweep(completedSweep?.batchId ?? this.store.getAcknowledgedCompletedSweepBatchId());
-		this.activeHighlightRange = null;
-		this.activeHighlightTone = "active";
+		this.clearActiveHighlights();
 		this.lastAppliedChange = null;
 		this.syncActiveEditorDecorations();
 	}
@@ -651,8 +652,7 @@ export default class EditorialistPlugin extends Plugin {
 	async exitCompletedReviewMode(): Promise<void> {
 		this.store.setCompletedSweep(null);
 		this.store.clearSession();
-		this.activeHighlightRange = null;
-		this.activeHighlightTone = "active";
+		this.clearActiveHighlights();
 		this.syncActiveEditorDecorations();
 	}
 
@@ -1949,6 +1949,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		return {
 			mode: "review",
+			anchorDirection: this.getActiveMoveAnchorDirection(selected),
 			hasReviewBlock,
 			completionLabel: this.isSweepComplete(suggestions) ? "sweep complete" : undefined,
 			pendingCount,
@@ -2036,8 +2037,7 @@ export default class EditorialistPlugin extends Plugin {
 		if (!context) {
 			this.bulkApplyConfirmState = null;
 			this.store.setAppliedReview(null);
-			this.activeHighlightRange = null;
-			this.activeHighlightTone = "active";
+			this.clearActiveHighlights();
 			this.lastAppliedChange = null;
 			if (session) {
 				this.store.clearSession();
@@ -2048,8 +2048,7 @@ export default class EditorialistPlugin extends Plugin {
 		if (!session || session.notePath !== context.filePath) {
 			this.bulkApplyConfirmState = null;
 			this.store.setAppliedReview(null);
-			this.activeHighlightRange = null;
-			this.activeHighlightTone = "active";
+			this.clearActiveHighlights();
 			this.lastAppliedChange = null;
 			return;
 		}
@@ -2064,8 +2063,7 @@ export default class EditorialistPlugin extends Plugin {
 		if (!hydratedSession.hasReviewBlock) {
 			this.bulkApplyConfirmState = null;
 			this.store.setAppliedReview(null);
-			this.activeHighlightRange = null;
-			this.activeHighlightTone = "active";
+			this.clearActiveHighlights();
 			this.lastAppliedChange = null;
 			this.store.clearSession();
 			return;
@@ -2357,8 +2355,7 @@ export default class EditorialistPlugin extends Plugin {
 	private async revealSelectedSuggestion(): Promise<void> {
 		const selectedSuggestion = this.store.getSelectedSuggestion();
 		if (!selectedSuggestion) {
-			this.activeHighlightRange = null;
-			this.activeHighlightTone = "active";
+			this.clearActiveHighlights();
 			this.syncActiveEditorDecorations();
 			return;
 		}
@@ -2369,31 +2366,39 @@ export default class EditorialistPlugin extends Plugin {
 	private async revealSuggestionContext(id: string): Promise<void> {
 		const suggestion = this.getSuggestionById(id);
 		if (!suggestion) {
-			this.activeHighlightRange = null;
-			this.activeHighlightTone = "active";
+			this.clearActiveHighlights();
 			this.syncActiveEditorDecorations();
 			return;
 		}
 
 		if (suggestion.operation === "move") {
-			if (await this.focusResolvedTarget(getSuggestionPrimaryTarget(suggestion), this.getSuggestionHighlightTone(suggestion))) {
+			const sourceRange = this.getResolvedOffsetRange(getSuggestionPrimaryTarget(suggestion));
+			const anchorRange = this.getResolvedOffsetRange(getSuggestionAnchorTarget(suggestion));
+			if (sourceRange) {
+				this.activeAnchorHighlightRange = anchorRange;
+				await this.focusEditorRange(
+					sourceRange.start,
+					sourceRange.end,
+					this.getSuggestionHighlightTone(suggestion),
+				);
 				return;
 			}
 
-			if (await this.focusResolvedTarget(getSuggestionAnchorTarget(suggestion), this.getSuggestionHighlightTone(suggestion))) {
+			this.activeAnchorHighlightRange = null;
+			if (await this.focusResolvedTarget(getSuggestionAnchorTarget(suggestion), "anchor")) {
 				return;
 			}
 		} else if (await this.focusResolvedTarget(getSuggestionPrimaryTarget(suggestion), this.getSuggestionHighlightTone(suggestion))) {
+			this.activeAnchorHighlightRange = null;
 			return;
 		}
-		this.activeHighlightRange = null;
-		this.activeHighlightTone = "active";
+		this.clearActiveHighlights();
 		this.syncActiveEditorDecorations();
 	}
 
 	private async focusResolvedTarget(
 		target?: ReviewTargetRef,
-		tone: "active" | "muted" = "active",
+		tone: HighlightTone = "active",
 	): Promise<boolean> {
 		if (!target || !this.hasResolvedRange(target)) {
 			return false;
@@ -2738,6 +2743,37 @@ export default class EditorialistPlugin extends Plugin {
 		return suggestion.status === "accepted" ? "muted" : "active";
 	}
 
+	private clearActiveHighlights(): void {
+		this.activeHighlightRange = null;
+		this.activeAnchorHighlightRange = null;
+		this.activeHighlightTone = "active";
+	}
+
+	private getResolvedOffsetRange(target?: ReviewTargetRef): OffsetRange | null {
+		if (!target || !this.hasResolvedRange(target)) {
+			return null;
+		}
+
+		return {
+			start: target.startOffset as number,
+			end: target.endOffset as number,
+		};
+	}
+
+	private getActiveMoveAnchorDirection(suggestion: ReviewSuggestion | null): "above" | "below" | undefined {
+		if (!suggestion || suggestion.operation !== "move") {
+			return undefined;
+		}
+
+		const source = this.getResolvedOffsetRange(getSuggestionPrimaryTarget(suggestion));
+		const anchor = this.getResolvedOffsetRange(getSuggestionAnchorTarget(suggestion));
+		if (!source || !anchor) {
+			return undefined;
+		}
+
+		return anchor.start < source.start ? "above" : "below";
+	}
+
 	private setDefaultHighlightForSelection(): void {
 		if (this.store.getAppliedReview()) {
 			return;
@@ -2745,21 +2781,25 @@ export default class EditorialistPlugin extends Plugin {
 
 		const selectedSuggestion = this.store.getSelectedSuggestion();
 		if (!selectedSuggestion) {
-			this.activeHighlightRange = null;
+			this.clearActiveHighlights();
 			return;
 		}
 
-		const target =
-			getSuggestionPrimaryTarget(selectedSuggestion) && this.hasResolvedRange(getSuggestionPrimaryTarget(selectedSuggestion))
-				? getSuggestionPrimaryTarget(selectedSuggestion)
-				: getSuggestionAnchorTarget(selectedSuggestion);
+		if (selectedSuggestion.operation === "move") {
+			const sourceRange = this.getResolvedOffsetRange(getSuggestionPrimaryTarget(selectedSuggestion));
+			const anchorRange = this.getResolvedOffsetRange(getSuggestionAnchorTarget(selectedSuggestion));
+			this.activeHighlightRange = sourceRange ?? anchorRange;
+			this.activeAnchorHighlightRange = sourceRange && anchorRange ? anchorRange : null;
+			this.activeHighlightTone = sourceRange ? this.getSuggestionHighlightTone(selectedSuggestion) : "anchor";
+			return;
+		}
 
-		this.activeHighlightRange = this.hasResolvedRange(target)
-			? {
-					start: target?.startOffset as number,
-					end: target?.endOffset as number,
-				}
-			: null;
+		const target = this.getResolvedOffsetRange(getSuggestionPrimaryTarget(selectedSuggestion))
+			? getSuggestionPrimaryTarget(selectedSuggestion)
+			: getSuggestionAnchorTarget(selectedSuggestion);
+
+		this.activeHighlightRange = this.getResolvedOffsetRange(target);
+		this.activeAnchorHighlightRange = null;
 		this.activeHighlightTone = this.getSuggestionHighlightTone(selectedSuggestion);
 	}
 
@@ -2771,8 +2811,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		if (this.shouldShowGuidedSweepHandoff(session)) {
 			this.store.selectSuggestion(null);
-			this.activeHighlightRange = null;
-			this.activeHighlightTone = "active";
+			this.clearActiveHighlights();
 			return;
 		}
 
@@ -2782,8 +2821,7 @@ export default class EditorialistPlugin extends Plugin {
 	private async enterGuidedSweepHandoff(): Promise<void> {
 		this.store.setAppliedReview(null);
 		this.store.selectSuggestion(null);
-		this.activeHighlightRange = null;
-		this.activeHighlightTone = "active";
+		this.clearActiveHighlights();
 		this.syncActiveEditorDecorations();
 	}
 
@@ -2954,15 +2992,26 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		return {
-			highlights: highlight
-				? [
-						{
-							start: highlight.start,
-							end: highlight.end,
-							tone: this.activeHighlightTone,
-						},
-					]
-				: [],
+			highlights: [
+				...(highlight
+					? [
+							{
+								start: highlight.start,
+								end: highlight.end,
+								tone: this.activeHighlightTone,
+							},
+						]
+					: []),
+				...(this.activeAnchorHighlightRange
+					? [
+							{
+								start: this.activeAnchorHighlightRange.start,
+								end: this.activeAnchorHighlightRange.end,
+								tone: "anchor" as const,
+							},
+						]
+					: []),
+			],
 		};
 	}
 
@@ -2987,7 +3036,7 @@ export default class EditorialistPlugin extends Plugin {
 	private async focusEditorRange(
 		start: number,
 		end: number,
-		tone: "active" | "muted" = "active",
+		tone: HighlightTone = "active",
 	): Promise<void> {
 		const context = this.getReviewNoteContext();
 		if (!context) {
