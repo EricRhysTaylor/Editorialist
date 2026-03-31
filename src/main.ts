@@ -134,6 +134,7 @@ interface BulkApplyConfirmState {
 }
 
 interface ReviewLaunchTarget {
+	intent: "active" | "next";
 	label: string;
 	notePath: string;
 	unitLabel: "note" | "scene";
@@ -183,9 +184,12 @@ export default class EditorialistPlugin extends Plugin {
 	private lastAppliedChange: LastAppliedChange | null = null;
 	private toolbarOverlayEl: HTMLElement | null = null;
 	private toolbarOverlayEditorView: EditorView | null = null;
+	private toolbarOverlayFrameId: number | null = null;
+	private toolbarOverlayHeight = 0;
+	private toolbarOverlayLastPosition: { hidden: boolean; left: string; top: string } | null = null;
 	private toolbarOverlayState: ToolbarState | null = null;
 	private readonly toolbarOverlayScrollHandler = (): void => {
-		this.positionToolbarOverlay();
+		this.scheduleToolbarOverlayPositionUpdate();
 	};
 
 	async onload(): Promise<void> {
@@ -201,7 +205,8 @@ export default class EditorialistPlugin extends Plugin {
 		});
 		registerCommands(this);
 		this.registerDomEvent(window, "resize", () => {
-			this.positionToolbarOverlay();
+			this.measureToolbarOverlayHeight();
+			this.scheduleToolbarOverlayPositionUpdate();
 		});
 
 		const unsubscribe = this.store.subscribe(() => {
@@ -782,7 +787,7 @@ export default class EditorialistPlugin extends Plugin {
 			sessionId,
 			sessionStartedAt,
 		});
-		await this.registry.syncSceneInventory();
+		await this.registry.syncSceneInventoryForSession(this.store.getSession());
 		if (nextSuggestionId) {
 			this.store.selectSuggestion(nextSuggestionId);
 			await this.revealSelectedSuggestion();
@@ -817,7 +822,7 @@ export default class EditorialistPlugin extends Plugin {
 			sessionId,
 			sessionStartedAt,
 		});
-		await this.registry.syncSceneInventory();
+		await this.registry.syncSceneInventoryForSession(this.store.getSession());
 		if (nextSuggestionId) {
 			this.store.selectSuggestion(nextSuggestionId);
 			await this.revealSelectedSuggestion();
@@ -887,7 +892,7 @@ export default class EditorialistPlugin extends Plugin {
 			textFingerprint: this.getNoteTextFingerprint(context.view.editor.getValue()),
 		};
 		if (options?.syncSceneInventory !== false) {
-			await this.registry.syncSceneInventory();
+			await this.registry.syncSceneInventoryForSession(this.store.getSession());
 		}
 		if (!options?.preserveSelection) {
 			this.store.selectSuggestion(id);
@@ -931,7 +936,7 @@ export default class EditorialistPlugin extends Plugin {
 			sessionId,
 			sessionStartedAt,
 		});
-		await this.registry.syncSceneInventory();
+		await this.registry.syncSceneInventoryForSession(this.store.getSession());
 		if (nextSuggestionId) {
 			this.store.selectSuggestion(nextSuggestionId);
 			await this.revealSelectedSuggestion();
@@ -1201,6 +1206,7 @@ export default class EditorialistPlugin extends Plugin {
 		const launchState = this.getEditorialistLaunchState(context);
 		if (context && launchState.currentNoteHasReviewBlock && launchState.currentNoteStatus === "ready") {
 			return {
+				intent: "active",
 				label: this.getNoteDisplayLabel(context.filePath),
 				notePath: context.filePath,
 				unitLabel: launchState.noteUnitLabel,
@@ -1209,6 +1215,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		if (launchState.nextNotePath && launchState.nextNoteLabel) {
 			return {
+				intent: "next",
 				label: launchState.nextNoteLabel,
 				notePath: launchState.nextNotePath,
 				unitLabel: launchState.noteUnitLabel,
@@ -1222,6 +1229,7 @@ export default class EditorialistPlugin extends Plugin {
 				.find((notePath) => this.isSweepableSceneRecord(this.getSceneReviewRecordByPath(notePath)));
 			if (candidatePath) {
 				return {
+					intent: context?.filePath === candidatePath ? "active" : "next",
 					label: this.getNoteDisplayLabel(candidatePath),
 					notePath: candidatePath,
 					unitLabel: this.registry.usesSceneTerminology(candidatePath) ? "scene" : "note",
@@ -1237,6 +1245,7 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		return {
+			intent: context?.filePath === activeBookCandidate.notePath ? "active" : "next",
 			label: activeBookCandidate.noteTitle,
 			notePath: activeBookCandidate.notePath,
 			unitLabel: this.registry.usesSceneTerminology(activeBookCandidate.notePath) ? "scene" : "note",
@@ -1753,7 +1762,12 @@ export default class EditorialistPlugin extends Plugin {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		const file = view?.file;
 		if (!view || !file) {
-			return null;
+			const activeFile = this.app.workspace.getActiveFile();
+			if (!activeFile) {
+				return null;
+			}
+
+			return this.getNoteContextByPath(activeFile.path);
 		}
 
 		return {
@@ -2540,6 +2554,7 @@ export default class EditorialistPlugin extends Plugin {
 		const selectedSuggestion = this.store.getSelectedSuggestion();
 		if (
 			!targetSession ||
+			this.hasLiveActionableSuggestions(targetSession.suggestions) ||
 			!selectedSuggestion ||
 			!this.isAcceptedReviewSuggestion(selectedSuggestion) ||
 			!this.shouldShowUndoForSelectedSuggestion(selectedSuggestion.id)
@@ -3072,7 +3087,7 @@ export default class EditorialistPlugin extends Plugin {
 		if (topOffset < topPadding) {
 			editorView.scrollDOM.scrollTop -= topPadding - topOffset;
 		}
-		this.positionToolbarOverlay();
+		this.scheduleToolbarOverlayPositionUpdate();
 	}
 
 	private async focusReviewLeaf(view: MarkdownView): Promise<void> {
@@ -3116,7 +3131,34 @@ export default class EditorialistPlugin extends Plugin {
 		this.toolbarOverlayState = toolbarState;
 		this.toolbarOverlayEl = createReviewToolbarElement(this, toolbarState);
 		document.body.appendChild(this.toolbarOverlayEl);
-		this.positionToolbarOverlay();
+		this.measureToolbarOverlayHeight();
+		this.toolbarOverlayLastPosition = null;
+		this.scheduleToolbarOverlayPositionUpdate();
+	}
+
+	private measureToolbarOverlayHeight(): void {
+		const toolbar = this.toolbarOverlayEl?.firstElementChild as HTMLElement | null;
+		this.toolbarOverlayHeight = toolbar?.getBoundingClientRect().height ?? 0;
+	}
+
+	private scheduleToolbarOverlayPositionUpdate(): void {
+		if (this.toolbarOverlayFrameId !== null) {
+			return;
+		}
+
+		this.toolbarOverlayFrameId = window.requestAnimationFrame(() => {
+			this.toolbarOverlayFrameId = null;
+			this.positionToolbarOverlay();
+		});
+	}
+
+	private cancelToolbarOverlayPositionUpdate(): void {
+		if (this.toolbarOverlayFrameId === null) {
+			return;
+		}
+
+		window.cancelAnimationFrame(this.toolbarOverlayFrameId);
+		this.toolbarOverlayFrameId = null;
 	}
 
 	private positionToolbarOverlay(): void {
@@ -3125,31 +3167,28 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		const editorRect = this.toolbarOverlayEditorView.scrollDOM.getBoundingClientRect();
-		const toolbar = this.toolbarOverlayEl.firstElementChild as HTMLElement | null;
-		const toolbarHeight = toolbar?.offsetHeight ?? 0;
+		const toolbarHeight = this.toolbarOverlayHeight;
 		const left = editorRect.left + editorRect.width / 2;
 		let clampedTop = editorRect.top + 8;
+		let isHidden = false;
 
 		if (this.toolbarOverlayState.mode === "review" || this.toolbarOverlayState.mode === "applied_review") {
 			if (!this.activeHighlightRange) {
-				this.toolbarOverlayEl.classList.add("is-hidden");
-				return;
-			}
+				isHidden = true;
+			} else {
+				const coords = this.toolbarOverlayEditorView.coordsAtPos(this.activeHighlightRange.start);
+				if (!coords) {
+					isHidden = true;
+				} else {
+					const top = coords.top - 50 - toolbarHeight;
+					const minimumTop = editorRect.top + 8;
+					const maximumTop = editorRect.bottom - 8 - toolbarHeight;
+					clampedTop = Math.min(Math.max(top, minimumTop), maximumTop);
 
-			const coords = this.toolbarOverlayEditorView.coordsAtPos(this.activeHighlightRange.start);
-			if (!coords) {
-				this.toolbarOverlayEl.classList.add("is-hidden");
-				return;
-			}
-
-			const top = coords.top - 50 - toolbarHeight;
-			const minimumTop = editorRect.top + 8;
-			const maximumTop = editorRect.bottom - 8 - toolbarHeight;
-			clampedTop = Math.min(Math.max(top, minimumTop), maximumTop);
-
-			if (coords.bottom < editorRect.top || coords.top > editorRect.bottom) {
-				this.toolbarOverlayEl.classList.add("is-hidden");
-				return;
+					if (coords.bottom < editorRect.top || coords.top > editorRect.bottom) {
+						isHidden = true;
+					}
+				}
 			}
 		} else {
 			const minimumTop = editorRect.top + 12;
@@ -3157,16 +3196,34 @@ export default class EditorialistPlugin extends Plugin {
 			clampedTop = Math.min(Math.max(editorRect.top + 20, minimumTop), maximumTop);
 		}
 
-		this.toolbarOverlayEl.classList.remove("is-hidden");
-		this.toolbarOverlayEl.style.setProperty("--editorialist-toolbar-overlay-left", `${left}px`);
-		this.toolbarOverlayEl.style.setProperty("--editorialist-toolbar-overlay-top", `${clampedTop}px`);
+		const nextPosition = {
+			hidden: isHidden,
+			left: `${left}px`,
+			top: `${clampedTop}px`,
+		};
+
+		if (this.toolbarOverlayLastPosition?.hidden !== nextPosition.hidden) {
+			this.toolbarOverlayEl.classList.toggle("is-hidden", nextPosition.hidden);
+		}
+		if (!nextPosition.hidden) {
+			if (this.toolbarOverlayLastPosition?.left !== nextPosition.left) {
+				this.toolbarOverlayEl.style.setProperty("--editorialist-toolbar-overlay-left", nextPosition.left);
+			}
+			if (this.toolbarOverlayLastPosition?.top !== nextPosition.top) {
+				this.toolbarOverlayEl.style.setProperty("--editorialist-toolbar-overlay-top", nextPosition.top);
+			}
+		}
+		this.toolbarOverlayLastPosition = nextPosition;
 	}
 
 	private destroyToolbarOverlay(): void {
+		this.cancelToolbarOverlayPositionUpdate();
 		if (this.toolbarOverlayEditorView) {
 			this.toolbarOverlayEditorView.scrollDOM.removeEventListener("scroll", this.toolbarOverlayScrollHandler);
 			this.toolbarOverlayEditorView = null;
 		}
+		this.toolbarOverlayHeight = 0;
+		this.toolbarOverlayLastPosition = null;
 		this.toolbarOverlayState = null;
 
 		if (this.toolbarOverlayEl) {
@@ -3230,11 +3287,11 @@ export default class EditorialistPlugin extends Plugin {
 				new Notice("Scene note not found.");
 				return;
 			}
-			const removed = removeImportedReviewBlocks(await this.app.vault.cachedRead(file));
-			if (removed.removedCount > 0) {
-				await this.app.vault.modify(file, removed.text);
+			await this.app.vault.process(file, (currentText) => {
+				const removed = removeImportedReviewBlocks(currentText);
 				removedCount = removed.removedCount;
-			}
+				return removed.removedCount > 0 ? removed.text : currentText;
+			});
 		}
 
 		await this.syncSceneReviewIndex();
@@ -3264,11 +3321,13 @@ export default class EditorialistPlugin extends Plugin {
 				continue;
 			}
 
-			const removed = removeImportedReviewBlocks(await this.app.vault.cachedRead(file));
-			if (removed.removedCount > 0) {
-				await this.app.vault.modify(file, removed.text);
-				removedCount += removed.removedCount;
-			}
+			let currentRemovedCount = 0;
+			await this.app.vault.process(file, (currentText) => {
+				const removed = removeImportedReviewBlocks(currentText);
+				currentRemovedCount = removed.removedCount;
+				return removed.removedCount > 0 ? removed.text : currentText;
+			});
+			removedCount += currentRemovedCount;
 		}
 
 		await this.syncSceneReviewIndex();
@@ -3296,7 +3355,7 @@ export default class EditorialistPlugin extends Plugin {
 		const date = new Date();
 		const dateLabel = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 		let targetPath = normalizePath(`editorialist-data-export-${dateLabel}.json`);
-		if (await this.app.vault.adapter.exists(targetPath)) {
+		if (this.app.vault.getAbstractFileByPath(targetPath) instanceof TFile) {
 			const timeLabel = `${String(date.getHours()).padStart(2, "0")}${String(date.getMinutes()).padStart(2, "0")}${String(date.getSeconds()).padStart(2, "0")}`;
 			targetPath = normalizePath(`editorialist-data-export-${dateLabel}-${timeLabel}.json`);
 		}
@@ -3574,14 +3633,13 @@ export default class EditorialistPlugin extends Plugin {
 				continue;
 			}
 
-			const currentText = await this.app.vault.cachedRead(file);
-			const removed = removeImportedReviewBlocks(currentText, batchId);
-			if (removed.removedCount === 0) {
-				continue;
-			}
-
-			await this.app.vault.modify(file, removed.text);
-			removedCount += removed.removedCount;
+			let currentRemovedCount = 0;
+			await this.app.vault.process(file, (currentText) => {
+				const removed = removeImportedReviewBlocks(currentText, batchId);
+				currentRemovedCount = removed.removedCount;
+				return removed.removedCount > 0 ? removed.text : currentText;
+			});
+			removedCount += currentRemovedCount;
 		}
 
 		await this.registry.updateSweepRegistry(

@@ -99,10 +99,8 @@ export class ImportEngine {
 				continue;
 			}
 
-			const currentText = await this.app.vault.cachedRead(file);
 			const block = this.serializeGroup(batch.batchId, group);
-			const nextText = this.appendImportBlock(currentText, block);
-			await this.app.vault.modify(file, nextText);
+			await this.app.vault.process(file, (currentText) => this.appendImportBlock(currentText, block));
 			importedGroups.push(group);
 		}
 

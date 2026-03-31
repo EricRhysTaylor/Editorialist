@@ -269,37 +269,49 @@ export function createReviewToolbarElement(
 
 	const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
 	markAsNonEditorSurface(meta);
-	renderMetaSegment(meta, state.operationLabel);
-	renderMetaSeparator(meta);
+	const metaSegments: Array<{ text: string; cls?: string }> = [
+		{ text: state.operationLabel },
+	];
 	if (state.sceneProgressLabel) {
-		renderMetaSegment(meta, state.sceneProgressLabel);
-		renderMetaSeparator(meta);
+		metaSegments.push({ text: state.sceneProgressLabel });
 	}
-	renderMetaSegment(meta, state.selectedIndexLabel);
-	renderMetaSeparator(meta);
-	renderMetaSegment(meta, `${state.pendingCount} pending`);
-	renderMetaSeparator(meta);
-	renderMetaSegment(meta, `${state.unresolvedCount} unresolved`);
-	if (state.deferredCount > 0) {
-		renderMetaSeparator(meta);
-		renderMetaSegment(meta, `${state.deferredCount} deferred`);
-	}
-	if (state.completionLabel) {
-		renderMetaSeparator(meta);
-		renderMetaSegment(meta, state.completionLabel, "editorialist-toolbar__meta-segment--positive");
-	}
+	metaSegments.push({ text: state.selectedIndexLabel });
 	if (state.acceptedCount > 0) {
-		renderMetaSeparator(meta);
-		renderMetaSegment(meta, `${state.acceptedCount} accepted`, "editorialist-toolbar__meta-segment--positive");
+		metaSegments.push({
+			text: `${state.acceptedCount} accepted`,
+			cls: "editorialist-toolbar__meta-segment--positive",
+		});
+	}
+	if (state.pendingCount > 0) {
+		metaSegments.push({ text: `${state.pendingCount} pending` });
 	}
 	if (state.rejectedCount > 0) {
-		renderMetaSeparator(meta);
-		renderMetaSegment(meta, `${state.rejectedCount} rejected`, "editorialist-toolbar__meta-segment--negative");
+		metaSegments.push({
+			text: `${state.rejectedCount} rejected`,
+			cls: "editorialist-toolbar__meta-segment--negative",
+		});
+	}
+	if (state.unresolvedCount > 0) {
+		metaSegments.push({ text: `${state.unresolvedCount} unresolved` });
+	}
+	if (state.deferredCount > 0) {
+		metaSegments.push({ text: `${state.deferredCount} deferred` });
 	}
 	if (state.rewrittenCount > 0) {
-		renderMetaSeparator(meta);
-		renderMetaSegment(meta, `${state.rewrittenCount} rewritten`);
+		metaSegments.push({ text: `${state.rewrittenCount} rewritten` });
 	}
+	if (state.completionLabel) {
+		metaSegments.push({
+			text: state.completionLabel,
+			cls: "editorialist-toolbar__meta-segment--positive",
+		});
+	}
+	metaSegments.forEach((segment, index) => {
+		if (index > 0) {
+			renderMetaSeparator(meta);
+		}
+		renderMetaSegment(meta, segment.text, segment.cls);
+	});
 
 	const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
 	const applyOperationLabel = state.operationLabel.toLowerCase();

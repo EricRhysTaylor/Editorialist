@@ -6,17 +6,26 @@
 	"type": "module",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
-		"build": "npm run css-check && npm run css-audit && npm run qa-audit && node esbuild.config.mjs production && npm run copy:dev && node scripts/backup-if-stale.mjs",
+		"build": "npm run css-check && npm run css-audit && npm run qa-audit && node esbuild.config.mjs production",
 		"copy:dev": "node scripts/copy-to-vault.mjs",
-		"build:dev": "npm run build",
+		"build:dev": "npm run build && npm run copy:dev",
 		"typecheck": "tsc --noEmit",
 		"lint": "eslint \"src/**/*.ts\"",
 		"css-check": "stylelint \"**/*.css\" --allow-empty-input",
 		"css-audit": "node scripts/css-audit.mjs",
 		"qa-audit": "node scripts/qa-audit.mjs",
 		"check": "npm run typecheck && npm run lint && npm run css-check && npm run css-audit && npm run qa-audit",
+		"release:check": "npm run check && npm run build",
 		"backup": "npm run check && node scripts/backup.mjs",
 		"backup:msg": "npm run check && node scripts/backup.mjs"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/EricRhysTaylor/Editorialist.git"
+	},
+	"homepage": "https://github.com/EricRhysTaylor/Editorialist#readme",
+	"bugs": {
+		"url": "https://github.com/EricRhysTaylor/Editorialist/issues"
 	},
 	"keywords": [
 		"obsidian",

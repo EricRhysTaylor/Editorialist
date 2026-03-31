@@ -94,7 +94,7 @@ export class ReviewPanel extends ItemView {
 				const nextLine = next.createDiv({ cls: "editorialist-panel__launch-target editorialist-panel__launch-target--primary" });
 				nextLine.createSpan({
 					cls: "editorialist-panel__launch-target-prefix editorialist-panel__launch-target-prefix--primary",
-					text: `→ Next ${launchTarget.unitLabel} `,
+					text: `→ ${launchTarget.intent === "active" ? `Active ${launchTarget.unitLabel}` : `Next ${launchTarget.unitLabel}`} `,
 				});
 				const nextLink = nextLine.createEl("a", {
 					cls: "editorialist-panel__launch-target-link",
@@ -133,12 +133,12 @@ export class ReviewPanel extends ItemView {
 				cls: "editorialist-panel__command-link",
 				attr: {
 					href: "#",
-					title: "Open Editorialist begin",
+					title: "Open the Editorialist launcher",
 				},
 			});
 			launchLink.createSpan({
 				cls: "editorialist-panel__command-name",
-				text: "Editorialist begin",
+				text: "Open review launcher",
 			});
 			this.bindImmediateAction(launchLink, () => {
 				void this.plugin.openEditorialistModal();
@@ -1335,7 +1335,7 @@ export class ReviewPanel extends ItemView {
 	private getOperationIcon(suggestion: ReviewSuggestion): string {
 		switch (suggestion.operation) {
 			case "edit":
-				return "pencil";
+				return "file-pen-line";
 			case "cut":
 				return "scissors";
 			case "condense":

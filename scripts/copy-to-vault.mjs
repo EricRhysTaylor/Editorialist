@@ -2,21 +2,26 @@ import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 
 const ROOT = process.cwd();
-const TARGET_DIR =
-	"/Users/ericrhystaylor/Documents/Author Eric Rhys Taylor/Obsidian Vault Author .nosync/.obsidian/plugins/editorialist";
-const TARGET_LABEL = "/Author/";
 const FILES_TO_COPY = ["manifest.json", "main.js", "styles.css"];
 
 async function main() {
-	await mkdir(TARGET_DIR, { recursive: true });
+	const targetDir = process.env.EDITORIALIST_DEV_PLUGIN_DIR?.trim();
+	if (!targetDir) {
+		throw new Error(
+			"Set EDITORIALIST_DEV_PLUGIN_DIR to your Obsidian dev vault plugin folder before running copy:dev.",
+		);
+	}
+
+	const resolvedTargetDir = path.resolve(targetDir);
+	await mkdir(resolvedTargetDir, { recursive: true });
 
 	for (const fileName of FILES_TO_COPY) {
 		const sourcePath = path.join(ROOT, fileName);
-		const targetPath = path.join(TARGET_DIR, fileName);
+		const targetPath = path.join(resolvedTargetDir, fileName);
 		await copyFile(sourcePath, targetPath);
 	}
 
-	console.log(`[copy:dev] Copied plugin to "${TARGET_LABEL}"`);
+	console.log(`[copy:dev] Copied plugin to "${resolvedTargetDir}"`);
 }
 
 await main();

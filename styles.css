@@ -1,9 +1,10 @@
 .editorialist-toolbar-overlay {
 	position: fixed;
-	left: var(--editorialist-toolbar-overlay-left, 0);
-	top: var(--editorialist-toolbar-overlay-top, 0);
+	left: 0;
+	top: 0;
 	z-index: 40;
-	transform: translateX(-50%);
+	transform: translate3d(calc(var(--editorialist-toolbar-overlay-left, 0) - 50%), var(--editorialist-toolbar-overlay-top, 0), 0);
+	will-change: transform;
 	pointer-events: none;
 }
 
@@ -373,6 +374,11 @@
 }
 
 .editorialist-panel__launch-section--next {
+	align-items: flex-start;
+	text-align: left;
+}
+
+.editorialist-panel__launch-section--intro {
 	align-items: flex-end;
 	text-align: right;
 }
@@ -487,7 +493,7 @@
 }
 
 @media (width <= 720px) {
-	.editorialist-panel__launch-section--next {
+	.editorialist-panel__launch-section--intro {
 		align-items: flex-start;
 		text-align: left;
 	}
@@ -637,6 +643,7 @@
 			color-mix(in srgb, var(--background-secondary) 94%, var(--color-green) 6%) 0%,
 			color-mix(in srgb, var(--background-secondary) 99%, var(--background-primary) 1%) 100%
 		);
+	contain: paint;
 }
 
 .editorialist-panel__handoff-header {
@@ -680,6 +687,7 @@
 	flex-direction: column;
 	gap: 0.8rem;
 	overflow: hidden;
+	overflow: clip;
 	padding: 1rem 1.05rem 1.1rem;
 	border: 1px solid color-mix(in srgb, var(--color-green) 24%, var(--background-modifier-border));
 	border-radius: 16px;
@@ -690,6 +698,7 @@
 			color-mix(in srgb, var(--background-secondary) 97%, var(--background-primary) 3%) 100%
 		);
 	animation: editorialist-panel-completion-fade 160ms ease-out;
+	contain: paint;
 }
 
 .editorialist-panel__completion--neutral {
@@ -1484,15 +1493,14 @@
 
 .editorialist-suggestion.is-collapsed:hover .editorialist-suggestion__summary,
 .editorialist-suggestion.is-collapsed:focus-within .editorialist-suggestion__summary {
-	display: none;
+	display: flex;
+	margin-bottom: 0.45rem;
 }
 
-.editorialist-suggestion.is-collapsed:hover .editorialist-suggestion__meta,
 .editorialist-suggestion.is-collapsed:hover .editorialist-suggestion__copy,
 .editorialist-suggestion.is-collapsed:hover .editorialist-suggestion__reason,
 .editorialist-suggestion.is-collapsed:hover .editorialist-suggestion__resolution-actions,
 .editorialist-suggestion.is-collapsed:hover .editorialist-reviewer-picker,
-.editorialist-suggestion.is-collapsed:focus-within .editorialist-suggestion__meta,
 .editorialist-suggestion.is-collapsed:focus-within .editorialist-suggestion__copy,
 .editorialist-suggestion.is-collapsed:focus-within .editorialist-suggestion__reason,
 .editorialist-suggestion.is-collapsed:focus-within .editorialist-suggestion__resolution-actions,
@@ -1620,7 +1628,6 @@
 	--editorialist-settings-panel-hero-border: color-mix(in srgb, var(--background-modifier-border) 90%, transparent);
 	--editorialist-settings-panel-hero-shadow: none;
 	--editorialist-settings-panel-hero-grad:
-		radial-gradient(circle at 10% 15%, color-mix(in srgb, var(--background-secondary) 20%, transparent) 0%, transparent 40%),
 		linear-gradient(135deg, color-mix(in srgb, var(--background-secondary) 16%, transparent) 0%, color-mix(in srgb, var(--background-secondary) 8%, transparent) 100%);
 	--editorialist-settings-panel-radius: 12px;
 	--editorialist-settings-panel-pad: 1rem;
@@ -1649,6 +1656,7 @@
 	border-radius: var(--editorialist-settings-panel-radius);
 	padding: var(--editorialist-settings-panel-pad);
 	box-shadow: var(--editorialist-settings-panel-shadow);
+	contain: paint;
 }
 
 .editorialist-settings__hero {
@@ -1675,6 +1683,7 @@
 	flex-direction: column;
 	gap: 0.65rem;
 	overflow: hidden;
+	overflow: clip;
 	padding-left: var(--editorialist-settings-panel-pad);
 	background:
 		linear-gradient(135deg, color-mix(in srgb, var(--background-primary) 92%, var(--interactive-accent) 8%) 0%, color-mix(in srgb, var(--background-primary) 96%, transparent) 100%);
@@ -3164,6 +3173,7 @@
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 12px;
 	background: var(--background-secondary);
+	contain: paint;
 }
 
 .editorialist-control-modal__example-header {

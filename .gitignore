@@ -1,6 +1,7 @@
 node_modules/
 dist/
 *.log
+main.js
 
 .obsidian/
 *.nosync/

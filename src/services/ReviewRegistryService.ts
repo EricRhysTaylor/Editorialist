@@ -707,6 +707,98 @@ export class ReviewRegistryService {
 		}
 	}
 
+	async syncSceneInventoryForSession(
+		session: ReviewSession | null,
+		options?: { persist?: boolean },
+	): Promise<void> {
+		if (!session) {
+			return;
+		}
+
+		const file = this.app.vault.getAbstractFileByPath(session.notePath);
+		if (!(file instanceof TFile)) {
+			return;
+		}
+
+		const noteText = this.getOpenNoteText(session.notePath) ?? (await this.app.vault.cachedRead(file));
+		const importedBlocks = findImportedReviewBlocks(noteText);
+		if (importedBlocks.length === 0) {
+			await this.syncSceneInventory(options);
+			return;
+		}
+
+		let acceptedCount = 0;
+		let deferredCount = 0;
+		let pendingCount = 0;
+		let rejectedCount = 0;
+		let rewrittenCount = 0;
+		let unresolvedCount = 0;
+		let lastDecisionAt = 0;
+
+		for (const suggestion of session.suggestions) {
+			const record = this.getPersistedReviewDecisionRecord(session.notePath, suggestion);
+			if (record?.updatedAt) {
+				lastDecisionAt = Math.max(lastDecisionAt, record.updatedAt);
+			}
+
+			switch (suggestion.status) {
+				case "accepted":
+					acceptedCount += 1;
+					break;
+				case "deferred":
+					deferredCount += 1;
+					break;
+				case "pending":
+					pendingCount += 1;
+					break;
+				case "rejected":
+					rejectedCount += 1;
+					break;
+				case "rewritten":
+					rewrittenCount += 1;
+					break;
+				case "unresolved":
+					unresolvedCount += 1;
+					break;
+			}
+		}
+
+		const batchIds = [
+			...new Set(importedBlocks.map((block) => block.batchId).filter((value): value is string => Boolean(value))),
+		];
+		const nextRecord: SceneReviewRecord = {
+			sceneId: getSceneIdForFile(this.app, file),
+			notePath: file.path,
+			noteTitle: file.basename,
+			bookLabel: getBookHintForPath(file.path, this.activeBookScope),
+			batchIds,
+			batchCount: batchIds.length,
+			pendingCount,
+			unresolvedCount,
+			deferredCount,
+			acceptedCount,
+			rejectedCount,
+			rewrittenCount,
+			status:
+				pendingCount === 0 && unresolvedCount === 0 && deferredCount === 0
+					? "completed"
+					: "in_progress",
+			lastUpdated: Math.max(file.stat.mtime, lastDecisionAt),
+		};
+
+		if (this.sameJsonValue(this.sceneReviewIndex[session.notePath], nextRecord)) {
+			return;
+		}
+
+		this.sceneReviewIndex = {
+			...this.sceneReviewIndex,
+			[session.notePath]: nextRecord,
+		};
+		if (options?.persist !== false) {
+			await this.persistData();
+		}
+	}
+
 	async recordImportedBatch(
 		batch: ReviewImportBatch,
 		importedGroups: ReviewImportNoteGroup[],

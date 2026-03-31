@@ -379,6 +379,14 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 		const actions = row.createDiv({ cls: "editorialist-settings__maintenance-actions" });
 		this.createActionButton(actions, "fingerprint", "Inject stable note IDs", async () => {
+			if (!(await this.confirmDestructiveAction({
+				title: "Inject stable note IDs",
+				description: `This adds an \`editorial_id\` frontmatter field to tracked ${vocabulary.pluralLabelLower} that do not already have a stable ID.`,
+				confirmLabel: "Inject IDs",
+			}))) {
+				return;
+			}
+
 			const injectedCount = await this.plugin.injectStableNoteIdsIntoTrackedNotes(this.activeBookOnly);
 			void this.displayAsync(false);
 			new Notice(
@@ -940,6 +948,14 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 		const cleanupActions = cleanupRow.createDiv({ cls: "editorialist-settings__maintenance-actions" });
 		this.createActionButton(cleanupActions, "brush-cleaning", `Clean all ${vocabulary.pluralLabelLower}`, async () => {
+			if (!(await this.confirmDestructiveAction({
+				title: `Clean all ${vocabulary.pluralLabelLower}`,
+				description: `This removes imported Editorialist review blocks from tracked ${vocabulary.pluralLabelLower}. Accepted manuscript edits and saved review history stay in place.`,
+				confirmLabel: `Clean all ${vocabulary.pluralLabelLower}`,
+			}))) {
+				return;
+			}
+
 			const removed = await this.plugin.cleanupAllSceneReviewNotes(this.activeBookOnly);
 			void this.displayAsync(false);
 			new Notice(
@@ -949,6 +965,14 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			);
 		});
 		this.createActionButton(cleanupActions, "archive-x", `Clean completed ${vocabulary.pluralLabelLower}`, async () => {
+			if (!(await this.confirmDestructiveAction({
+				title: `Clean completed ${vocabulary.pluralLabelLower}`,
+				description: `This removes imported Editorialist review blocks only from completed ${vocabulary.pluralLabelLower}. Accepted manuscript edits and saved review history stay in place.`,
+				confirmLabel: `Clean completed ${vocabulary.pluralLabelLower}`,
+			}))) {
+				return;
+			}
+
 			const removed = await this.plugin.cleanupCompletedSceneReviewNotes(this.activeBookOnly);
 			void this.displayAsync(false);
 			new Notice(
@@ -1048,6 +1072,23 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				? "Reset all saved revision history."
 				: "No saved revision history was found.",
 		);
+	}
+
+	private async confirmDestructiveAction(options: {
+		title: string;
+		description: string;
+		confirmLabel: string;
+	}): Promise<boolean> {
+		const choice = await openEditorialistChoiceModal(this.app, {
+			title: options.title,
+			description: options.description,
+			choices: [
+				{ label: options.confirmLabel, value: "confirm" },
+				{ label: "Cancel", value: "cancel" },
+			],
+		});
+
+		return choice === "confirm";
 	}
 
 	private formatSweepChoiceLabel(entry: ReviewSweepRegistryEntry): string {
