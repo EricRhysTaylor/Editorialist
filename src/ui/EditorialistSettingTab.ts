@@ -163,7 +163,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 		const featureList = features.createDiv({ cls: "editorialist-settings__hero-features-list" });
 		this.createHeroFeature(featureList, "table-properties", "Scene inventory — see every scene that still has revision notes and track progress at a glance.");
-		this.createHeroFeature(featureList, "list-todo", "Review in context — jump straight into any scene and continue editing without searching.");
+		this.createHeroFeature(featureList, "pen-tool", "Review in context — jump straight into any scene and continue editing without searching.");
 		this.createHeroFeature(featureList, "users", "Contributor tracking — keep revision identities clean, merge aliases, and preserve trustworthy editorial history.");
 		this.createHeroFeature(featureList, "database-backup", "Backup your data — export contributor history and revision activity without touching your manuscript.");
 	}

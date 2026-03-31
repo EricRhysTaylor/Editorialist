@@ -6,9 +6,9 @@
 	"type": "module",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
-		"build": "npm run css-check && npm run css-audit && npm run qa-audit && node esbuild.config.mjs production",
+		"build": "npm run css-check && npm run css-audit && npm run qa-audit && node esbuild.config.mjs production && npm run copy:dev && node scripts/backup-if-stale.mjs",
 		"copy:dev": "node scripts/copy-to-vault.mjs",
-		"build:dev": "npm run build && npm run copy:dev",
+		"build:dev": "npm run build",
 		"typecheck": "tsc --noEmit",
 		"lint": "eslint \"src/**/*.ts\"",
 		"css-check": "stylelint \"**/*.css\" --allow-empty-input",

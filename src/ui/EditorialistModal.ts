@@ -176,7 +176,7 @@ export class EditorialistModal extends Modal {
 		if (!this.options.isReviewPanelOpen) {
 			this.renderSecondaryActions(card, [
 				{
-					icon: "list-todo",
+					icon: "pen-tool",
 					label: "Open revisions side-panel",
 					onClick: async () => {
 						await this.options.onOpenReviewPanel();

@@ -32,7 +32,7 @@ export class ReviewPanel extends ItemView {
 	}
 
 	getIcon(): string {
-		return "list-todo";
+		return "pen-tool";
 	}
 
 	async onOpen(): Promise<void> {
@@ -52,7 +52,7 @@ export class ReviewPanel extends ItemView {
 		const header = this.contentEl.createDiv({ cls: "editorialist-panel__header" });
 		const titleRow = header.createDiv({ cls: "editorialist-panel__title-row" });
 		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__title-icon" });
-		setIcon(titleIcon, "list-todo");
+		setIcon(titleIcon, "pen-tool");
 		titleRow.createEl("h2", { text: "Editorialist review" });
 		const settingsButton = titleRow.createEl("button", {
 			cls: "editorialist-panel__settings-button",
@@ -250,11 +250,11 @@ export class ReviewPanel extends ItemView {
 
 		const card = this.contentEl.createDiv({ cls: "editorialist-panel__completion" });
 		const bgIcon = card.createSpan({ cls: "editorialist-panel__completion-bg-icon" });
-		setIcon(bgIcon, "list-todo");
+		setIcon(bgIcon, "pen-tool");
 
 		const titleRow = card.createDiv({ cls: "editorialist-panel__completion-title-row" });
 		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__completion-title-icon" });
-		setIcon(titleIcon, "list-todo");
+		setIcon(titleIcon, "pen-tool");
 		titleRow.createSpan({
 			cls: "editorialist-panel__completion-title",
 			text: completedSweep.title,
@@ -371,11 +371,11 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-panel__completion editorialist-panel__completion--neutral",
 		});
 		const bgIcon = card.createSpan({ cls: "editorialist-panel__completion-bg-icon" });
-		setIcon(bgIcon, "list-todo");
+		setIcon(bgIcon, "pen-tool");
 
 		const titleRow = card.createDiv({ cls: "editorialist-panel__completion-title-row" });
 		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__completion-title-icon" });
-		setIcon(titleIcon, "list-todo");
+		setIcon(titleIcon, "pen-tool");
 		titleRow.createSpan({
 			cls: "editorialist-panel__completion-title",
 			text: postCompletionIdle.title,
@@ -530,7 +530,7 @@ export class ReviewPanel extends ItemView {
 		const header = card.createDiv({ cls: "editorialist-panel__panel-only-header" });
 		const title = header.createDiv({ cls: "editorialist-panel__panel-only-title" });
 		const titleIcon = title.createSpan({ cls: "editorialist-panel__panel-only-title-icon" });
-		setIcon(titleIcon, "list-todo");
+		setIcon(titleIcon, "pen-tool");
 		title.createSpan({ text: panelOnlyState.title });
 		if (panelOnlyState.progressLabel) {
 			header.createDiv({
@@ -611,7 +611,7 @@ export class ReviewPanel extends ItemView {
 		if (panelPrimary) {
 			const panelFocus = metaPrimary.createDiv({ cls: "editorialist-suggestion__panel-focus" });
 			const panelFocusIcon = panelFocus.createSpan({ cls: "editorialist-suggestion__panel-focus-icon" });
-			setIcon(panelFocusIcon, "list-todo");
+			setIcon(panelFocusIcon, "pen-tool");
 			panelFocus.createSpan({
 				cls: "editorialist-suggestion__panel-focus-text",
 				text: "Continue here",
@@ -1042,6 +1042,9 @@ export class ReviewPanel extends ItemView {
 		if (this.isOtherTextSuggestion(suggestion)) {
 			const session = this.plugin.store.getSession();
 			const unitLabel = this.plugin.usesSceneTerminology(session?.notePath) ? "scene" : "note";
+			if (suggestion.operation === "cut") {
+				return `This line may already have been removed or rewritten in this ${unitLabel}.`;
+			}
 			return `This revision note now applies elsewhere in this ${unitLabel}.`;
 		}
 

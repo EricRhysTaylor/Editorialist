@@ -740,6 +740,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async acceptSuggestion(id: string): Promise<boolean> {
+		const acceptedSuggestion = this.getSuggestionById(id);
 		const appliedChange = await this.applySuggestionById(id, {
 			highlightMode: "muted",
 		});
@@ -755,6 +756,19 @@ export default class EditorialistPlugin extends Plugin {
 
 		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next", id);
 		if (this.getPanelOnlyReviewStateForSession(refreshedSession) && nextSuggestionId) {
+			this.store.selectSuggestion(nextSuggestionId);
+			await this.revealSelectedSuggestion();
+			return true;
+		}
+
+		if (acceptedSuggestion?.operation === "cut" && nextSuggestionId) {
+			this.store.selectSuggestion(nextSuggestionId);
+			await this.revealSelectedSuggestion();
+			return true;
+		}
+
+		const hasHighlightableRange = appliedChange.end > appliedChange.start;
+		if (!hasHighlightableRange && nextSuggestionId) {
 			this.store.selectSuggestion(nextSuggestionId);
 			await this.revealSelectedSuggestion();
 			return true;

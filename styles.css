@@ -179,7 +179,12 @@
 .editorialist-control-modal__button {
 	display: inline-flex;
 	align-items: center;
+	justify-content: center;
 	gap: 0.35rem;
+	box-sizing: border-box;
+	line-height: 1;
+	overflow: visible;
+	vertical-align: middle;
 }
 
 .editorialist-toolbar__button-icon,
@@ -187,12 +192,16 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	line-height: 0;
+	overflow: visible;
 }
 
 .editorialist-toolbar__button {
 	justify-content: center;
 	width: 2.1rem;
 	height: 2.1rem;
+	min-width: 2.1rem;
+	min-height: 2.1rem;
 	padding: 0;
 	border-radius: 10px;
 }
@@ -233,6 +242,8 @@
 	width: 1rem;
 	height: 1rem;
 	stroke-width: 2.25px;
+	overflow: visible;
+	flex: 0 0 auto;
 }
 
 .editorialist-toolbar__button-label {
@@ -243,26 +254,54 @@
 	text-transform: none;
 }
 
-.editorialist-toolbar__flat-close {
+.ert-toolbar-close {
+	all: unset;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	width: 1.35rem;
 	height: 1.35rem;
+	flex: 0 0 auto;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	background: transparent;
+	box-shadow: none;
 	color: color-mix(in srgb, var(--text-muted) 88%, var(--text-normal));
+	cursor: pointer;
+	appearance: none;
+	line-height: 1;
+	font-family: inherit;
+	font-size: inherit;
+	font-weight: inherit;
+	text-decoration: none;
+	vertical-align: middle;
+}
+
+.ert-toolbar-close:hover,
+.ert-toolbar-close:focus-visible {
+	color: var(--text-normal);
+	border-color: color-mix(in srgb, var(--background-modifier-border) 72%, transparent);
+	background: color-mix(in srgb, var(--background-primary) 72%, var(--background-modifier-hover) 28%);
+	box-shadow: none;
+	outline: none;
+}
+
+.ert-toolbar-close__icon,
+.ert-toolbar-close__icon svg {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 0.9rem;
+	height: 0.9rem;
+}
+
+.ert-toolbar-close__icon svg {
+	stroke-width: 2px;
 }
 
 .editorialist-toolbar--bulk-confirm .editorialist-toolbar__meta {
 	flex: 1 1 auto;
-}
-
-.editorialist-toolbar__flat-close:hover,
-.editorialist-toolbar__flat-close:focus-visible {
-	color: var(--text-normal);
-	box-shadow: none;
-}
-
-.editorialist-toolbar__flat-close svg {
-	width: 0.9rem;
-	height: 0.9rem;
-	stroke-width: 2px;
 }
 
 .editorialist-panel {
