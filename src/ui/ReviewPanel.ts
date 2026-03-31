@@ -755,6 +755,8 @@ export class ReviewPanel extends ItemView {
 		});
 		this.renderStructureBlock(structure, afterLabel, afterText, {
 			icon: isCondense ? "sparkles" : "check",
+			copyHint: "Click to copy",
+			copyNotice: isCondense ? "Suggestion copied" : "Revised text copied",
 			tone: "active",
 		});
 	}
@@ -801,6 +803,8 @@ export class ReviewPanel extends ItemView {
 			text: label,
 		});
 		this.renderStructureBlock(insertion, "Inserted content", text, {
+			copyHint: "Click to copy",
+			copyNotice: "Inserted text copied",
 			icon: "plus",
 			tone: "active",
 			state: "insert",
@@ -812,6 +816,8 @@ export class ReviewPanel extends ItemView {
 		label: string,
 		text: string,
 		options: {
+			copyHint?: string;
+			copyNotice?: string;
 			icon: string;
 			state?: "insert" | "delete";
 			tone: "active" | "ghost" | "muted";
@@ -820,6 +826,19 @@ export class ReviewPanel extends ItemView {
 		const block = parent.createDiv({
 			cls: `editorialist-suggestion__structure-block editorialist-suggestion__structure-block--${options.tone}${options.state ? ` editorialist-suggestion__structure-block--${options.state}` : ""}`,
 		});
+		if (options.copyHint) {
+			block.addClass("is-copyable");
+			block.setAttribute("role", "button");
+			block.setAttribute("tabindex", "0");
+			block.setAttribute("aria-label", `${options.copyHint}: ${label}`);
+			this.bindImmediateAction(block, () => {
+				void this.plugin.copyTextToClipboard(
+					text,
+					options.copyNotice ?? "Copied to clipboard",
+					"Could not copy the text.",
+				);
+			});
+		}
 		const header = block.createDiv({ cls: "editorialist-suggestion__structure-block-header" });
 		const icon = header.createSpan({ cls: "editorialist-suggestion__structure-block-icon" });
 		setIcon(icon, options.icon);
@@ -827,6 +846,12 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-suggestion__structure-block-label",
 			text: label,
 		});
+		if (options.copyHint) {
+			header.createSpan({
+				cls: "editorialist-suggestion__structure-copy-hint",
+				text: options.copyHint,
+			});
+		}
 		block.createDiv({
 			cls: "editorialist-suggestion__structure-block-body",
 			text,
@@ -1014,7 +1039,22 @@ export class ReviewPanel extends ItemView {
 		const wrapper = parent.createDiv({
 			cls: `editorialist-suggestion__copy-block editorialist-suggestion__copy-block--${title.toLowerCase()}`,
 		});
-		wrapper.createEl("strong", { text: title.toUpperCase() });
+		if (title.toLowerCase() === "revised") {
+			wrapper.addClass("is-copyable");
+			wrapper.setAttribute("role", "button");
+			wrapper.setAttribute("tabindex", "0");
+			wrapper.setAttribute("aria-label", "Click to copy revised text");
+			this.bindImmediateAction(wrapper, () => {
+				void this.plugin.copyTextToClipboard(body, "Revised text copied", "Could not copy the revised text.");
+			});
+		}
+		const heading = wrapper.createEl("strong", { text: title.toUpperCase() });
+		if (title.toLowerCase() === "revised") {
+			heading.createSpan({
+				cls: "editorialist-suggestion__copy-hint",
+				text: "Click to copy",
+			});
+		}
 		wrapper.createDiv({ cls: "editorialist-suggestion__copy-body", text: body });
 	}
 

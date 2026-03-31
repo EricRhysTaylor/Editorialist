@@ -185,6 +185,12 @@
 	background: color-mix(in srgb, var(--color-green) 14%, var(--background-secondary));
 }
 
+.editorialist-toolbar__button--apply[data-editorialist-shift-mode="true"] {
+	color: color-mix(in srgb, var(--color-red) 72%, var(--text-normal));
+	border-color: color-mix(in srgb, var(--color-red) 34%, var(--background-modifier-border));
+	background: color-mix(in srgb, var(--color-red) 12%, var(--background-secondary));
+}
+
 .editorialist-toolbar__button--text {
 	width: auto;
 	min-width: 0;
@@ -216,6 +222,10 @@
 	width: 1.35rem;
 	height: 1.35rem;
 	color: color-mix(in srgb, var(--text-muted) 88%, var(--text-normal));
+}
+
+.editorialist-toolbar--bulk-confirm .editorialist-toolbar__meta {
+	flex: 1 1 auto;
 }
 
 .editorialist-toolbar__flat-close:hover,
@@ -1156,6 +1166,16 @@
 	min-width: 0;
 }
 
+.editorialist-suggestion__structure-block.is-copyable {
+	position: relative;
+	cursor: copy;
+}
+
+.editorialist-suggestion__structure-block.is-copyable:hover,
+.editorialist-suggestion__structure-block.is-copyable:focus-within {
+	border-color: color-mix(in srgb, var(--interactive-accent) 28%, var(--background-modifier-border));
+}
+
 .editorialist-suggestion__structure-block-icon,
 .editorialist-suggestion__structure-block-icon svg {
 	display: inline-flex;
@@ -1178,6 +1198,25 @@
 	letter-spacing: 0.02em;
 	text-transform: uppercase;
 	color: color-mix(in srgb, var(--text-muted) 76%, var(--text-normal));
+}
+
+.editorialist-suggestion__structure-copy-hint,
+.editorialist-suggestion__copy-hint {
+	margin-left: auto;
+	font-size: 0.7rem;
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+	color: color-mix(in srgb, var(--text-muted) 82%, var(--text-normal));
+	opacity: 0;
+	transition: opacity 120ms ease;
+}
+
+.editorialist-suggestion__structure-block.is-copyable:hover .editorialist-suggestion__structure-copy-hint,
+.editorialist-suggestion__structure-block.is-copyable:focus-within .editorialist-suggestion__structure-copy-hint,
+.editorialist-suggestion__copy-block.is-copyable:hover .editorialist-suggestion__copy-hint,
+.editorialist-suggestion__copy-block.is-copyable:focus-within .editorialist-suggestion__copy-hint {
+	opacity: 1;
 }
 
 .editorialist-suggestion__structure-block-body {
@@ -1252,7 +1291,9 @@
 }
 
 .editorialist-suggestion__copy strong {
-	display: block;
+	display: flex;
+	align-items: center;
+	gap: 0.45rem;
 	margin-bottom: 0.18rem;
 	font-family: var(--font-monospace);
 	font-size: var(--font-ui-smaller);
@@ -1264,6 +1305,15 @@
 .editorialist-suggestion__copy-block {
 	display: flex;
 	flex-direction: column;
+}
+
+.editorialist-suggestion__copy-block.is-copyable {
+	cursor: copy;
+}
+
+.editorialist-suggestion__copy-block.is-copyable:hover .editorialist-suggestion__copy-body,
+.editorialist-suggestion__copy-block.is-copyable:focus-within .editorialist-suggestion__copy-body {
+	color: var(--text-normal);
 }
 
 .editorialist-suggestion__copy-body {

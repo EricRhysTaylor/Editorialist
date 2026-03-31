@@ -157,44 +157,30 @@ export class ImportEngine {
 	): Promise<ResolvedFileMatch> {
 		const routing = suggestion.routing;
 		const sceneId = routing?.sceneId?.trim();
+		let sceneIdFailureReason: string | null = null;
 
 		if (sceneId) {
 			const sceneMatches = markdownFiles.filter((file) => this.matchesSceneId(file, sceneId));
-			if (sceneMatches.length !== 1) {
-				return {
-					status: "unresolved",
-					strategy: "declared_scene_id",
-					reason:
-						sceneMatches.length > 1
-							? `Multiple notes match SceneId ${sceneId}.`
-							: `No note matches SceneId ${sceneId}.`,
-				};
+			if (sceneMatches.length > 1) {
+				sceneIdFailureReason = `Multiple notes match SceneId ${sceneId}.`;
+			} else if (sceneMatches.length === 0) {
+				sceneIdFailureReason = `No note matches SceneId ${sceneId}.`;
 			}
 
 			const resolvedFile = sceneMatches[0];
-			if (!resolvedFile) {
-				return {
-					status: "unresolved",
-					strategy: "declared_scene_id",
-					reason: `No note matches SceneId ${sceneId}.`,
-				};
-			}
-			const mismatchReason = this.getRoutingMismatchReason(resolvedFile, suggestion);
-			if (mismatchReason) {
-				return {
-					file: resolvedFile,
-					status: "mismatch",
-					strategy: "declared_scene_id",
-					reason: mismatchReason,
-				};
-			}
+			if (resolvedFile) {
+				const mismatchReason = this.getRoutingMismatchReason(resolvedFile, suggestion);
+				if (!mismatchReason) {
+					return {
+						file: resolvedFile,
+						status: "resolved",
+						strategy: "declared_scene_id",
+						reason: `Resolved via SceneId ${sceneId}.`,
+					};
+				}
 
-			return {
-				file: resolvedFile,
-				status: "resolved",
-				strategy: "declared_scene_id",
-				reason: `Resolved via SceneId ${sceneId}.`,
-			};
+				sceneIdFailureReason = mismatchReason;
+			}
 		}
 
 		const pathMatch = this.resolvePathHint(routing?.path);
@@ -203,7 +189,10 @@ export class ImportEngine {
 				file: pathMatch,
 				status: "resolved",
 				strategy: "declared_path",
-				reason: "Resolved via Path hint.",
+				reason: this.combineRoutingReasons(
+					sceneIdFailureReason,
+					"Resolved via Path hint.",
+				),
 			};
 		}
 
@@ -213,7 +202,10 @@ export class ImportEngine {
 				file: noteMatch,
 				status: "resolved",
 				strategy: "declared_note",
-				reason: "Resolved via Note hint.",
+				reason: this.combineRoutingReasons(
+					sceneIdFailureReason,
+					"Resolved via Note hint.",
+				),
 			};
 		}
 
@@ -223,13 +215,32 @@ export class ImportEngine {
 				file: sceneMatch,
 				status: "resolved",
 				strategy: "declared_scene",
-				reason: "Resolved via Scene hint.",
+				reason: this.combineRoutingReasons(
+					sceneIdFailureReason,
+					"Resolved via Scene hint.",
+				),
 			};
 		}
 
 		const inferredMatch = await this.inferFileForSuggestion(suggestion, scopeFiles, noteTextCache);
 		if (inferredMatch) {
-			return inferredMatch;
+			return {
+				...inferredMatch,
+				reason: this.combineRoutingReasons(sceneIdFailureReason, inferredMatch.reason),
+			};
+		}
+
+		if (sceneIdFailureReason) {
+			return {
+				status: "unresolved",
+				strategy: "declared_scene_id",
+				reason: this.combineRoutingReasons(
+					sceneIdFailureReason,
+					scopeFiles.length > 0
+						? "No Path, Note, or safe inferred scene match could be resolved."
+						: "No Path or Note hint could be resolved, and no active-book scene scope was available for inferred matching.",
+				),
+			};
 		}
 
 		return {
@@ -240,6 +251,14 @@ export class ImportEngine {
 					? "No SceneId, Path, Note, or safe inferred scene match could be resolved."
 					: "No SceneId, Path, or Note hint could be resolved, and no active-book scene scope was available for inferred matching.",
 		};
+	}
+
+	private combineRoutingReasons(primary: string | null | undefined, fallback: string): string {
+		if (!primary?.trim()) {
+			return fallback;
+		}
+
+		return `${primary} ${fallback}`;
 	}
 
 	private async getActiveBookScopeFiles(activeNotePath: string | undefined, markdownFiles: TFile[]): Promise<TFile[]> {

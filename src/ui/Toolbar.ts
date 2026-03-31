@@ -47,13 +47,21 @@ export interface PanelToolbarState {
 
 export interface AppliedReviewToolbarState {
 	mode: "applied_review";
+	canUndo: boolean;
 	currentIndexLabel: string;
 	title: string;
 }
 
 export interface AcceptedReviewToolbarState {
 	mode: "accepted_review";
+	canUndo: boolean;
 	currentIndexLabel: string;
+	title: string;
+}
+
+export interface BulkConfirmToolbarState {
+	mode: "bulk_confirm";
+	countLabel: string;
 	title: string;
 }
 
@@ -68,6 +76,7 @@ export interface CompletedReviewToolbarState {
 
 export type ToolbarState =
 	| ReviewToolbarState
+	| BulkConfirmToolbarState
 	| HandoffToolbarState
 	| PanelToolbarState
 	| AppliedReviewToolbarState
@@ -130,6 +139,29 @@ export function createReviewToolbarElement(
 		return overlay;
 	}
 
+	if (state.mode === "bulk_confirm") {
+		toolbar.addClass("editorialist-toolbar--bulk-confirm");
+		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
+		buildFlatIconButton(leading, "Cancel bulk apply", "x", () => {
+			plugin.cancelApplyAndReviewConfirmMode();
+		});
+
+		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });
+		markAsNonEditorSurface(meta);
+		renderMetaSegment(meta, state.title, "editorialist-toolbar__meta-segment--negative");
+		renderMetaSeparator(meta);
+		renderMetaSegment(meta, state.countLabel);
+
+		const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
+		buildActionButton(actions, "Cancel", "arrow-left", () => {
+			plugin.cancelApplyAndReviewConfirmMode();
+		}, true);
+		buildActionButton(actions, "Confirm", "triangle-alert", () => {
+			void plugin.confirmApplyAndReviewSceneSuggestions();
+		});
+		return overlay;
+	}
+
 	if (state.mode === "applied_review") {
 		toolbar.addClass("editorialist-toolbar--panel");
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
@@ -150,6 +182,11 @@ export function createReviewToolbarElement(
 		buildButton(actions, "Next", "arrow-right", () => {
 			void plugin.selectNextAppliedReviewChange();
 		}, false);
+		if (state.canUndo) {
+			buildButton(actions, "Undo", "rotate-ccw", () => {
+				void plugin.undoLastAppliedSuggestion();
+			}, false);
+		}
 		return overlay;
 	}
 
@@ -173,6 +210,11 @@ export function createReviewToolbarElement(
 		buildButton(actions, "Next", "arrow-right", () => {
 			void plugin.selectNextAcceptedSuggestion();
 		}, false);
+		if (state.canUndo) {
+			buildButton(actions, "Undo", "rotate-ccw", () => {
+				void plugin.undoLastAppliedSuggestion();
+			}, false);
+		}
 		return overlay;
 	}
 
@@ -257,16 +299,13 @@ export function createReviewToolbarElement(
 		!state.canApply,
 		true,
 		{
-			label: "Apply and advance",
-			icon: "list-end",
+			label: "Apply and review all",
+			icon: "triangle-alert",
 			onClick: () => {
-				void plugin.acceptSelectedSuggestionAndAdvance();
+				void plugin.enterApplyAndReviewConfirmMode();
 			},
 		},
 	);
-	buildButton(actions, "Apply and review", "check-check", () => {
-		void plugin.applyAndReviewSceneSuggestions();
-	}, !plugin.canApplyAndReviewSceneSuggestions());
 	buildButton(actions, "Defer", "clock", () => {
 		plugin.deferSelectedSuggestion();
 	}, !state.canDefer);

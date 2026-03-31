@@ -126,6 +126,10 @@ interface PostCompletionIdleState {
 	title: string;
 }
 
+interface BulkApplyConfirmState {
+	notePath: string;
+}
+
 interface ReviewLaunchTarget {
 	label: string;
 	notePath: string;
@@ -171,6 +175,7 @@ export default class EditorialistPlugin extends Plugin {
 
 	private activeHighlightRange: OffsetRange | null = null;
 	private activeHighlightTone: "active" | "muted" = "active";
+	private bulkApplyConfirmState: BulkApplyConfirmState | null = null;
 	private lastAppliedChange: LastAppliedChange | null = null;
 	private toolbarOverlayEl: HTMLElement | null = null;
 	private toolbarOverlayEditorView: EditorView | null = null;
@@ -375,6 +380,7 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
+		this.bulkApplyConfirmState = null;
 		this.syncAppliedReviewSelection(id);
 		this.store.selectSuggestion(id);
 		await this.revealSuggestionContext(id);
@@ -469,6 +475,35 @@ export default class EditorialistPlugin extends Plugin {
 		await this.selectNextSuggestion();
 	}
 
+	async enterApplyAndReviewConfirmMode(): Promise<void> {
+		const session = this.getReviewSession();
+		if (!session) {
+			return;
+		}
+
+		if (!this.canApplyAndReviewSceneSuggestions()) {
+			new Notice("No eligible suggestions are ready to apply and review in this scene.");
+			return;
+		}
+
+		this.bulkApplyConfirmState = { notePath: session.notePath };
+		this.syncActiveEditorDecorations();
+	}
+
+	cancelApplyAndReviewConfirmMode(): void {
+		if (!this.bulkApplyConfirmState) {
+			return;
+		}
+
+		this.bulkApplyConfirmState = null;
+		this.syncActiveEditorDecorations();
+	}
+
+	async confirmApplyAndReviewSceneSuggestions(): Promise<void> {
+		this.bulkApplyConfirmState = null;
+		await this.applyAndReviewSceneSuggestions();
+	}
+
 	async applyAndReviewSceneSuggestions(): Promise<void> {
 		const context = this.getReviewNoteContext();
 		const session = this.getReviewSession();
@@ -535,6 +570,7 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
+		this.bulkApplyConfirmState = null;
 		this.store.setAppliedReview(null);
 		this.setDefaultHighlightForSelection();
 		this.syncActiveEditorDecorations();
@@ -542,6 +578,7 @@ export default class EditorialistPlugin extends Plugin {
 
 	async closeActiveReviewContext(): Promise<void> {
 		const completedSweep = this.getResolvedCompletedSweepState();
+		this.bulkApplyConfirmState = null;
 		this.store.setAppliedReview(null);
 		this.store.setCompletedSweep(null);
 		this.store.clearSession();
@@ -1827,6 +1864,7 @@ export default class EditorialistPlugin extends Plugin {
 		if (appliedReview && appliedReview.entries.length > 0) {
 			return {
 				mode: "applied_review",
+				canUndo: this.canUndoLastAppliedSuggestion(),
 				currentIndexLabel: `${appliedReview.currentIndex + 1} of ${appliedReview.entries.length}`,
 				title: "Review applied changes",
 			};
@@ -1848,6 +1886,7 @@ export default class EditorialistPlugin extends Plugin {
 		if (acceptedReview) {
 			return {
 				mode: "accepted_review",
+				canUndo: this.canUndoLastAppliedSuggestion(),
 				currentIndexLabel: acceptedReview.currentIndexLabel,
 				title: acceptedReview.title,
 			};
@@ -1873,6 +1912,15 @@ export default class EditorialistPlugin extends Plugin {
 				progressLabel: panelOnlyState.progressLabel,
 				remainingLabel: `${panelOnlyState.remainingCount} remaining`,
 				title: `Continue in ${panelOnlyState.unitLabel === "scene" ? "this scene" : "this note"}`,
+			};
+		}
+
+		if (this.bulkApplyConfirmState?.notePath === session.notePath && this.canApplyAndReviewSceneSuggestions()) {
+			const count = session.suggestions.filter((suggestion) => this.canApplySuggestionInReviewAllMode(suggestion)).length;
+			return {
+				mode: "bulk_confirm",
+				countLabel: `${count} ${count === 1 ? "change" : "changes"}`,
+				title: "Apply and review all?",
 			};
 		}
 
@@ -1984,6 +2032,7 @@ export default class EditorialistPlugin extends Plugin {
 		const context = this.getReviewNoteContext() ?? this.getActiveNoteContext();
 		const session = this.store.getSession();
 		if (!context) {
+			this.bulkApplyConfirmState = null;
 			this.store.setAppliedReview(null);
 			this.activeHighlightRange = null;
 			this.activeHighlightTone = "active";
@@ -1995,6 +2044,7 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		if (!session || session.notePath !== context.filePath) {
+			this.bulkApplyConfirmState = null;
 			this.store.setAppliedReview(null);
 			this.activeHighlightRange = null;
 			this.activeHighlightTone = "active";
@@ -2006,6 +2056,7 @@ export default class EditorialistPlugin extends Plugin {
 		const hydratedSession = this.registry.applyPersistedReviewState(refreshedSession);
 		void this.persistContributorProfilesIfNeeded();
 		if (!hydratedSession.hasReviewBlock) {
+			this.bulkApplyConfirmState = null;
 			this.store.setAppliedReview(null);
 			this.activeHighlightRange = null;
 			this.activeHighlightTone = "active";
@@ -2015,6 +2066,9 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		const preferredSelectionId = this.store.getState().selectedSuggestionId;
+		if (this.bulkApplyConfirmState?.notePath !== hydratedSession.notePath) {
+			this.bulkApplyConfirmState = null;
+		}
 		this.store.setSession(hydratedSession, preferredSelectionId);
 		this.syncSelectionForSession(hydratedSession, preferredSelectionId);
 		void this.workflow.syncCurrentNote(context.filePath);
@@ -3181,16 +3235,26 @@ export default class EditorialistPlugin extends Plugin {
 
 	private async copyReviewTemplateToClipboard(selectedText?: string): Promise<void> {
 		const template = buildReviewTemplate(selectedText);
+		await this.copyTextToClipboard(template, "Review template copied", "Could not copy the review template.");
+	}
+
+	async copyTextToClipboard(
+		text: string,
+		successMessage = "Copied to clipboard",
+		errorMessage = "Could not copy to the clipboard.",
+	): Promise<boolean> {
 		if (!navigator.clipboard?.writeText) {
 			new Notice("Clipboard access is not available in this environment.");
-			return;
+			return false;
 		}
 
 		try {
-			await navigator.clipboard.writeText(template);
-			new Notice("Review template copied");
+			await navigator.clipboard.writeText(text);
+			new Notice(successMessage);
+			return true;
 		} catch {
-			new Notice("Could not copy the review template.");
+			new Notice(errorMessage);
+			return false;
 		}
 	}
 
