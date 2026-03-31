@@ -95,7 +95,7 @@ export class ReviewPanel extends ItemView {
 				const nextLine = next.createDiv({ cls: "editorialist-panel__launch-target editorialist-panel__launch-target--primary" });
 				nextLine.createSpan({
 					cls: "editorialist-panel__launch-target-prefix editorialist-panel__launch-target-prefix--primary",
-					text: `→ ${launchTarget.intent === "active" ? `Active ${launchTarget.unitLabel}` : `Next ${launchTarget.unitLabel}`} `,
+					text: `→ ${launchTarget.intent === "active" ? `Resume ${launchTarget.unitLabel}` : `Next ${launchTarget.unitLabel}`} `,
 				});
 				const nextLink = nextLine.createEl("a", {
 					cls: "editorialist-panel__launch-target-link",

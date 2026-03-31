@@ -1204,7 +1204,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		const context = this.getActiveNoteContext();
 		const launchState = this.getEditorialistLaunchState(context);
-		if (context && launchState.currentNoteHasReviewBlock && launchState.currentNoteStatus === "ready") {
+		if (context && launchState.currentNoteHasReviewBlock) {
 			return {
 				intent: "active",
 				label: this.getNoteDisplayLabel(context.filePath),
