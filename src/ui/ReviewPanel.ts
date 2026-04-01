@@ -373,14 +373,6 @@ export class ReviewPanel extends ItemView {
 		const bgIcon = card.createSpan({ cls: "editorialist-panel__completion-bg-icon" });
 		setIcon(bgIcon, "pen-tool");
 
-		const titleRow = card.createDiv({ cls: "editorialist-panel__completion-title-row" });
-		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__completion-title-icon" });
-		setIcon(titleIcon, "pen-tool");
-		titleRow.createSpan({
-			cls: "editorialist-panel__completion-title",
-			text: postCompletionIdle.title,
-		});
-
 		card.createDiv({
 			cls: "editorialist-panel__completion-summary",
 			text: "No active revision pass right now",

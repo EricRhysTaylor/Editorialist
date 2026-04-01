@@ -225,6 +225,33 @@ export class ReviewStore {
 	}
 
 	setAppliedReview(appliedReview: AppliedReviewState | null): void {
+		if (this.state.appliedReview === appliedReview) {
+			return;
+		}
+
+		if (!appliedReview && !this.state.appliedReview) {
+			return;
+		}
+
+		if (
+			appliedReview &&
+			this.state.appliedReview &&
+			appliedReview.notePath === this.state.appliedReview.notePath &&
+			appliedReview.currentIndex === this.state.appliedReview.currentIndex &&
+			appliedReview.entries.length === this.state.appliedReview.entries.length &&
+			appliedReview.entries.every((entry, index) => {
+				const current = this.state.appliedReview?.entries[index];
+				return Boolean(
+					current
+					&& current.start === entry.start
+					&& current.end === entry.end
+					&& current.suggestionId === entry.suggestionId,
+				);
+			})
+		) {
+			return;
+		}
+
 		this.state = {
 			...this.state,
 			appliedReview,
