@@ -286,6 +286,10 @@ export function getSuggestionReason(suggestion: ReviewSuggestion): string {
 		return "Accepted into the manuscript.";
 	}
 
+	if (isImplicitlyAcceptedCutSuggestion(suggestion)) {
+		return "Already removed from the scene.";
+	}
+
 	if (suggestion.status === "rejected") {
 		return "Rejected for this review session.";
 	}
@@ -314,7 +318,10 @@ export function getEffectiveSuggestionStatus(suggestion: ReviewSuggestion): Revi
 }
 
 export function isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
-	if (suggestion.operation !== "cut" || suggestion.status !== "pending") {
+	if (
+		suggestion.operation !== "cut" ||
+		(suggestion.status !== "pending" && suggestion.status !== "unresolved")
+	) {
 		return false;
 	}
 
@@ -329,7 +336,11 @@ export function isSuggestionOpen(suggestion: ReviewSuggestion): boolean {
 }
 
 export function isSuggestionResolved(suggestion: ReviewSuggestion): boolean {
-	if (suggestion.status === "accepted" || suggestion.status === "rewritten") {
+	if (
+		suggestion.status === "accepted" ||
+		suggestion.status === "rewritten" ||
+		isImplicitlyAcceptedCutSuggestion(suggestion)
+	) {
 		return true;
 	}
 
@@ -341,7 +352,8 @@ export function isSuggestionResolved(suggestion: ReviewSuggestion): boolean {
 }
 
 export function getSuggestionPresentationTone(suggestion: ReviewSuggestion): ReviewSuggestionPresentationTone {
-	return suggestion.status === "accepted" || suggestion.status === "rejected" || suggestion.status === "rewritten" ? "muted" : "active";
+	const status = getEffectiveSuggestionStatus(suggestion);
+	return status === "accepted" || status === "rejected" || status === "rewritten" ? "muted" : "active";
 }
 
 export function getSuggestionStatusRank(_status: ReviewStatus): number {

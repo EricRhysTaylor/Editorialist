@@ -27,6 +27,7 @@ export interface ReviewToolbarState {
 	sceneProgressLabel?: string;
 	selectedIndexLabel: string;
 	selectedLabel: string;
+	unresolvedDetails?: string;
 	unresolvedCount: number;
 }
 
@@ -274,7 +275,7 @@ export function createReviewToolbarElement(
 
 	const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
 	markAsNonEditorSurface(meta);
-	const metaSegments: Array<{ text: string; cls?: string }> = [
+	const metaSegments: Array<{ text: string; cls?: string; title?: string }> = [
 		{ text: state.operationLabel },
 	];
 	if (state.sceneProgressLabel) {
@@ -297,7 +298,10 @@ export function createReviewToolbarElement(
 		});
 	}
 	if (state.unresolvedCount > 0) {
-		metaSegments.push({ text: `${state.unresolvedCount} unresolved` });
+		metaSegments.push({
+			text: `${state.unresolvedCount} unresolved`,
+			title: state.unresolvedDetails,
+		});
 	}
 	if (state.deferredCount > 0) {
 		metaSegments.push({ text: `${state.deferredCount} deferred` });
@@ -315,7 +319,7 @@ export function createReviewToolbarElement(
 		if (index > 0) {
 			renderMetaSeparator(meta);
 		}
-		renderMetaSegment(meta, segment.text, segment.cls);
+		renderMetaSegment(meta, segment.text, segment.cls, segment.title);
 	});
 
 	const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
@@ -500,12 +504,16 @@ function buildActionButton(
 	});
 }
 
-function renderMetaSegment(parent: HTMLElement, text: string, className?: string): void {
+function renderMetaSegment(parent: HTMLElement, text: string, className?: string, title?: string): void {
 	const segment = parent.createSpan({
 		cls: className ? `editorialist-toolbar__meta-segment ${className}` : "editorialist-toolbar__meta-segment",
 		text,
 	});
 	markAsNonEditorSurface(segment);
+	if (title) {
+		segment.setAttribute("title", title);
+		segment.setAttribute("aria-label", `${text}. ${title}`);
+	}
 }
 
 function renderMetaSeparator(parent: HTMLElement): void {

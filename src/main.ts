@@ -1980,7 +1980,10 @@ export default class EditorialistPlugin extends Plugin {
 		const suggestions = session.suggestions;
 		const selectedIndex = suggestions.findIndex((suggestion) => suggestion.id === selected.id);
 		const pendingCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "pending").length;
-		const unresolvedCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "unresolved").length;
+		const unresolvedSuggestions = suggestions
+			.map((suggestion, index) => ({ suggestion, index }))
+			.filter(({ suggestion }) => this.getEffectiveSuggestionStatus(suggestion) === "unresolved");
+		const unresolvedCount = unresolvedSuggestions.length;
 		const acceptedCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "accepted").length;
 		const rejectedCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "rejected").length;
 		const deferredCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "deferred").length;
@@ -2007,6 +2010,10 @@ export default class EditorialistPlugin extends Plugin {
 			selectedIndexLabel:
 				selectedIndex === -1 ? `${suggestions.length} total` : `${selectedIndex + 1} of ${suggestions.length}`,
 			unresolvedCount,
+			unresolvedDetails:
+				unresolvedSuggestions.length > 0
+					? `Unresolved items: ${unresolvedSuggestions.map(({ index }) => index + 1).join(", ")}`
+					: undefined,
 			canApply: this.canAcceptSelectedSuggestion(),
 			canDefer: this.canDeferSelectedSuggestion(),
 			canRewrite: this.canRewriteSelectedSuggestion(),

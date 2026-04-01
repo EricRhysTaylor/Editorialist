@@ -1371,7 +1371,7 @@ export class ReviewPanel extends ItemView {
 				case "edit":
 					return "Edited";
 				case "cut":
-					return "Cut";
+					return "Text removed";
 				case "condense":
 					return "Condensed";
 				case "move":
