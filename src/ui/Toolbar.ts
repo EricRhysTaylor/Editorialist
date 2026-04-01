@@ -377,21 +377,30 @@ export function createReviewToolbarElement(
 
 function buildFlatIconButton(
 	parent: HTMLElement,
-	_label: string,
+	label: string,
 	icon: string,
 	onClick: () => void,
 ): void {
-	const button = parent.createEl("button", {
-		cls: "ert-toolbar-close",
+	const button = parent.createDiv({
+		cls: "ert-btn ert-btn--flat ert-btn--flat-icon ert-toolbar-close",
 	});
-	button.type = "button";
-	button.setAttribute("aria-label", "Close");
-	button.setAttribute("title", "Close");
+	button.setAttribute("role", "button");
+	button.setAttribute("tabindex", "0");
+	button.setAttribute("aria-label", label);
 	markAsNonEditorSurface(button);
 	const iconEl = button.createSpan({ cls: "ert-toolbar-close__icon" });
 	markAsNonEditorSurface(iconEl);
 	setIcon(iconEl, icon);
 	bindImmediateAction(button, () => {
+		onClick();
+	});
+	button.addEventListener("keydown", (event) => {
+		if (event.key !== "Enter" && event.key !== " ") {
+			return;
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
 		onClick();
 	});
 }

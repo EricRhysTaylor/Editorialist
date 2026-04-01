@@ -1,6 +1,7 @@
 import { ButtonComponent, Notice, PluginSettingTab, setIcon, TFile, type App } from "obsidian";
 import {
 	formatReviewerTypeLabel,
+	normalizeContributorValue,
 } from "../core/ContributorIdentity";
 import {
 	CONTRIBUTOR_ROLE_DEFINITIONS,
@@ -597,7 +598,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		[
 			"",
 			vocabulary.singularLabel,
-			"Revision notes",
+			"Revisions",
 			"Open",
 			"Done",
 		].forEach((label, index) => {
@@ -1298,11 +1299,122 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		parent: HTMLElement,
 		profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number],
 	): void {
+		const aiBrand = profile.kind === "ai" ? this.getContributorAvatarBrand(profile) : null;
 		const avatar = parent.createDiv({
-			cls: `editorialist-settings__contributor-avatar${profile.kind === "ai" ? " is-ai" : ""}${profile.isStarred ? " is-starred" : ""}`,
+			cls: `editorialist-settings__contributor-avatar${profile.kind === "ai" ? " is-ai" : ""}${profile.isStarred ? " is-starred" : ""}${aiBrand ? ` is-provider-${aiBrand}` : ""}`,
 		});
 		const icon = avatar.createSpan({ cls: "editorialist-settings__contributor-avatar-icon" });
-		setIcon(icon, profile.isStarred ? "user-star" : profile.kind === "ai" ? "cpu" : "user-round");
+		if (profile.kind === "ai") {
+			const brand = this.getContributorAvatarBrand(profile);
+			if (brand === "generic") {
+				setIcon(icon, "cpu");
+				return;
+			}
+
+			icon.addClass("is-brand");
+			this.renderContributorBrandIcon(icon, brand);
+			return;
+		}
+
+		setIcon(icon, profile.isStarred ? "user-star" : "user-round");
+	}
+
+	private getContributorAvatarBrand(
+		profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number],
+	): "openai" | "anthropic" | "gemini" | "grok" | "generic" {
+		const signature = normalizeContributorValue([
+			profile.provider,
+			profile.model,
+			profile.displayName,
+			...profile.aliases,
+		].filter((value): value is string => Boolean(value?.trim())).join(" "));
+
+		if (signature.includes("claude") || signature.includes("anthropic")) {
+			return "anthropic";
+		}
+
+		if (signature.includes("gemini") || signature.includes("google")) {
+			return "gemini";
+		}
+
+		if (signature.includes("grok") || signature.includes("xai") || signature.includes("x ai")) {
+			return "grok";
+		}
+
+		if (
+			signature.includes("openai")
+			|| signature.includes("chatgpt")
+			|| /\bgpt\b/.test(signature)
+			|| /\bo[134]\b/.test(signature)
+		) {
+			return "openai";
+		}
+
+		return "generic";
+	}
+
+	private renderContributorBrandIcon(
+		parent: HTMLElement,
+		brand: "openai" | "anthropic" | "gemini" | "grok",
+	): void {
+		parent.empty();
+		const svgNamespace = "http://www.w3.org/2000/svg";
+		const svg = document.createElementNS(svgNamespace, "svg");
+		svg.setAttribute("viewBox", "0 0 24 24");
+		svg.setAttribute("fill", "none");
+		svg.setAttribute("stroke", "currentColor");
+		svg.setAttribute("stroke-linecap", "round");
+		svg.setAttribute("stroke-linejoin", "round");
+		svg.setAttribute("aria-hidden", "true");
+		svg.classList.add("editorialist-settings__brand-mark");
+
+		const append = (tag: string, attributes: Record<string, string>): void => {
+			const element = document.createElementNS(svgNamespace, tag);
+			for (const [key, value] of Object.entries(attributes)) {
+				element.setAttribute(key, value);
+			}
+			svg.appendChild(element);
+		};
+
+		switch (brand) {
+			case "openai":
+				svg.setAttribute("stroke-width", "1.8");
+				[
+					"rotate(0 12 12)",
+					"rotate(60 12 12)",
+					"rotate(120 12 12)",
+					"rotate(180 12 12)",
+					"rotate(240 12 12)",
+					"rotate(300 12 12)",
+				].forEach((transform) => {
+					append("rect", {
+						x: "10.2",
+						y: "2.3",
+						width: "3.6",
+						height: "8.2",
+						rx: "1.8",
+						transform,
+					});
+				});
+				break;
+			case "anthropic":
+				svg.setAttribute("stroke-width", "2");
+				append("path", { d: "M6 19 11 5h2l5 14" });
+				append("path", { d: "M8.7 13h6.6" });
+				break;
+			case "gemini":
+				svg.setAttribute("stroke-width", "1.9");
+				append("path", { d: "M12 3 13.9 10.1 21 12 13.9 13.9 12 21 10.1 13.9 3 12 10.1 10.1Z" });
+				break;
+			case "grok":
+				svg.setAttribute("stroke-width", "2");
+				append("path", { d: "M7 6 17 18" });
+				append("path", { d: "M17 6 7 18" });
+				append("path", { d: "M7 6h10" });
+				break;
+		}
+
+		parent.appendChild(svg);
 	}
 
 	private renderContributorUseIcons(

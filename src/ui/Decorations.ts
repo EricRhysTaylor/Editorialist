@@ -57,8 +57,17 @@ export function syncReviewDecorations(editorView: EditorView, snapshot: ReviewDe
 
 function buildDecorations(state: ReviewDecorationState): DecorationSet {
 	const builder = new RangeSetBuilder<Decoration>();
+	const highlights = [...state.highlights].sort((left, right) => {
+		if (left.start !== right.start) {
+			return left.start - right.start;
+		}
+		if (left.end !== right.end) {
+			return left.end - right.end;
+		}
+		return left.tone.localeCompare(right.tone);
+	});
 
-	for (const highlight of state.highlights) {
+	for (const highlight of highlights) {
 		if (highlight.end <= highlight.start) {
 			continue;
 		}

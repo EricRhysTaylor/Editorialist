@@ -553,8 +553,8 @@ export class ReviewPanel extends ItemView {
 		index: number,
 		total: number,
 	): HTMLElement {
-		const statusName = suggestion.status;
-		const tone = this.plugin.getSuggestionPresentationTone(suggestion);
+		const statusName = this.getVisualStatusName(suggestion);
+		const tone = this.getVisualTone(suggestion);
 		const isCollapsed = !selected && this.reviewerMenuSuggestionId !== suggestion.id && this.jumpMenuSuggestionId !== suggestion.id;
 
 		const card = parent.createDiv({
@@ -630,7 +630,6 @@ export class ReviewPanel extends ItemView {
 				disabled: !hasReviewerMenu,
 				icon: "user",
 				trailingIcon: hasReviewerMenu ? (this.reviewerMenuSuggestionId === suggestion.id ? "chevron-up" : "chevron-down") : undefined,
-				tooltip: this.getSourceLabel(suggestion),
 			},
 		);
 		sourceButton.addClass("editorialist-suggestion__control--source");
@@ -671,7 +670,6 @@ export class ReviewPanel extends ItemView {
 				},
 				{
 					icon: "pen-line",
-					tooltip: "Mark as rewritten",
 				},
 			);
 		}
@@ -788,24 +786,30 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-suggestion__structure-bridge editorialist-suggestion__structure-bridge--move",
 		});
 		const destinationColumn = split.createDiv({ cls: "editorialist-suggestion__structure-column" });
+		const placementLabel = suggestion.payload.placement === "after" ? "After this" : "Before this";
+		const placementIcon = suggestion.payload.placement === "after" ? "corner-up-left" : "corner-down-left";
 
-		this.renderStructureBlock(sourceColumn, "Move this text", suggestion.payload.target, {
-			accent: "source",
+		this.renderStructureMiniHeader(sourceColumn, "Move this text", {
 			icon: "arrow-right-left",
+			align: "start",
+		});
+		this.renderStructureBlock(sourceColumn, "", suggestion.payload.target, {
+			accent: "source",
 			tone: "ghost",
+			hideHeader: true,
 		});
 
 		const bridgeIcon = bridge.createSpan({ cls: "editorialist-suggestion__structure-bridge-icon" });
 		setIcon(bridgeIcon, "arrow-right");
-		bridge.createSpan({
-			cls: "editorialist-suggestion__structure-bridge-text",
-			text: suggestion.payload.placement === "after" ? "Place it after this" : "Place it before this",
-		});
 
-		this.renderStructureBlock(destinationColumn, "Place it before this", suggestion.payload.anchor, {
+		this.renderStructureMiniHeader(destinationColumn, placementLabel, {
+			icon: placementIcon,
+			align: "start",
+		});
+		this.renderStructureBlock(destinationColumn, "", suggestion.payload.anchor, {
 			accent: "anchor",
-			icon: "map-pin",
 			tone: "muted",
+			hideHeader: true,
 		});
 	}
 
@@ -828,7 +832,8 @@ export class ReviewPanel extends ItemView {
 			accent?: "anchor" | "source";
 			copyHint?: string;
 			copyNotice?: string;
-			icon: string;
+			hideHeader?: boolean;
+			icon?: string;
 			state?: "insert" | "delete";
 			tone: "active" | "ghost" | "muted";
 		},
@@ -852,18 +857,22 @@ export class ReviewPanel extends ItemView {
 				);
 			});
 		}
-		const header = block.createDiv({ cls: "editorialist-suggestion__structure-block-header" });
-		const icon = header.createSpan({ cls: "editorialist-suggestion__structure-block-icon" });
-		setIcon(icon, options.icon);
-		header.createSpan({
-			cls: "editorialist-suggestion__structure-block-label",
-			text: label,
-		});
-		if (options.copyHint) {
+		if (!options.hideHeader) {
+			const header = block.createDiv({ cls: "editorialist-suggestion__structure-block-header" });
+			if (options.icon) {
+				const icon = header.createSpan({ cls: "editorialist-suggestion__structure-block-icon" });
+				setIcon(icon, options.icon);
+			}
 			header.createSpan({
-				cls: "editorialist-suggestion__structure-copy-hint",
-				text: options.copyHint,
+				cls: "editorialist-suggestion__structure-block-label",
+				text: label,
 			});
+			if (options.copyHint) {
+				header.createSpan({
+					cls: "editorialist-suggestion__structure-copy-hint",
+					text: options.copyHint,
+				});
+			}
 		}
 		block.createDiv({
 			cls: "editorialist-suggestion__structure-block-body",
@@ -871,8 +880,30 @@ export class ReviewPanel extends ItemView {
 		});
 	}
 
+	private renderStructureMiniHeader(
+		parent: HTMLElement,
+		label: string,
+		options: { align?: "end" | "start"; icon: string },
+	): void {
+		const header = parent.createDiv({
+			cls: `editorialist-suggestion__structure-mini-header${options.align === "end" ? " is-align-end" : ""}`,
+		});
+		if (options.align === "end") {
+			header.addClass("is-icon-leading");
+		}
+		const icon = header.createSpan({ cls: "editorialist-suggestion__structure-mini-header-icon" });
+		setIcon(icon, options.icon);
+		header.createSpan({
+			cls: "editorialist-suggestion__structure-mini-header-label",
+			text: label,
+		});
+	}
+
 	private getCollapsedPreview(suggestion: ReviewSuggestion): string {
 		if (this.isOtherTextSuggestion(suggestion)) {
+			if (suggestion.operation === "cut") {
+				return "Already removed";
+			}
 			return "Applies elsewhere";
 		}
 
@@ -1086,6 +1117,22 @@ export class ReviewPanel extends ItemView {
 		}
 
 		return "muted";
+	}
+
+	private getVisualStatusName(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
+		if (this.isOtherTextSuggestion(suggestion) && suggestion.operation === "cut") {
+			return "accepted";
+		}
+
+		return suggestion.status;
+	}
+
+	private getVisualTone(suggestion: ReviewSuggestion): "active" | "muted" {
+		if (this.isOtherTextSuggestion(suggestion) && suggestion.operation === "cut") {
+			return "muted";
+		}
+
+		return this.plugin.getSuggestionPresentationTone(suggestion);
 	}
 
 	private getSuggestionReasonIcon(suggestion: ReviewSuggestion): string {
@@ -1313,7 +1360,11 @@ export class ReviewPanel extends ItemView {
 	}
 
 	private getStatusLabel(suggestion: ReviewSuggestion): string {
-		return this.isOtherTextSuggestion(suggestion) ? "Other text" : this.toSentenceCase(suggestion.status);
+		if (this.isOtherTextSuggestion(suggestion)) {
+			return suggestion.operation === "cut" ? "Already cut" : "Other text";
+		}
+
+		return this.toSentenceCase(suggestion.status);
 	}
 
 	private isOtherTextSuggestion(suggestion: ReviewSuggestion): boolean {

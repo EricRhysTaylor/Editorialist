@@ -19,6 +19,8 @@ export interface ReviewCopyBlock {
 
 export interface ReviewApplyPlan {
 	from: number;
+	focusEnd?: number;
+	focusStart?: number;
 	text: string;
 	to: number;
 }
@@ -116,11 +118,35 @@ const operationSupport: {
 
 			const insertOffset =
 				suggestion.payload.placement === "before" ? adjustedAnchorStart : adjustedAnchorEnd;
+			const normalizedTargetText = targetText.replace(/^\n+|\n+$/g, "");
+			const beforeContext = withoutTarget.slice(0, insertOffset);
+			const afterContext = withoutTarget.slice(insertOffset);
+			const prefix =
+				beforeContext.length === 0
+					? ""
+					: beforeContext.endsWith("\n\n")
+						? ""
+						: beforeContext.endsWith("\n")
+							? "\n"
+							: "\n\n";
+			const suffix =
+				afterContext.length === 0
+					? ""
+					: afterContext.startsWith("\n\n")
+						? ""
+						: afterContext.startsWith("\n")
+							? "\n"
+							: "\n\n";
+			const insertedText = `${prefix}${normalizedTargetText}${suffix}`;
+			const focusStart = insertOffset + prefix.length;
+			const focusEnd = focusStart + normalizedTargetText.length;
 
 			return {
 				from: 0,
 				to: noteText.length,
-				text: withoutTarget.slice(0, insertOffset) + targetText + withoutTarget.slice(insertOffset),
+				text: withoutTarget.slice(0, insertOffset) + insertedText + withoutTarget.slice(insertOffset),
+				focusStart,
+				focusEnd,
 			};
 		},
 		getCopyBlocks: (suggestion: MoveSuggestion) => [

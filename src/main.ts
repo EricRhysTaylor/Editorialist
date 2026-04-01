@@ -767,6 +767,12 @@ export default class EditorialistPlugin extends Plugin {
 			return true;
 		}
 
+		if (acceptedSuggestion?.operation === "move") {
+			this.store.selectSuggestion(id);
+			await this.revealSelectedSuggestion();
+			return true;
+		}
+
 		const hasHighlightableRange = appliedChange.end > appliedChange.start;
 		if (!hasHighlightableRange && nextSuggestionId) {
 			this.store.selectSuggestion(nextSuggestionId);
@@ -883,9 +889,10 @@ export default class EditorialistPlugin extends Plugin {
 		const from = context.view.editor.offsetToPos(applyPlan.from);
 		const to = context.view.editor.offsetToPos(applyPlan.to);
 		context.view.editor.replaceRange(applyPlan.text, from, to);
-		const appliedEnd = applyPlan.from + applyPlan.text.length;
-		const appliedFrom = context.view.editor.offsetToPos(applyPlan.from);
-		const appliedTo = context.view.editor.offsetToPos(appliedEnd);
+		const appliedStartOffset = applyPlan.focusStart ?? applyPlan.from;
+		const appliedEndOffset = applyPlan.focusEnd ?? applyPlan.from + applyPlan.text.length;
+		const appliedFrom = context.view.editor.offsetToPos(appliedStartOffset);
+		const appliedTo = context.view.editor.offsetToPos(appliedEndOffset);
 		context.view.editor.setSelection(appliedFrom, appliedTo);
 		context.view.editor.scrollIntoView({ from: appliedFrom, to: appliedTo }, true);
 		context.view.editor.focus();
@@ -899,8 +906,8 @@ export default class EditorialistPlugin extends Plugin {
 			sessionStartedAt,
 		});
 		this.lastAppliedChange = {
-			start: applyPlan.from,
-			end: appliedEnd,
+			start: appliedStartOffset,
+			end: appliedEndOffset,
 			notePath: context.filePath,
 			suggestionId: suggestion.id,
 			textFingerprint: this.getNoteTextFingerprint(context.view.editor.getValue()),
@@ -913,16 +920,16 @@ export default class EditorialistPlugin extends Plugin {
 		}
 		if (options?.highlightMode === "muted") {
 			this.activeHighlightRange = {
-				start: applyPlan.from,
-				end: appliedEnd,
+				start: appliedStartOffset,
+				end: appliedEndOffset,
 			};
 			this.activeHighlightTone = "muted";
 			this.syncActiveEditorDecorations();
 		}
 
 		return {
-			start: applyPlan.from,
-			end: appliedEnd,
+			start: appliedStartOffset,
+			end: appliedEndOffset,
 			suggestionId: suggestion.id,
 		};
 	}
