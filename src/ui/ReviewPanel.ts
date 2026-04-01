@@ -608,7 +608,7 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-suggestion__position",
 			text: `${index + 1} of ${total}`,
 		});
-		if (panelPrimary) {
+		if (panelPrimary && this.hasAnyJumpTarget(suggestion.id)) {
 			const panelFocus = metaPrimary.createDiv({ cls: "editorialist-suggestion__panel-focus" });
 			const panelFocusIcon = panelFocus.createSpan({ cls: "editorialist-suggestion__panel-focus-icon" });
 			setIcon(panelFocusIcon, "pen-tool");
@@ -1129,7 +1129,7 @@ export class ReviewPanel extends ItemView {
 
 	private getVisualTone(suggestion: ReviewSuggestion): "active" | "muted" {
 		if (this.isImplicitlyAcceptedCutSuggestion(suggestion)) {
-			return "muted";
+			return "active";
 		}
 
 		return this.plugin.getSuggestionPresentationTone(suggestion);
@@ -1380,14 +1380,17 @@ export class ReviewPanel extends ItemView {
 		}
 
 		if (status === "rejected") {
-			return "Author rejected";
+			return "Rejected";
 		}
 
 		if (status === "rewritten") {
-			return "Author rewritten";
+			return "Rewritten";
 		}
 
 		if (this.isOtherTextSuggestion(suggestion)) {
+			if (suggestion.operation === "cut") {
+				return "Text removed";
+			}
 			return "Other text";
 		}
 
