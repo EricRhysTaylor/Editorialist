@@ -2610,37 +2610,44 @@
 }
 
 .editorialist-settings__contributor-avatar.is-ai {
-	background: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary));
-	color: color-mix(in srgb, var(--interactive-accent) 30%, var(--text-normal));
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	color: var(--text-normal);
 }
 
 .editorialist-settings__contributor-avatar.is-provider-openai {
-	background: color-mix(in srgb, var(--color-green) 10%, var(--background-primary));
-	border-color: color-mix(in srgb, var(--color-green) 18%, var(--background-modifier-border));
-	color: color-mix(in srgb, var(--color-green) 36%, var(--text-normal));
+	background: transparent;
+	border-color: transparent;
+	color: var(--text-normal);
 }
 
 .editorialist-settings__contributor-avatar.is-provider-anthropic {
-	background: color-mix(in srgb, var(--color-orange) 10%, var(--background-primary));
-	border-color: color-mix(in srgb, var(--color-orange) 18%, var(--background-modifier-border));
-	color: color-mix(in srgb, var(--color-orange) 28%, var(--text-normal));
+	background: transparent;
+	border-color: transparent;
+	color: var(--text-normal);
 }
 
 .editorialist-settings__contributor-avatar.is-provider-gemini {
-	background: color-mix(in srgb, var(--color-cyan) 10%, var(--background-primary));
-	border-color: color-mix(in srgb, var(--color-cyan) 18%, var(--background-modifier-border));
-	color: color-mix(in srgb, var(--color-cyan) 32%, var(--text-normal));
+	background: transparent;
+	border-color: transparent;
+	color: var(--text-normal);
 }
 
 .editorialist-settings__contributor-avatar.is-provider-grok {
-	background: color-mix(in srgb, var(--color-purple) 9%, var(--background-primary));
-	border-color: color-mix(in srgb, var(--color-purple) 16%, var(--background-modifier-border));
-	color: color-mix(in srgb, var(--color-purple) 26%, var(--text-normal));
+	background: transparent;
+	border-color: transparent;
+	color: var(--text-normal);
 }
 
 .editorialist-settings__contributor-avatar.is-starred {
 	background: color-mix(in srgb, var(--color-yellow) 10%, var(--background-primary));
 	border-color: color-mix(in srgb, var(--color-yellow) 22%, var(--background-modifier-border));
+}
+
+.editorialist-settings__contributor-avatar.is-ai.is-starred {
+	background: transparent;
+	border-color: transparent;
 }
 
 .editorialist-settings__contributor-avatar-icon {
@@ -2655,9 +2662,15 @@
 	stroke-width: 1.9;
 }
 
+.editorialist-settings__contributor-avatar.is-ai .editorialist-settings__contributor-avatar-icon svg {
+	width: 1.85rem;
+	height: 1.85rem;
+	stroke-width: 1.7;
+}
+
 .editorialist-settings__contributor-avatar-icon.is-brand svg {
-	width: 1.05rem;
-	height: 1.05rem;
+	width: 2.55rem;
+	height: 2.55rem;
 }
 
 .editorialist-settings__contributor-text {
