@@ -70,7 +70,6 @@ export class ReviewPanel extends ItemView {
 
 		const completedSweep = this.plugin.getCompletedSweepPanelState();
 		if (completedSweep) {
-			this.contentEl.createDiv({ cls: "editorialist-panel__divider" });
 			this.renderCompletedSweepCard(completedSweep);
 			return;
 		}
@@ -78,7 +77,6 @@ export class ReviewPanel extends ItemView {
 		if (!session) {
 			const postCompletionIdle = this.plugin.getPostCompletionIdleState();
 			if (postCompletionIdle) {
-				this.contentEl.createDiv({ cls: "editorialist-panel__divider" });
 				this.renderIdleStateCard(postCompletionIdle);
 				return;
 			}
@@ -181,19 +179,16 @@ export class ReviewPanel extends ItemView {
 
 		const handoff = this.plugin.getGuidedSweepHandoffState();
 		if (handoff) {
-			this.contentEl.createDiv({ cls: "editorialist-panel__divider" });
 			this.renderSweepHandoffCard(handoff);
 			return;
 		}
 
 		const panelOnlyState = this.plugin.getPanelOnlyReviewState();
 		if (panelOnlyState) {
-			this.contentEl.createDiv({ cls: "editorialist-panel__divider" });
 			this.renderPanelOnlyState(panelOnlyState);
 		}
 
 		if (this.shouldShowReviewerFilters(session.suggestions)) {
-			this.contentEl.createDiv({ cls: "editorialist-panel__divider" });
 			this.renderFilters();
 		} else {
 			this.reviewerFilterId = null;
@@ -417,7 +412,7 @@ export class ReviewPanel extends ItemView {
 		setIcon(operationsBullet, "arrow-right");
 		operationsStep.createSpan({
 			cls: "editorialist-panel__completion-step-text",
-			text: "Review line edits, moves, cuts, and condenses in context.",
+			text: "Review revision and contributor details in settings.",
 		});
 	}
 
