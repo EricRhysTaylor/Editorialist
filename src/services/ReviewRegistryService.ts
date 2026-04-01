@@ -27,7 +27,7 @@ import type {
 } from "../models/ReviewerProfile";
 import type { ReviewerDirectory } from "../state/ReviewerDirectory";
 import { getLegacyContributorSignatureKind } from "../core/ContributorIdentity";
-import { getSuggestionSignatureParts } from "../core/OperationSupport";
+import { getEffectiveSuggestionStatus, getSuggestionSignatureParts, isImplicitlyAcceptedCutSuggestion } from "../core/OperationSupport";
 
 interface ReviewActivitySummary {
 	accepted: number;
@@ -64,21 +64,11 @@ export class ReviewRegistryService {
 	private sweepRegistry: Record<string, ReviewSweepRegistryEntry> = {};
 
 	private getEffectiveSuggestionStatus(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
-		if (this.isImplicitlyAcceptedCutSuggestion(suggestion)) {
-			return "accepted";
-		}
-
-		return suggestion.status;
+		return getEffectiveSuggestionStatus(suggestion);
 	}
 
 	private isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
-		if (suggestion.operation !== "cut" || suggestion.status !== "pending") {
-			return false;
-		}
-
-		const target = suggestion.location.primary ?? suggestion.location.target;
-		const reason = target?.reason?.toLowerCase() ?? "";
-		return target?.matchType === "already_applied" || target?.matchType === "none" || reason.includes("not found");
+		return isImplicitlyAcceptedCutSuggestion(suggestion);
 	}
 
 	constructor(
@@ -812,8 +802,41 @@ export class ReviewRegistryService {
 			...this.sceneReviewIndex,
 			[session.notePath]: nextRecord,
 		};
+
+		this.reconcileSweepRegistryStatus(nextRecord);
+
 		if (options?.persist !== false) {
 			await this.persistData();
+		}
+	}
+
+	private reconcileSweepRegistryStatus(updatedRecord: SceneReviewRecord): void {
+		for (const entry of Object.values(this.sweepRegistry)) {
+			if (entry.status !== "in_progress") {
+				continue;
+			}
+
+			const sweepPaths = entry.sceneOrder.length > 0 ? entry.sceneOrder : entry.importedNotePaths;
+			if (!sweepPaths.includes(updatedRecord.notePath)) {
+				continue;
+			}
+
+			const allCompleted = sweepPaths.every((path) => {
+				const record = this.sceneReviewIndex[path];
+				if (!record || record.batchCount === 0) {
+					return true;
+				}
+
+				return record.pendingCount === 0 && record.unresolvedCount === 0 && record.deferredCount === 0;
+			});
+
+			if (allCompleted) {
+				this.sweepRegistry[entry.batchId] = {
+					...entry,
+					status: "completed",
+					updatedAt: Date.now(),
+				};
+			}
 		}
 	}
 

@@ -989,7 +989,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 		const historyCard = body.createDiv({ cls: "editorialist-settings__maintenance-card" });
 		const historyRow = historyCard.createDiv({
-			cls: "editorialist-settings__maintenance-row",
+			cls: "editorialist-settings__maintenance-row editorialist-settings__maintenance-row--reset",
 		});
 		const historyInfo = historyRow.createDiv({
 			cls: "editorialist-settings__maintenance-info",
@@ -1003,7 +1003,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			text: "Use this if a pass was imported twice or you need to unwind saved stats. Imported review blocks still inside notes will be discovered again on the next sync.",
 		});
 		const historyActions = historyRow.createDiv({
-			cls: "editorialist-settings__maintenance-actions",
+			cls: "editorialist-settings__maintenance-actions editorialist-settings__maintenance-actions--reset",
 		});
 		this.createActionButton(historyActions, "history", "Reset one batch", async () => {
 			await this.handleResetSingleBatch();

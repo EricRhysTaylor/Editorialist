@@ -305,6 +305,29 @@ export function getSuggestionCopyBlocks(suggestion: ReviewSuggestion): ReviewCop
 	return operationSupport[suggestion.operation].getCopyBlocks(suggestion as never);
 }
 
+export function getEffectiveSuggestionStatus(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
+	if (isImplicitlyAcceptedCutSuggestion(suggestion)) {
+		return "accepted";
+	}
+
+	return suggestion.status;
+}
+
+export function isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
+	if (suggestion.operation !== "cut" || suggestion.status !== "pending") {
+		return false;
+	}
+
+	const target = getSuggestionPrimaryTarget(suggestion);
+	const reason = target?.reason?.toLowerCase() ?? "";
+	return target?.matchType === "already_applied" || target?.matchType === "none" || reason.includes("not found");
+}
+
+export function isSuggestionOpen(suggestion: ReviewSuggestion): boolean {
+	const status = getEffectiveSuggestionStatus(suggestion);
+	return status === "pending" || status === "deferred" || status === "unresolved";
+}
+
 export function isSuggestionResolved(suggestion: ReviewSuggestion): boolean {
 	if (suggestion.status === "accepted" || suggestion.status === "rewritten") {
 		return true;

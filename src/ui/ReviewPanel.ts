@@ -1,6 +1,6 @@
 import { ButtonComponent, DropdownComponent, ItemView, setIcon, type WorkspaceLeaf } from "obsidian";
 import { formatContributorIdentityLabel } from "../core/ContributorIdentity";
-import { getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isMoveSuggestion } from "../core/OperationSupport";
+import { getEffectiveSuggestionStatus, getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isImplicitlyAcceptedCutSuggestion, isMoveSuggestion } from "../core/OperationSupport";
 import type { ReviewSuggestion } from "../models/ReviewSuggestion";
 import type EditorialistPlugin from "../main";
 
@@ -1398,21 +1398,11 @@ export class ReviewPanel extends ItemView {
 	}
 
 	private getEffectiveStatus(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
-		if (this.isImplicitlyAcceptedCutSuggestion(suggestion)) {
-			return "accepted";
-		}
-
-		return suggestion.status;
+		return getEffectiveSuggestionStatus(suggestion);
 	}
 
 	private isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
-		if (suggestion.operation !== "cut" || suggestion.status !== "pending") {
-			return false;
-		}
-
-		const target = suggestion.location.primary ?? suggestion.location.target;
-		const reason = target?.reason?.toLowerCase() ?? "";
-		return target?.matchType === "already_applied" || target?.matchType === "none" || reason.includes("not found");
+		return isImplicitlyAcceptedCutSuggestion(suggestion);
 	}
 
 	private isOtherTextSuggestion(suggestion: ReviewSuggestion): boolean {

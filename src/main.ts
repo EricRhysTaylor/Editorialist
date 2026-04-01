@@ -7,10 +7,13 @@ import { MatchEngine } from "./core/MatchEngine";
 import {
 	canApplySuggestionDirectly,
 	createSuggestionApplyPlan,
+	getEffectiveSuggestionStatus as getEffectiveSuggestionStatusShared,
 	getSuggestionAnchorTarget,
 	getSuggestionPresentationTone,
 	getSuggestionPrimaryTarget,
 	getSuggestionStatusRank,
+	isImplicitlyAcceptedCutSuggestion as isImplicitlyAcceptedCutSuggestionShared,
+	isSuggestionOpen as isSuggestionOpenShared,
 } from "./core/OperationSupport";
 import {
 	REVIEW_BLOCK_FENCE,
@@ -2736,31 +2739,15 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private isSuggestionOpen(suggestion: ReviewSuggestion): boolean {
-		const status = this.getEffectiveSuggestionStatus(suggestion);
-		return status === "pending" || status === "deferred" || status === "unresolved";
+		return isSuggestionOpenShared(suggestion);
 	}
 
 	private getEffectiveSuggestionStatus(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
-		if (this.isImplicitlyAcceptedCutSuggestion(suggestion)) {
-			return "accepted";
-		}
-
-		return suggestion.status;
+		return getEffectiveSuggestionStatusShared(suggestion);
 	}
 
 	private isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
-		if (suggestion.operation !== "cut" || suggestion.status !== "pending") {
-			return false;
-		}
-
-		const target = getSuggestionPrimaryTarget(suggestion);
-		const reason = target?.reason?.toLowerCase() ?? "";
-
-		if (target?.matchType === "already_applied" || target?.matchType === "none" || reason.includes("not found")) {
-			return true;
-		}
-
-		return false;
+		return isImplicitlyAcceptedCutSuggestionShared(suggestion);
 	}
 
 	private isAcceptedReviewSuggestion(suggestion: ReviewSuggestion): boolean {
@@ -2935,6 +2922,13 @@ export default class EditorialistPlugin extends Plugin {
 			return null;
 		}
 
+		const remainingCount = this.getSceneReviewRecords()
+			.filter((record) => record.batchCount > 0)
+			.reduce((total, record) => total + record.pendingCount + record.unresolvedCount + record.deferredCount, 0);
+		if (remainingCount > 0) {
+			return null;
+		}
+
 		const currentSession = this.getReviewSession();
 		if (currentSession && !this.hasLiveActionableSuggestions(currentSession.suggestions)) {
 			return {
@@ -2945,13 +2939,6 @@ export default class EditorialistPlugin extends Plugin {
 				startedAt: currentSession.parsedAt,
 				totalSuggestions: currentSession.suggestions.length,
 			};
-		}
-
-		const remainingCount = this.getSceneReviewRecords()
-			.filter((record) => record.batchCount > 0)
-			.reduce((total, record) => total + record.pendingCount + record.unresolvedCount + record.deferredCount, 0);
-		if (remainingCount > 0) {
-			return null;
 		}
 
 		const latestCompletedSweep = this.registry

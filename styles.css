@@ -2846,6 +2846,19 @@
 	flex: 0 0 auto;
 }
 
+.editorialist-settings__maintenance-row--reset {
+	flex-direction: column;
+	align-items: stretch;
+	min-height: 100%;
+}
+
+.editorialist-settings__maintenance-actions--reset {
+	margin-top: auto;
+	justify-content: flex-end;
+	align-self: flex-end;
+	padding-top: 0.35rem;
+}
+
 .editorialist-settings__tracking-badge {
 	display: inline-flex;
 	align-items: center;
