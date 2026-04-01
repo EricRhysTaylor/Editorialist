@@ -1120,7 +1120,7 @@ export class ReviewPanel extends ItemView {
 	}
 
 	private getVisualStatusName(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
-		if (this.isOtherTextSuggestion(suggestion) && suggestion.operation === "cut") {
+		if (this.isImplicitlyAcceptedCutSuggestion(suggestion)) {
 			return "accepted";
 		}
 
@@ -1128,7 +1128,7 @@ export class ReviewPanel extends ItemView {
 	}
 
 	private getVisualTone(suggestion: ReviewSuggestion): "active" | "muted" {
-		if (this.isOtherTextSuggestion(suggestion) && suggestion.operation === "cut") {
+		if (this.isImplicitlyAcceptedCutSuggestion(suggestion)) {
 			return "muted";
 		}
 
@@ -1356,19 +1356,64 @@ export class ReviewPanel extends ItemView {
 	}
 
 	private isOpenSuggestion(suggestion: ReviewSuggestion): boolean {
-		return suggestion.status === "pending" || suggestion.status === "deferred" || suggestion.status === "unresolved";
+		const status = this.getEffectiveStatus(suggestion);
+		return status === "pending" || status === "deferred" || status === "unresolved";
+	}
+
+	private isRawOpenSuggestionStatus(status: ReviewSuggestion["status"]): boolean {
+		return status === "pending" || status === "deferred" || status === "unresolved";
 	}
 
 	private getStatusLabel(suggestion: ReviewSuggestion): string {
-		if (this.isOtherTextSuggestion(suggestion)) {
-			return suggestion.operation === "cut" ? "Already cut" : "Other text";
+		const status = this.getEffectiveStatus(suggestion);
+		if (status === "accepted") {
+			switch (suggestion.operation) {
+				case "edit":
+					return "Edit accepted";
+				case "cut":
+					return "Cut accepted";
+				case "condense":
+					return "Condense accepted";
+				case "move":
+					return "Move accepted";
+			}
 		}
 
-		return this.toSentenceCase(suggestion.status);
+		if (status === "rejected") {
+			return "Author rejected";
+		}
+
+		if (status === "rewritten") {
+			return "Author rewritten";
+		}
+
+		if (this.isOtherTextSuggestion(suggestion)) {
+			return "Other text";
+		}
+
+		return this.toSentenceCase(status);
+	}
+
+	private getEffectiveStatus(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
+		if (this.isImplicitlyAcceptedCutSuggestion(suggestion)) {
+			return "accepted";
+		}
+
+		return suggestion.status;
+	}
+
+	private isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
+		if (suggestion.operation !== "cut" || suggestion.status !== "pending") {
+			return false;
+		}
+
+		const target = suggestion.location.primary ?? suggestion.location.target;
+		const reason = target?.reason?.toLowerCase() ?? "";
+		return target?.matchType === "already_applied" || target?.matchType === "none" || reason.includes("not found");
 	}
 
 	private isOtherTextSuggestion(suggestion: ReviewSuggestion): boolean {
-		if (!this.isOpenSuggestion(suggestion)) {
+		if (!this.isRawOpenSuggestionStatus(suggestion.status)) {
 			return false;
 		}
 

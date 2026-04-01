@@ -274,6 +274,10 @@ export function getSuggestionAnchorTarget(suggestion: ReviewSuggestion): ReviewT
 
 export function getSuggestionReason(suggestion: ReviewSuggestion): string {
 	if (suggestion.status === "accepted") {
+		if (suggestion.location.relocation?.alreadyApplied) {
+			return "Already moved into place.";
+		}
+
 		const targets = [suggestion.location.primary, suggestion.location.target, suggestion.location.anchor];
 		if (targets.some((target) => target?.matchType === "already_applied")) {
 			return "Already reflected in the manuscript.";
@@ -310,7 +314,7 @@ export function isSuggestionResolved(suggestion: ReviewSuggestion): boolean {
 		suggestion.location.primary,
 		suggestion.location.target,
 		suggestion.location.anchor,
-	].some((target) => target?.matchType === "already_applied");
+	].some((target) => target?.matchType === "already_applied") || Boolean(suggestion.location.relocation?.alreadyApplied);
 }
 
 export function getSuggestionPresentationTone(suggestion: ReviewSuggestion): ReviewSuggestionPresentationTone {

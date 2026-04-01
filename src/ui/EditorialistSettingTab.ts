@@ -4,6 +4,10 @@ import {
 	normalizeContributorValue,
 } from "../core/ContributorIdentity";
 import {
+	renderContributorBrandMark,
+	type ContributorBrand,
+} from "../core/ContributorBrandMarks";
+import {
 	CONTRIBUTOR_ROLE_DEFINITIONS,
 	getContributorStrengthDefinition,
 } from "../core/ContributorStrengths";
@@ -1312,7 +1316,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			}
 
 			icon.addClass("is-brand");
-			this.renderContributorBrandIcon(icon, brand);
+			renderContributorBrandMark(icon, brand);
 			return;
 		}
 
@@ -1321,7 +1325,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 
 	private getContributorAvatarBrand(
 		profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number],
-	): "openai" | "anthropic" | "gemini" | "grok" | "generic" {
+	): ContributorBrand | "generic" {
 		const signature = normalizeContributorValue([
 			profile.provider,
 			profile.model,
@@ -1351,70 +1355,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		}
 
 		return "generic";
-	}
-
-	private renderContributorBrandIcon(
-		parent: HTMLElement,
-		brand: "openai" | "anthropic" | "gemini" | "grok",
-	): void {
-		parent.empty();
-		const svgNamespace = "http://www.w3.org/2000/svg";
-		const svg = document.createElementNS(svgNamespace, "svg");
-		svg.setAttribute("viewBox", "0 0 24 24");
-		svg.setAttribute("fill", "none");
-		svg.setAttribute("stroke", "currentColor");
-		svg.setAttribute("stroke-linecap", "round");
-		svg.setAttribute("stroke-linejoin", "round");
-		svg.setAttribute("aria-hidden", "true");
-		svg.classList.add("editorialist-settings__brand-mark");
-
-		const append = (tag: string, attributes: Record<string, string>): void => {
-			const element = document.createElementNS(svgNamespace, tag);
-			for (const [key, value] of Object.entries(attributes)) {
-				element.setAttribute(key, value);
-			}
-			svg.appendChild(element);
-		};
-
-		switch (brand) {
-			case "openai":
-				svg.setAttribute("stroke-width", "1.8");
-				[
-					"rotate(0 12 12)",
-					"rotate(60 12 12)",
-					"rotate(120 12 12)",
-					"rotate(180 12 12)",
-					"rotate(240 12 12)",
-					"rotate(300 12 12)",
-				].forEach((transform) => {
-					append("rect", {
-						x: "10.2",
-						y: "2.3",
-						width: "3.6",
-						height: "8.2",
-						rx: "1.8",
-						transform,
-					});
-				});
-				break;
-			case "anthropic":
-				svg.setAttribute("stroke-width", "2");
-				append("path", { d: "M6 19 11 5h2l5 14" });
-				append("path", { d: "M8.7 13h6.6" });
-				break;
-			case "gemini":
-				svg.setAttribute("stroke-width", "1.9");
-				append("path", { d: "M12 3 13.9 10.1 21 12 13.9 13.9 12 21 10.1 13.9 3 12 10.1 10.1Z" });
-				break;
-			case "grok":
-				svg.setAttribute("stroke-width", "2");
-				append("path", { d: "M7 6 17 18" });
-				append("path", { d: "M17 6 7 18" });
-				append("path", { d: "M7 6h10" });
-				break;
-		}
-
-		parent.appendChild(svg);
 	}
 
 	private renderContributorUseIcons(

@@ -422,7 +422,7 @@ function buildButton(
 ): void {
 	const button = new ButtonComponent(parent);
 	button.setDisabled(disabled);
-	button.buttonEl.addClass("editorialist-toolbar__button");
+	button.buttonEl.addClass("ert-btn", "ert-btn--flat", "editorialist-toolbar__button");
 	if (isApply) {
 		button.buttonEl.addClass("editorialist-toolbar__button--apply");
 	}
@@ -484,7 +484,7 @@ function buildActionButton(
 	isSecondary = false,
 ): void {
 	const button = new ButtonComponent(parent);
-	button.buttonEl.addClass("editorialist-toolbar__button", "editorialist-toolbar__button--text");
+	button.buttonEl.addClass("ert-btn", "ert-btn--flat", "editorialist-toolbar__button", "editorialist-toolbar__button--text");
 	if (isSecondary) {
 		button.buttonEl.addClass("editorialist-toolbar__button--secondary");
 	}

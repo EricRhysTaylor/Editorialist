@@ -63,6 +63,24 @@ export class ReviewRegistryService {
 	private sceneReviewIndex: Record<string, SceneReviewRecord> = {};
 	private sweepRegistry: Record<string, ReviewSweepRegistryEntry> = {};
 
+	private getEffectiveSuggestionStatus(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
+		if (this.isImplicitlyAcceptedCutSuggestion(suggestion)) {
+			return "accepted";
+		}
+
+		return suggestion.status;
+	}
+
+	private isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
+		if (suggestion.operation !== "cut" || suggestion.status !== "pending") {
+			return false;
+		}
+
+		const target = suggestion.location.primary ?? suggestion.location.target;
+		const reason = target?.reason?.toLowerCase() ?? "";
+		return target?.matchType === "already_applied" || target?.matchType === "none" || reason.includes("not found");
+	}
+
 	constructor(
 		private readonly app: App,
 		private readonly reviewEngine: ReviewEngine,
@@ -624,7 +642,7 @@ export class ReviewRegistryService {
 					lastDecisionAt = Math.max(lastDecisionAt, record.updatedAt);
 				}
 
-				switch (suggestion.status) {
+				switch (this.getEffectiveSuggestionStatus(suggestion)) {
 					case "accepted":
 						acceptedCount += 1;
 						break;
@@ -741,7 +759,7 @@ export class ReviewRegistryService {
 				lastDecisionAt = Math.max(lastDecisionAt, record.updatedAt);
 			}
 
-			switch (suggestion.status) {
+			switch (this.getEffectiveSuggestionStatus(suggestion)) {
 				case "accepted":
 					acceptedCount += 1;
 					break;
@@ -1159,15 +1177,15 @@ export class ReviewRegistryService {
 			key,
 			reviewerId,
 			status:
-				suggestion.status === "accepted"
+				this.getEffectiveSuggestionStatus(suggestion) === "accepted"
 					? "accepted"
-					: suggestion.status === "pending"
+					: this.getEffectiveSuggestionStatus(suggestion) === "pending"
 						? "pending"
-					: suggestion.status === "rejected"
+					: this.getEffectiveSuggestionStatus(suggestion) === "rejected"
 						? "rejected"
-						: suggestion.status === "rewritten"
+						: this.getEffectiveSuggestionStatus(suggestion) === "rewritten"
 							? "rewritten"
-						: suggestion.status === "deferred"
+						: this.getEffectiveSuggestionStatus(suggestion) === "deferred"
 							? "deferred"
 							: "unresolved",
 			operation: suggestion.operation,

@@ -57,6 +57,7 @@ export interface ReviewTargetRef {
 export interface RelocationResolution {
 	targetResolved: boolean;
 	anchorResolved: boolean;
+	alreadyApplied?: boolean;
 	targetStart?: number;
 	targetEnd?: number;
 	anchorStart?: number;

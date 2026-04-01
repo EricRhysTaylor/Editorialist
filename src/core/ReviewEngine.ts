@@ -66,7 +66,7 @@ export class ReviewEngine {
 		return suggestions.map((suggestion) => {
 			if (suggestion.status === "accepted") {
 				const targets = [suggestion.location.primary, suggestion.location.target, suggestion.location.anchor];
-				const reason = targets.some((target) => target?.matchType === "already_applied")
+				const reason = targets.some((target) => target?.matchType === "already_applied") || suggestion.location.relocation?.alreadyApplied
 					? "Already reflected in the manuscript."
 					: "Accepted into the manuscript.";
 				return this.annotateSuggestionReason(suggestion, reason);

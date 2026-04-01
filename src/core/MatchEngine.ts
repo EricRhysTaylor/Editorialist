@@ -67,6 +67,7 @@ export class MatchEngine {
 		const targetResolution = this.resolveTextTarget(noteText, suggestion.payload.target);
 		const anchorResolution = this.resolveTextTarget(noteText, suggestion.payload.anchor);
 		const relocation = this.resolveRelocation(
+			noteText,
 			targetResolution.target,
 			anchorResolution.target,
 			suggestion.payload.placement,
@@ -74,7 +75,10 @@ export class MatchEngine {
 
 		return {
 			...suggestion,
-			status: this.preserveTerminalStatus(suggestion.status, relocation.canApply ? "pending" : "unresolved"),
+			status: this.preserveTerminalStatus(
+				suggestion.status,
+				relocation.alreadyApplied ? "accepted" : relocation.canApply ? "pending" : "unresolved",
+			),
 			location: {
 				target: targetResolution.target,
 				anchor: anchorResolution.target,
@@ -112,6 +116,7 @@ export class MatchEngine {
 	}
 
 	private resolveRelocation(
+		noteText: string,
 		target: ReviewTargetRef,
 		anchor: ReviewTargetRef,
 		placement?: "before" | "after",
@@ -175,6 +180,29 @@ export class MatchEngine {
 			};
 		}
 
+		const alreadyApplied = this.isRelocationAlreadyApplied(
+			noteText,
+			target.startOffset,
+			target.endOffset,
+			anchor.startOffset,
+			anchor.endOffset,
+			placement,
+		);
+		if (alreadyApplied) {
+			return {
+				targetResolved: true,
+				anchorResolved: true,
+				alreadyApplied: true,
+				targetStart: target.startOffset,
+				targetEnd: target.endOffset,
+				anchorStart: anchor.startOffset,
+				anchorEnd: anchor.endOffset,
+				placement,
+				canApply: false,
+				reason: placement ? `Move already reflected ${placement} anchor.` : "Move already reflected in the manuscript.",
+			};
+		}
+
 		return {
 			targetResolved: true,
 			anchorResolved: true,
@@ -186,6 +214,29 @@ export class MatchEngine {
 			canApply: true,
 			reason: placement ? `Ready to move target ${placement} anchor.` : "Ready to move target.",
 		};
+	}
+
+	private isRelocationAlreadyApplied(
+		noteText: string,
+		targetStart: number,
+		targetEnd: number,
+		anchorStart: number,
+		anchorEnd: number,
+		placement?: "before" | "after",
+	): boolean {
+		if (placement === "after") {
+			if (anchorEnd > targetStart) {
+				return false;
+			}
+
+			return /^\s*$/.test(noteText.slice(anchorEnd, targetStart));
+		}
+
+		if (targetEnd > anchorStart) {
+			return false;
+		}
+
+		return /^\s*$/.test(noteText.slice(targetEnd, anchorStart));
 	}
 
 	private resolveTextTarget(noteText: string, text: string, alternateText?: string): TextResolution {

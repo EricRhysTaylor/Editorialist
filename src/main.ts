@@ -1225,7 +1225,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		const context = this.getActiveNoteContext();
 		const launchState = this.getEditorialistLaunchState(context);
-		if (context && launchState.currentNoteHasReviewBlock) {
+		if (context && launchState.currentNoteHasReviewBlock && launchState.currentNoteStatus !== "completed") {
 			return {
 				intent: "active",
 				label: this.getNoteDisplayLabel(context.filePath),
@@ -1968,12 +1968,12 @@ export default class EditorialistPlugin extends Plugin {
 
 		const suggestions = session.suggestions;
 		const selectedIndex = suggestions.findIndex((suggestion) => suggestion.id === selected.id);
-		const pendingCount = suggestions.filter((suggestion) => suggestion.status === "pending").length;
-		const unresolvedCount = suggestions.filter((suggestion) => suggestion.status === "unresolved").length;
-		const acceptedCount = suggestions.filter((suggestion) => suggestion.status === "accepted").length;
-		const rejectedCount = suggestions.filter((suggestion) => suggestion.status === "rejected").length;
-		const deferredCount = suggestions.filter((suggestion) => suggestion.status === "deferred").length;
-		const rewrittenCount = suggestions.filter((suggestion) => suggestion.status === "rewritten").length;
+		const pendingCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "pending").length;
+		const unresolvedCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "unresolved").length;
+		const acceptedCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "accepted").length;
+		const rejectedCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "rejected").length;
+		const deferredCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "deferred").length;
+		const rewrittenCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "rewritten").length;
 		const canUndoLastAccept = this.shouldShowUndoForSelectedSuggestion(selected.id);
 		const guidedSweep = this.getGuidedSweep();
 		const unitLabel = this.getSweepUnitLabel(guidedSweep?.notePaths.length ?? 0, session.notePath);
@@ -2736,7 +2736,31 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private isSuggestionOpen(suggestion: ReviewSuggestion): boolean {
-		return suggestion.status === "pending" || suggestion.status === "deferred" || suggestion.status === "unresolved";
+		const status = this.getEffectiveSuggestionStatus(suggestion);
+		return status === "pending" || status === "deferred" || status === "unresolved";
+	}
+
+	private getEffectiveSuggestionStatus(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
+		if (this.isImplicitlyAcceptedCutSuggestion(suggestion)) {
+			return "accepted";
+		}
+
+		return suggestion.status;
+	}
+
+	private isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
+		if (suggestion.operation !== "cut" || suggestion.status !== "pending") {
+			return false;
+		}
+
+		const target = getSuggestionPrimaryTarget(suggestion);
+		const reason = target?.reason?.toLowerCase() ?? "";
+
+		if (target?.matchType === "already_applied" || target?.matchType === "none" || reason.includes("not found")) {
+			return true;
+		}
+
+		return false;
 	}
 
 	private isAcceptedReviewSuggestion(suggestion: ReviewSuggestion): boolean {
@@ -2909,6 +2933,18 @@ export default class EditorialistPlugin extends Plugin {
 
 		if (this.store.getGuidedSweep()) {
 			return null;
+		}
+
+		const currentSession = this.getReviewSession();
+		if (currentSession && !this.hasLiveActionableSuggestions(currentSession.suggestions)) {
+			return {
+				batchId: this.getCurrentBatchId() ?? `session-complete:${currentSession.notePath}`,
+				completedAt: Date.now(),
+				currentNoteIndex: 0,
+				notePaths: [currentSession.notePath],
+				startedAt: currentSession.parsedAt,
+				totalSuggestions: currentSession.suggestions.length,
+			};
 		}
 
 		const remainingCount = this.getSceneReviewRecords()
