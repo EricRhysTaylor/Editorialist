@@ -1369,13 +1369,13 @@ export class ReviewPanel extends ItemView {
 		if (status === "accepted") {
 			switch (suggestion.operation) {
 				case "edit":
-					return "Edit accepted";
+					return "Edited";
 				case "cut":
-					return "Cut accepted";
+					return "Cut";
 				case "condense":
-					return "Condense accepted";
+					return "Condensed";
 				case "move":
-					return "Move accepted";
+					return "Moved";
 			}
 		}
 

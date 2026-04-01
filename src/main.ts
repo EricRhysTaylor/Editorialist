@@ -1946,7 +1946,7 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		const panelOnlyState = this.getPanelOnlyReviewStateForSession(session);
-		if (panelOnlyState) {
+		if (panelOnlyState && !this.store.getSelectedSuggestion()) {
 			return {
 				mode: "panel",
 				progressLabel: panelOnlyState.progressLabel,
@@ -1966,6 +1966,14 @@ export default class EditorialistPlugin extends Plugin {
 
 		const selected = this.store.getSelectedSuggestion();
 		if (!selected) {
+			if (panelOnlyState) {
+				return {
+					mode: "panel",
+					progressLabel: panelOnlyState.progressLabel,
+					remainingLabel: `${panelOnlyState.remainingCount} remaining`,
+					title: `Continue in ${panelOnlyState.unitLabel === "scene" ? "this scene" : "this note"}`,
+				};
+			}
 			return null;
 		}
 
