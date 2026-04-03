@@ -1002,6 +1002,10 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			cls: "editorialist-settings__maintenance-description",
 			text: "Use this if a pass was imported twice or you need to unwind saved stats. Imported review blocks still inside notes will be discovered again on the next sync.",
 		});
+		historyCard.createDiv({
+			cls: "editorialist-settings__maintenance-note",
+			text: "Resetting history clears Editorialist’s saved decisions and batch tracking, not the review blocks currently written into notes.",
+		});
 		const historyActions = historyRow.createDiv({
 			cls: "editorialist-settings__maintenance-actions editorialist-settings__maintenance-actions--reset",
 		});
@@ -1010,10 +1014,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 		this.createActionButton(historyActions, "rotate-ccw", "Reset all history", async () => {
 			await this.handleResetAllHistory();
-		});
-		historyCard.createDiv({
-			cls: "editorialist-settings__maintenance-note",
-			text: "Resetting history clears Editorialist’s saved decisions and batch tracking, not the review blocks currently written into notes.",
 		});
 	}
 
