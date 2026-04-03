@@ -2872,6 +2872,20 @@
 	padding-top: 0.35rem;
 }
 
+.editorialist-settings__maintenance-row--footer {
+	margin-top: auto;
+	align-items: flex-end;
+}
+
+.editorialist-settings__maintenance-actions--reset-footer {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	justify-content: flex-end;
+	align-self: flex-end;
+	flex: 0 0 auto;
+}
+
 .editorialist-settings__tracking-badge {
 	display: inline-flex;
 	align-items: center;
@@ -2910,6 +2924,7 @@
 	padding-top: 0;
 	font-size: var(--font-ui-small);
 	color: var(--text-muted);
+	max-width: 64ch;
 }
 
 @media (width <= 720px) {
