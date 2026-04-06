@@ -16,8 +16,8 @@
 		"qa-audit": "node scripts/qa-audit.mjs",
 		"check": "npm run typecheck && npm run lint && npm run css-check && npm run css-audit && npm run qa-audit",
 		"release:check": "npm run check && npm run build",
-		"backup": "npm run check && node scripts/backup.mjs",
-		"backup:msg": "npm run check && node scripts/backup.mjs"
+		"backup": "npm run build && node scripts/backup.mjs",
+		"backup:msg": "npm run build && node scripts/backup.mjs"
 	},
 	"repository": {
 		"type": "git",
