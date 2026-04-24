@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	computeFieldAfterDrain,
+	formatPendingEditForDisplay,
 	isInquiryLine,
 	parsePendingEditsField,
 	hasPendingEdits,
@@ -151,6 +152,46 @@ describe("computeFieldAfterDrain", () => {
 		const result = computeFieldAfterDrain(field, staleInquiry);
 		expect(result.outcome).toBe("not_found");
 		expect(result.nextValue).toBe(field);
+	});
+});
+
+describe("formatPendingEditForDisplay", () => {
+	const path = "Book/Scene-01.md";
+	const title = "Scene 01";
+	const order = 1;
+
+	it("returns human segment text as-is with no prefix", () => {
+		const [segment] = parsePendingEditsField(path, title, order, "Tighten the opening paragraph.");
+		const display = formatPendingEditForDisplay(segment);
+		expect(display.mutedPrefix).toBeUndefined();
+		expect(display.actionText).toBe("Tighten the opening paragraph.");
+	});
+
+	it("splits an Inquiry line into muted wiki-link prefix + action text", () => {
+		const field = "[[Inquiry Brief — Pay4: Premature Resolution Apr 15 2026 @ 3.36pm|Briefing]] — Revise Trisan's first conscious post-crisis contact with 'her'.";
+		const segments = parsePendingEditsField(path, title, order, field);
+		const inquirySegment = segments[0];
+		const display = formatPendingEditForDisplay(inquirySegment);
+		expect(display.mutedPrefix).toBe("[[Inquiry Brief — Pay4: Premature Resolution Apr 15 2026 @ 3.36pm|Briefing]] — ");
+		expect(display.actionText).toBe("Revise Trisan's first conscious post-crisis contact with 'her'.");
+	});
+
+	it("falls back to full text when Inquiry line is malformed (no ]] separator)", () => {
+		const field = "[[Inquiry Brief — malformed without closing";
+		const segments = parsePendingEditsField(path, title, order, field);
+		const segment = segments[0];
+		const display = formatPendingEditForDisplay(segment);
+		expect(display.mutedPrefix).toBeUndefined();
+		expect(display.actionText).toBe(field);
+	});
+
+	it("falls back when action text is missing after separator", () => {
+		const field = "[[Inquiry Brief — abc|Briefing]] — ";
+		const segments = parsePendingEditsField(path, title, order, field);
+		const segment = segments[0];
+		const display = formatPendingEditForDisplay(segment);
+		expect(display.mutedPrefix).toBeUndefined();
+		expect(display.actionText).toBe(field);
 	});
 });
 

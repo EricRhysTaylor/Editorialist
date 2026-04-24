@@ -524,7 +524,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const body = this.createSection(
 			parent,
 			"Pending edits",
-			"Free-form revision notes from your active book's scene frontmatter. Reviewed separately from imported revision passes.",
+			"Free-form revision notes from your active book's scene frontmatter. Reviewed separately from imported revision passes. Edit each line item (human note plus one or more Inquiry View items) in order as they appear.",
 			"clipboard-list",
 		);
 
@@ -550,22 +550,24 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				: `${humanCount} human · ${inquiryCount} inquiry`,
 		);
 
-		const actionCard = cards.createDiv({ cls: "editorialist-settings__stat-card" });
-		actionCard.createDiv({ cls: "editorialist-settings__stat-label", text: "Action" });
-		const actionRow = actionCard.createDiv({ cls: "editorialist-settings__stat-value" });
-		const startButton = this.createActionButton(actionRow, "play", "Start review", async () => {
-			await this.plugin.startPendingEditsReview();
+		const actionCard = cards.createDiv({
+			cls: "editorialist-settings__stat-card editorialist-settings__stat-card--action",
 		});
-		if (segmentCount === 0) {
-			startButton.setAttribute("disabled", "true");
-			startButton.setAttribute("aria-disabled", "true");
-		}
+		actionCard.createDiv({ cls: "editorialist-settings__stat-label", text: "Action" });
 		actionCard.createDiv({
 			cls: "editorialist-settings__stat-detail",
 			text: segmentCount === 0
 				? "Nothing to review right now"
 				: "Walk each item across the active book",
 		});
+		const actionFooter = actionCard.createDiv({ cls: "editorialist-settings__stat-action-footer" });
+		const startButton = this.createActionButton(actionFooter, "play", "Start review", async () => {
+			await this.plugin.startPendingEditsReview();
+		});
+		if (segmentCount === 0) {
+			startButton.setAttribute("disabled", "true");
+			startButton.setAttribute("aria-disabled", "true");
+		}
 	}
 
 	private renderActivitySection(
@@ -626,10 +628,10 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		}
 
 		if (activeBookLabel) {
-			const toolbar = body.createDiv({ cls: "editorialist-settings__inventory-toolbar" });
-			const actions = toolbar.createDiv({ cls: "editorialist-settings__inventory-actions" });
+			const titleRow = this.getSectionTitleRow(body);
+			const host = titleRow ?? body.createDiv({ cls: "editorialist-settings__inventory-toolbar" });
 			const filterButton = this.createActionButton(
-				actions,
+				host,
 				"book-open",
 				this.activeBookOnly ? `Active ${vocabulary.scopeLabel}: ${activeBookLabel}` : `All ${vocabulary.scopeLabel}s`,
 				async () => {
@@ -638,6 +640,9 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				},
 			);
 			filterButton.addClass("editorialist-settings__inventory-filter");
+			if (titleRow) {
+				filterButton.addClass("editorialist-settings__section-header-action");
+			}
 			if (this.activeBookOnly) {
 				filterButton.addClass("is-active");
 			}
@@ -1213,6 +1218,18 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		heading.createDiv({ cls: "editorialist-settings__section-description", text: description });
 
 		return section.createDiv({ cls: "editorialist-settings__section-body" });
+	}
+
+	private getSectionTitleRow(body: HTMLElement): HTMLElement | null {
+		const section = body.parentElement;
+		if (!section) {
+			return null;
+		}
+		const header = section.querySelector(".editorialist-settings__section-header");
+		if (!header) {
+			return null;
+		}
+		return header.querySelector(".editorialist-settings__section-title-row");
 	}
 
 	private createSectionTitleRow(parent: HTMLElement, icon: string, title: string): HTMLElement {

@@ -6,6 +6,7 @@ import {
 } from "./core/PendingEditsCollector";
 import {
 	drainSegmentFromFrontmatter,
+	formatPendingEditForDisplay,
 	parsePendingEditsField,
 	readPendingEditsField,
 } from "./core/PendingEditsSegments";
@@ -504,6 +505,7 @@ export default class EditorialistPlugin extends Plugin {
 		if (activeFilePath !== segment.scenePath) {
 			await this.app.workspace.openLinkText(segment.scenePath, "", false);
 		}
+		this.syncActiveEditorDecorations();
 	}
 
 	async completePendingEditSegment(segment: PendingEditSegment): Promise<void> {
@@ -525,6 +527,141 @@ export default class EditorialistPlugin extends Plugin {
 
 	async skipPendingEditSegment(segment: PendingEditSegment): Promise<void> {
 		await this.advanceToNextPendingEditSegment(segment);
+	}
+
+	async completeSelectedPendingEditSegment(): Promise<void> {
+		const segment = this.getSelectedPendingEditSegment();
+		if (!segment) {
+			return;
+		}
+		await this.completePendingEditSegment(segment);
+	}
+
+	async skipSelectedPendingEditSegment(): Promise<void> {
+		const segment = this.getSelectedPendingEditSegment();
+		if (!segment) {
+			return;
+		}
+		await this.skipPendingEditSegment(segment);
+	}
+
+	async selectNextPendingEditSegment(): Promise<void> {
+		const segment = this.getSelectedPendingEditSegment();
+		if (!segment) {
+			return;
+		}
+		await this.advancePendingEditSegmentBy(segment, "next");
+	}
+
+	async selectPreviousPendingEditSegment(): Promise<void> {
+		const segment = this.getSelectedPendingEditSegment();
+		if (!segment) {
+			return;
+		}
+		await this.advancePendingEditSegmentBy(segment, "previous");
+	}
+
+	async closePendingEditsReview(): Promise<void> {
+		this.pendingEditsSession = null;
+		this.syncActiveEditorDecorations();
+	}
+
+	private getSelectedPendingEditSegment(): PendingEditSegment | null {
+		const session = this.pendingEditsSession;
+		if (!session || !session.selectedSegmentId) {
+			return null;
+		}
+
+		for (const scene of session.scenes) {
+			for (const segment of scene.segments) {
+				if (segment.id === session.selectedSegmentId) {
+					return segment;
+				}
+			}
+		}
+		return null;
+	}
+
+	private getOrderedPendingEditSegments(): PendingEditSegment[] {
+		const session = this.pendingEditsSession;
+		if (!session) {
+			return [];
+		}
+		return session.scenes.flatMap((scene) => scene.segments);
+	}
+
+	private getPendingEditsToolbarState(): ToolbarState | null {
+		const session = this.pendingEditsSession;
+		if (!session || session.scenes.length === 0) {
+			return null;
+		}
+
+		const activeFilePath = this.app.workspace.getActiveFile()?.path;
+		if (!activeFilePath) {
+			return null;
+		}
+
+		const sceneForActive = session.scenes.find((scene) => scene.scenePath === activeFilePath);
+		if (!sceneForActive) {
+			return null;
+		}
+
+		const segment = this.getSelectedPendingEditSegment() ?? sceneForActive.segments[0] ?? null;
+		if (!segment) {
+			return null;
+		}
+
+		if (segment.scenePath !== activeFilePath) {
+			return null;
+		}
+
+		const ordered = this.getOrderedPendingEditSegments();
+		const currentIndex = ordered.findIndex((candidate) => candidate.id === segment.id);
+		const segmentIndexLabel =
+			currentIndex === -1
+				? `${ordered.length} total`
+				: `Item ${currentIndex + 1} of ${ordered.length}`;
+		const segmentKindLabel = segment.kind === "human" ? "HUMAN NOTE" : "INQUIRY ITEM";
+		const display = formatPendingEditForDisplay(segment);
+
+		return {
+			mode: "pending_edits_review",
+			title: "Pending edits",
+			sceneLabel: segment.sceneTitle,
+			segmentKindLabel,
+			segmentIndexLabel,
+			segmentMutedPrefix: display.mutedPrefix,
+			segmentActionText: display.actionText,
+			canComplete: true,
+			canNext: currentIndex !== -1 && currentIndex < ordered.length - 1,
+			canPrevious: currentIndex > 0,
+		};
+	}
+
+	private async advancePendingEditSegmentBy(
+		fromSegment: PendingEditSegment,
+		direction: "next" | "previous",
+	): Promise<void> {
+		const ordered = this.getOrderedPendingEditSegments();
+		if (ordered.length === 0) {
+			return;
+		}
+
+		const currentIndex = ordered.findIndex((candidate) => candidate.id === fromSegment.id);
+		if (currentIndex === -1) {
+			return;
+		}
+
+		const targetIndex = direction === "next" ? currentIndex + 1 : currentIndex - 1;
+		if (targetIndex < 0 || targetIndex >= ordered.length) {
+			return;
+		}
+
+		const target = ordered[targetIndex];
+		if (!target) {
+			return;
+		}
+		await this.openPendingEditSegment(target);
 	}
 
 	private rebuildPendingEditsSessionForScene(scenePath: string): void {
@@ -2104,6 +2241,11 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private getToolbarState(hasReviewBlock: boolean): ToolbarState | null {
+		const pendingEditsState = this.getPendingEditsToolbarState();
+		if (pendingEditsState) {
+			return pendingEditsState;
+		}
+
 		if (!hasReviewBlock) {
 			return null;
 		}
@@ -3379,8 +3521,9 @@ export default class EditorialistPlugin extends Plugin {
 	): void {
 		const isHandoff = toolbarState?.mode === "handoff";
 		const isPanel = toolbarState?.mode === "panel";
+		const isPendingEdits = toolbarState?.mode === "pending_edits_review";
 		const hasHighlight = Boolean(highlight && highlight.end > highlight.start);
-		if (!editorView || !toolbarState || (!isHandoff && !isPanel && !hasHighlight)) {
+		if (!editorView || !toolbarState || (!isHandoff && !isPanel && !isPendingEdits && !hasHighlight)) {
 			this.destroyToolbarOverlay();
 			return;
 		}

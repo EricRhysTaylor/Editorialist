@@ -77,6 +77,19 @@ export interface CompletedReviewToolbarState {
 	title: string;
 }
 
+export interface PendingEditsReviewToolbarState {
+	mode: "pending_edits_review";
+	title: string;
+	sceneLabel: string;
+	segmentKindLabel: string;
+	segmentIndexLabel: string;
+	segmentMutedPrefix?: string;
+	segmentActionText: string;
+	canComplete: boolean;
+	canNext: boolean;
+	canPrevious: boolean;
+}
+
 export type ToolbarState =
 	| ReviewToolbarState
 	| BulkConfirmToolbarState
@@ -84,7 +97,8 @@ export type ToolbarState =
 	| PanelToolbarState
 	| AppliedReviewToolbarState
 	| AcceptedReviewToolbarState
-	| CompletedReviewToolbarState;
+	| CompletedReviewToolbarState
+	| PendingEditsReviewToolbarState;
 
 export function createReviewToolbarElement(
 	plugin: EditorialistPlugin,
@@ -218,6 +232,58 @@ export function createReviewToolbarElement(
 				void plugin.undoLastAppliedSuggestion();
 			}, false);
 		}
+		return overlay;
+	}
+
+	if (state.mode === "pending_edits_review") {
+		toolbar.addClass("editorialist-toolbar--pending-edits");
+		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
+		buildFlatIconButton(leading, "Close pending edits review", "x", () => {
+			void plugin.closePendingEditsReview();
+		});
+
+		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
+		markAsNonEditorSurface(meta);
+		renderMetaSegment(meta, state.title, "editorialist-toolbar__meta-segment--positive");
+		renderMetaSeparator(meta);
+		renderMetaSegment(meta, state.sceneLabel);
+		renderMetaSeparator(meta);
+		renderMetaSegment(meta, state.segmentKindLabel);
+		renderMetaSeparator(meta);
+		renderMetaSegment(meta, state.segmentIndexLabel);
+
+		const body = toolbar.createDiv({ cls: "editorialist-toolbar__pending-body" });
+		markAsNonEditorSurface(body);
+		if (state.segmentMutedPrefix) {
+			const prefix = body.createSpan({
+				cls: "editorialist-toolbar__pending-body-prefix",
+				text: state.segmentMutedPrefix,
+			});
+			markAsNonEditorSurface(prefix);
+		}
+		const action = body.createSpan({
+			cls: "editorialist-toolbar__pending-body-action",
+			text: state.segmentActionText,
+		});
+		markAsNonEditorSurface(action);
+
+		const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
+		buildButton(actions, "Previous", "arrow-left", () => {
+			void plugin.selectPreviousPendingEditSegment();
+		}, !state.canPrevious);
+		buildButton(actions, "Next", "arrow-right", () => {
+			void plugin.selectNextPendingEditSegment();
+		}, !state.canNext);
+		buildButton(
+			actions,
+			"Complete",
+			"check",
+			() => {
+				void plugin.completeSelectedPendingEditSegment();
+			},
+			!state.canComplete,
+			true,
+		);
 		return overlay;
 	}
 

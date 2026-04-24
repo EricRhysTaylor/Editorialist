@@ -12,6 +12,48 @@ export function isInquiryLine(line: string): boolean {
 	return line.includes(INQUIRY_LINE_TOKEN);
 }
 
+export interface PendingEditDisplay {
+	mutedPrefix?: string;
+	actionText: string;
+}
+
+/**
+ * Split an Inquiry-line segment for display so the wiki-link prefix renders muted
+ * and the author's eye locks onto the actual revision action.
+ *
+ * Inquiry format: `[[Inquiry Brief — <title>|Briefing]] — <action text>`
+ *   → mutedPrefix: `[[Inquiry Brief — <title>|Briefing]] — `
+ *   → actionText:  `<action text>`
+ *
+ * Human segments keep the full text as actionText with no prefix.
+ */
+export function formatPendingEditForDisplay(segment: PendingEditSegment): PendingEditDisplay {
+	if (segment.kind !== "inquiry") {
+		return { actionText: segment.text };
+	}
+
+	const text = segment.text;
+	const linkClose = text.indexOf("]]");
+	if (linkClose === -1) {
+		return { actionText: text };
+	}
+
+	const afterLink = text.slice(linkClose + 2);
+	const separatorMatch = afterLink.match(/^\s*(?:—|--)\s*/);
+	if (!separatorMatch) {
+		return { actionText: text };
+	}
+
+	const prefixEnd = linkClose + 2 + separatorMatch[0].length;
+	const mutedPrefix = text.slice(0, prefixEnd);
+	const actionText = text.slice(prefixEnd).trim();
+	if (!actionText) {
+		return { actionText: text };
+	}
+
+	return { mutedPrefix, actionText };
+}
+
 export function splitFieldLines(raw: string): string[] {
 	if (!raw) {
 		return [];

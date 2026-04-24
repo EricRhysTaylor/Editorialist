@@ -45,6 +45,56 @@
 	padding: 0.42rem 0.62rem;
 }
 
+.editorialist-toolbar--pending-edits {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 0.5rem;
+	padding: 0.55rem 0.7rem;
+	max-width: min(640px, calc(100vw - 3rem));
+}
+
+.editorialist-toolbar--pending-edits .editorialist-toolbar__leading {
+	align-self: flex-end;
+}
+
+.editorialist-toolbar--pending-edits .editorialist-toolbar__meta {
+	flex-wrap: wrap;
+	white-space: normal;
+}
+
+.editorialist-toolbar__pending-body {
+	font-family: var(--font-text);
+	font-size: var(--font-ui-medium);
+	font-weight: 400;
+	line-height: 1.55;
+	color: var(--text-normal);
+	text-transform: none;
+	letter-spacing: normal;
+	white-space: pre-wrap;
+	word-break: break-word;
+	padding: 0.7rem 0.85rem;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--background-primary) 62%, transparent);
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 50%, transparent);
+	max-height: 14rem;
+	overflow-y: auto;
+}
+
+.editorialist-toolbar__pending-body-prefix {
+	color: color-mix(in srgb, var(--text-muted) 55%, transparent);
+	font-size: 0.92em;
+}
+
+.editorialist-toolbar__pending-body-action {
+	color: var(--text-normal);
+	font-weight: 500;
+}
+
+.editorialist-toolbar--pending-edits .editorialist-toolbar__actions {
+	justify-content: flex-end;
+	flex-wrap: wrap;
+}
+
 .editorialist-toolbar__meta {
 	display: inline-flex;
 	align-items: center;
@@ -2102,11 +2152,16 @@
 }
 
 .editorialist-settings__section-title-row {
-	display: inline-flex;
+	display: flex;
 	align-items: center;
 	gap: var(--editorialist-settings-gap-sm);
-	width: fit-content;
+	width: 100%;
 	max-width: 100%;
+}
+
+.editorialist-settings__section-header-action {
+	margin-left: auto;
+	flex: 0 0 auto;
 }
 
 .editorialist-settings__section-title-row--hero {
@@ -2256,6 +2311,23 @@
 	display: flex;
 	flex-direction: column;
 	gap: 0.22rem;
+}
+
+.editorialist-settings__stat-card--action {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+}
+
+.editorialist-settings__stat-card--action .editorialist-settings__stat-detail {
+	margin: 0;
+}
+
+.editorialist-settings__stat-action-footer {
+	margin-top: auto;
+	padding-top: 0.6rem;
+	display: flex;
+	justify-content: flex-end;
 }
 
 .editorialist-settings__hero-metric-label,
