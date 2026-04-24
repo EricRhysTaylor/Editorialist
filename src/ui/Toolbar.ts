@@ -271,18 +271,26 @@ export function createReviewToolbarElement(
 		buildButton(actions, "Previous", "arrow-left", () => {
 			void plugin.selectPreviousPendingEditSegment();
 		}, !state.canPrevious);
-		buildButton(actions, "Next", "arrow-right", () => {
-			void plugin.selectNextPendingEditSegment();
-		}, !state.canNext);
 		buildButton(
 			actions,
-			"Complete",
-			"check",
+			"Next (leave item in pending edits)",
+			"arrow-right",
+			() => {
+				void plugin.selectNextPendingEditSegment();
+			},
+			!state.canNext,
+			true,
+			undefined,
+			true,
+		);
+		buildButton(
+			actions,
+			"Complete and remove from pending edits",
+			"list-x",
 			() => {
 				void plugin.completeSelectedPendingEditSegment();
 			},
 			!state.canComplete,
-			true,
 		);
 		return overlay;
 	}
@@ -489,12 +497,20 @@ function buildButton(
 		onClick: () => void;
 		when: (state: { modPressed: boolean; shiftPressed: boolean }) => boolean;
 	}>,
+	autoFocus = false,
 ): void {
 	const button = new ButtonComponent(parent);
 	button.setDisabled(disabled);
 	button.buttonEl.addClass("ert-btn", "ert-btn--flat", "editorialist-toolbar__button");
 	if (isApply) {
 		button.buttonEl.addClass("editorialist-toolbar__button--apply");
+	}
+	if (autoFocus && !disabled) {
+		window.requestAnimationFrame(() => {
+			if (button.buttonEl.isConnected) {
+				button.buttonEl.focus();
+			}
+		});
 	}
 	markAsNonEditorSurface(button.buttonEl);
 	const iconEl = button.buttonEl.createSpan({ cls: "editorialist-toolbar__button-icon" });

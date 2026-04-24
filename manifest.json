@@ -2,8 +2,9 @@
 	"id": "editorialist",
 	"name": "Editorialist",
 	"version": "0.1.0",
-	"minAppVersion": "0.15.0",
+	"minAppVersion": "1.5.0",
 	"description": "A structured editorial review system for manuscripts in Obsidian.",
 	"author": "RT LLC",
+	"authorUrl": "https://github.com/EricRhysTaylor",
 	"isDesktopOnly": false
 }
