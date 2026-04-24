@@ -402,7 +402,7 @@ export class ReviewPanel extends ItemView {
 		const pendingSummary = this.plugin.getPendingEditsSummary();
 		if (pendingSummary && pendingSummary.segmentCount > 0) {
 			const pendingStep = steps.createDiv({
-				cls: "editorialist-panel__completion-step editorialist-panel__completion-step--secondary",
+				cls: "editorialist-panel__completion-step editorialist-panel__completion-step--active",
 			});
 			const pendingBullet = pendingStep.createSpan({ cls: "editorialist-panel__completion-step-bullet" });
 			setIcon(pendingBullet, "clipboard-list");
