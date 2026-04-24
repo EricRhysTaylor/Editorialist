@@ -370,7 +370,7 @@ export class ReviewPanel extends ItemView {
 
 		card.createDiv({
 			cls: "editorialist-panel__completion-summary",
-			text: "No active revision pass right now",
+			text: "No active review",
 		});
 		card.createDiv({
 			cls: "editorialist-panel__completion-description",
@@ -399,13 +399,30 @@ export class ReviewPanel extends ItemView {
 			void this.plugin.openEditorialistModal();
 		});
 
-		const passStep = steps.createDiv({ cls: "editorialist-panel__completion-step" });
-		const passBullet = passStep.createSpan({ cls: "editorialist-panel__completion-step-bullet" });
-		setIcon(passBullet, "arrow-right");
-		passStep.createSpan({
-			cls: "editorialist-panel__completion-step-text",
-			text: "Start another pass when you are ready.",
-		});
+		const pendingSummary = this.plugin.getPendingEditsSummary();
+		if (pendingSummary && pendingSummary.segmentCount > 0) {
+			const pendingStep = steps.createDiv({
+				cls: "editorialist-panel__completion-step editorialist-panel__completion-step--secondary",
+			});
+			const pendingBullet = pendingStep.createSpan({ cls: "editorialist-panel__completion-step-bullet" });
+			setIcon(pendingBullet, "clipboard-list");
+			const pendingLink = pendingStep.createEl("a", {
+				cls: "editorialist-panel__completion-step-link",
+				attr: {
+					href: "#",
+					title: "Start pending-edits review in active book",
+				},
+			});
+			const itemNoun = pendingSummary.segmentCount === 1 ? "item" : "items";
+			const sceneNoun = pendingSummary.sceneCount === 1 ? "scene" : "scenes";
+			pendingLink.createSpan({
+				cls: "editorialist-panel__completion-link-text",
+				text: `Review ${pendingSummary.segmentCount} pending edit ${itemNoun} across ${pendingSummary.sceneCount} ${sceneNoun}`,
+			});
+			this.bindImmediateAction(pendingLink, () => {
+				void this.plugin.startPendingEditsReview();
+			});
+		}
 
 		const operationsStep = steps.createDiv({ cls: "editorialist-panel__completion-step" });
 		const operationsBullet = operationsStep.createSpan({ cls: "editorialist-panel__completion-step-bullet" });

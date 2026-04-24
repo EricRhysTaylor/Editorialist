@@ -6,7 +6,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
-		"build": "npm run css-check && npm run css-audit && npm run qa-audit && node esbuild.config.mjs production && npm run copy:dev && node scripts/backup-if-stale.mjs",
+		"build": "npm run typecheck && npm run lint && npm run css-check && npm run css-audit && npm run qa-audit && node esbuild.config.mjs production && npm run copy:dev && node scripts/backup-if-stale.mjs",
 		"copy:dev": "node scripts/copy-to-vault.mjs",
 		"build:dev": "npm run build",
 		"typecheck": "tsc --noEmit",
@@ -14,10 +14,13 @@
 		"css-check": "stylelint \"**/*.css\" --allow-empty-input",
 		"css-audit": "node scripts/css-audit.mjs",
 		"qa-audit": "node scripts/qa-audit.mjs",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"css-drift": "node scripts/css-drift-check.mjs",
 		"check": "npm run typecheck && npm run lint && npm run css-check && npm run css-audit && npm run qa-audit",
-		"release:check": "npm run check && npm run build",
-		"backup": "npm run build && node scripts/backup.mjs",
-		"backup:msg": "npm run build && node scripts/backup.mjs"
+		"release:check": "npm run check && npm run test && npm run css-drift -- --maintenance && npm run build",
+		"backup": "npm run test && npm run css-drift -- --maintenance && npm run build && node scripts/backup.mjs",
+		"backup:msg": "npm run backup"
 	},
 	"repository": {
 		"type": "git",
@@ -36,7 +39,7 @@
 	"devDependencies": {
 		"@codemirror/state": "6.5.0",
 		"@codemirror/view": "6.38.6",
-		"@types/node": "^16.11.6",
+		"@types/node": "^20.10.5",
 		"@typescript-eslint/eslint-plugin": "^8.57.2",
 		"@typescript-eslint/parser": "^8.57.2",
 		"esbuild": "0.25.5",
@@ -44,7 +47,8 @@
 		"stylelint": "^16.26.1",
 		"stylelint-config-standard": "^36.0.1",
 		"tslib": "2.4.0",
-		"typescript": "^5.8.3"
+		"typescript": "^5.8.3",
+		"vitest": "^3.2.4"
 	},
 	"dependencies": {
 		"obsidian": "latest"

@@ -16,4 +16,12 @@ export function registerCommands(plugin: EditorialistPlugin): void {
 			void plugin.openReviewPanel();
 		},
 	});
+
+	plugin.addCommand({
+		id: "review-pending-edits",
+		name: "Review pending edits in active book",
+		callback: () => {
+			void plugin.startPendingEditsReview();
+		},
+	});
 }

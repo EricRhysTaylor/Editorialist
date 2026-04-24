@@ -1,5 +1,18 @@
 import type { EditorView } from "@codemirror/view";
 import { MarkdownView, normalizePath, Notice, Plugin, TFile, type App } from "obsidian";
+import {
+	collectPendingEdits,
+	describeCollectFailure,
+} from "./core/PendingEditsCollector";
+import {
+	drainSegmentFromFrontmatter,
+	parsePendingEditsField,
+	readPendingEditsField,
+} from "./core/PendingEditsSegments";
+import type {
+	PendingEditSegment,
+	PendingEditsSession,
+} from "./models/PendingEditSegment";
 import { registerCommands } from "./commands/Commands";
 import { deriveContributorIdentitySeed } from "./core/ContributorIdentity";
 import { ImportEngine } from "./core/ImportEngine";
@@ -143,6 +156,16 @@ interface ReviewLaunchTarget {
 	unitLabel: "note" | "scene";
 }
 
+export interface PendingEditsSummary {
+	sceneCount: number;
+	segmentCount: number;
+	humanCount: number;
+	inquiryCount: number;
+	scenePaths: ReadonlySet<string>;
+}
+
+const PENDING_EDITS_SUMMARY_MIN_REFRESH_MS = 2000;
+
 export default class EditorialistPlugin extends Plugin {
 	readonly store = new ReviewStore();
 
@@ -191,6 +214,10 @@ export default class EditorialistPlugin extends Plugin {
 	private toolbarOverlayHeight = 0;
 	private toolbarOverlayLastPosition: { hidden: boolean; left: string; top: string } | null = null;
 	private toolbarOverlayState: ToolbarState | null = null;
+	private pendingEditsSession: PendingEditsSession | null = null;
+	private pendingEditsSummary: PendingEditsSummary | null = null;
+	private pendingEditsSummaryInflight: Promise<void> | null = null;
+	private pendingEditsSummaryLastRefreshAt = 0;
 	private readonly toolbarOverlayScrollHandler = (): void => {
 		this.scheduleToolbarOverlayPositionUpdate();
 	};
@@ -235,6 +262,7 @@ export default class EditorialistPlugin extends Plugin {
 				}
 				this.resyncSessionForActiveNote();
 				this.syncActiveEditorDecorations();
+				void this.refreshPendingEditsSummary();
 			}),
 		);
 
@@ -245,6 +273,7 @@ export default class EditorialistPlugin extends Plugin {
 		);
 
 		this.syncActiveEditorDecorations();
+		void this.refreshPendingEditsSummary({ force: true });
 	}
 
 	async onunload(): Promise<void> {
@@ -368,10 +397,194 @@ export default class EditorialistPlugin extends Plugin {
 		});
 		this.app.workspace.revealLeaf(leaf);
 		this.refreshReviewPanel();
+		void this.refreshPendingEditsSummary({ force: true });
 	}
 
 	isReviewPanelOpen(): boolean {
 		return this.app.workspace.getLeavesOfType(REVIEW_PANEL_VIEW_TYPE).length > 0;
+	}
+
+	getPendingEditsSession(): PendingEditsSession | null {
+		return this.pendingEditsSession;
+	}
+
+	getPendingEditsSummary(): PendingEditsSummary | null {
+		return this.pendingEditsSummary;
+	}
+
+	hasPendingEditsForScene(scenePath: string): boolean {
+		return this.pendingEditsSummary?.scenePaths.has(scenePath) ?? false;
+	}
+
+	async refreshPendingEditsSummary(options?: { force?: boolean }): Promise<void> {
+		const force = options?.force ?? false;
+		const now = Date.now();
+		if (!force && now - this.pendingEditsSummaryLastRefreshAt < PENDING_EDITS_SUMMARY_MIN_REFRESH_MS) {
+			return this.pendingEditsSummaryInflight ?? Promise.resolve();
+		}
+		if (this.pendingEditsSummaryInflight) {
+			return this.pendingEditsSummaryInflight;
+		}
+
+		const task = (async () => {
+			try {
+				const result = await collectPendingEdits(this.app);
+				if (!result.ok) {
+					this.pendingEditsSummary = null;
+					return;
+				}
+
+				let humanCount = 0;
+				let inquiryCount = 0;
+				const scenePaths = new Set<string>();
+				for (const scene of result.session.scenes) {
+					scenePaths.add(scene.scenePath);
+					for (const segment of scene.segments) {
+						if (segment.kind === "human") humanCount += 1;
+						else inquiryCount += 1;
+					}
+				}
+
+				this.pendingEditsSummary = {
+					sceneCount: result.session.scenes.length,
+					segmentCount: humanCount + inquiryCount,
+					humanCount,
+					inquiryCount,
+					scenePaths,
+				};
+			} finally {
+				this.pendingEditsSummaryLastRefreshAt = Date.now();
+				this.pendingEditsSummaryInflight = null;
+				this.refreshReviewPanel();
+			}
+		})();
+
+		this.pendingEditsSummaryInflight = task;
+		return task;
+	}
+
+	async startPendingEditsReview(): Promise<void> {
+		const result = await collectPendingEdits(this.app);
+		if (!result.ok) {
+			new Notice(describeCollectFailure(result.reason));
+			this.pendingEditsSession = null;
+			return;
+		}
+
+		this.pendingEditsSession = result.session;
+		const segmentCount = result.session.scenes.reduce(
+			(total, scene) => total + scene.segments.length,
+			0,
+		);
+		new Notice(
+			`Pending edits: ${segmentCount} item${segmentCount === 1 ? "" : "s"} across ${result.session.scenes.length} scene${result.session.scenes.length === 1 ? "" : "s"}.`,
+		);
+
+		const firstSegment = result.session.scenes[0]?.segments[0] ?? null;
+		if (firstSegment) {
+			await this.openPendingEditSegment(firstSegment);
+		}
+	}
+
+	async openPendingEditSegment(segment: PendingEditSegment): Promise<void> {
+		const session = this.pendingEditsSession;
+		if (!session) {
+			return;
+		}
+
+		session.selectedSegmentId = segment.id;
+
+		const file = this.app.vault.getAbstractFileByPath(segment.scenePath);
+		if (!(file instanceof TFile)) {
+			new Notice(`Scene file not found: ${segment.scenePath}`);
+			return;
+		}
+
+		const activeFilePath = this.app.workspace.getActiveFile()?.path;
+		if (activeFilePath !== segment.scenePath) {
+			await this.app.workspace.openLinkText(segment.scenePath, "", false);
+		}
+	}
+
+	async completePendingEditSegment(segment: PendingEditSegment): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(segment.scenePath);
+		if (!(file instanceof TFile)) {
+			new Notice("Scene file no longer available.");
+			return;
+		}
+
+		const drain = await drainSegmentFromFrontmatter(this.app, file, segment);
+		if (drain.outcome === "not_found") {
+			new Notice("This pending-edit item is no longer in the scene — skipping.");
+		}
+
+		this.rebuildPendingEditsSessionForScene(segment.scenePath);
+		void this.refreshPendingEditsSummary({ force: true });
+		await this.advanceToNextPendingEditSegment(segment);
+	}
+
+	async skipPendingEditSegment(segment: PendingEditSegment): Promise<void> {
+		await this.advanceToNextPendingEditSegment(segment);
+	}
+
+	private rebuildPendingEditsSessionForScene(scenePath: string): void {
+		const session = this.pendingEditsSession;
+		if (!session) {
+			return;
+		}
+
+		const file = this.app.vault.getAbstractFileByPath(scenePath);
+		if (!(file instanceof TFile)) {
+			session.scenes = session.scenes.filter((scene) => scene.scenePath !== scenePath);
+			return;
+		}
+
+		const rawField = readPendingEditsField(this.app, file);
+		const existing = session.scenes.find((scene) => scene.scenePath === scenePath);
+		const segments = parsePendingEditsField(
+			scenePath,
+			existing?.sceneTitle ?? file.basename,
+			existing?.sceneOrder ?? 0,
+			rawField,
+		);
+
+		if (segments.length === 0) {
+			session.scenes = session.scenes.filter((scene) => scene.scenePath !== scenePath);
+			return;
+		}
+
+		session.scenes = session.scenes.map((scene) =>
+			scene.scenePath === scenePath
+				? { ...scene, rawField, segments }
+				: scene,
+		);
+	}
+
+	private async advanceToNextPendingEditSegment(fromSegment: PendingEditSegment): Promise<void> {
+		const session = this.pendingEditsSession;
+		if (!session) {
+			return;
+		}
+
+		const ordered: PendingEditSegment[] = session.scenes.flatMap((scene) => scene.segments);
+		if (ordered.length === 0) {
+			new Notice("All pending edits processed.");
+			this.pendingEditsSession = null;
+			return;
+		}
+
+		const unchangedIndex = ordered.findIndex((candidate) => candidate.id === fromSegment.id);
+		const nextSegment = unchangedIndex >= 0
+			? ordered[unchangedIndex + 1] ?? ordered[0]
+			: ordered[0];
+
+		if (!nextSegment) {
+			new Notice("All pending edits processed.");
+			this.pendingEditsSession = null;
+			return;
+		}
+
+		await this.openPendingEditSegment(nextSegment);
 	}
 
 	openSettings(): void {
@@ -1314,7 +1527,7 @@ export default class EditorialistPlugin extends Plugin {
 			return {
 				title: "Editorialist review",
 				description:
-					"Editorialist keeps revision notes, decisions, and contributor history together in one side-panel workspace so you can review changes in context across your manuscript.",
+					"Editorialist reviews two kinds of revision work: imported review passes (contributor notes with accept/reject) and pending edits — free-form revision notes across the active book.",
 			};
 		}
 
@@ -1332,7 +1545,7 @@ export default class EditorialistPlugin extends Plugin {
 		return {
 			title: "Editorialist review",
 			description:
-				"Editorialist keeps revision notes, decisions, and contributor history together in one side-panel workspace so you can review changes in context across your manuscript.",
+				"Editorialist reviews two kinds of revision work: imported review passes (contributor notes with accept/reject) and pending edits — free-form revision notes across the active book.",
 		};
 	}
 

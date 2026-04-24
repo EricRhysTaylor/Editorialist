@@ -59,6 +59,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		if (refreshMetadata) {
 			await this.plugin.syncOperationalMetadata();
 		}
+		await this.plugin.refreshPendingEditsSummary({ force: refreshMetadata });
 		if (runId !== this.displayRunId) {
 			return;
 		}
@@ -89,6 +90,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		}
 		this.renderHero(coreContent, summary, inventory);
 		this.renderInventorySection(coreContent, inventory, activeBook.label);
+		this.renderPendingEditsSection(coreContent);
 		this.renderActivitySection(coreContent, summary);
 		this.renderTrackingSection(coreContent, activeBook);
 		this.renderMaintenanceSection(coreContent, activeBook.label);
@@ -511,6 +513,61 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		this.createHeroMetric(summaryGrid, "Current sweep", ...this.getCurrentRevisionStatus(currentRevisionStatus, remainingCount));
 	}
 
+	private renderPendingEditsSection(parent: HTMLElement): void {
+		const summary = this.plugin.getPendingEditsSummary();
+		const radialTimelineInstalled = this.isRadialTimelineInstalled();
+
+		if (!radialTimelineInstalled && !summary) {
+			return;
+		}
+
+		const body = this.createSection(
+			parent,
+			"Pending edits",
+			"Free-form revision notes from your active book's scene frontmatter. Reviewed separately from imported revision passes.",
+			"clipboard-list",
+		);
+
+		const cards = body.createDiv({ cls: "editorialist-settings__stats" });
+
+		const sceneCount = summary?.sceneCount ?? 0;
+		const segmentCount = summary?.segmentCount ?? 0;
+		const humanCount = summary?.humanCount ?? 0;
+		const inquiryCount = summary?.inquiryCount ?? 0;
+
+		this.createStatCard(
+			cards,
+			"Scenes",
+			`${sceneCount}`,
+			sceneCount === 0 ? "No scenes with pending edits" : "With pending edits in active book",
+		);
+		this.createStatCard(
+			cards,
+			"Items",
+			`${segmentCount}`,
+			segmentCount === 0
+				? "Human notes and Inquiry insertions will appear here"
+				: `${humanCount} human · ${inquiryCount} inquiry`,
+		);
+
+		const actionCard = cards.createDiv({ cls: "editorialist-settings__stat-card" });
+		actionCard.createDiv({ cls: "editorialist-settings__stat-label", text: "Action" });
+		const actionRow = actionCard.createDiv({ cls: "editorialist-settings__stat-value" });
+		const startButton = this.createActionButton(actionRow, "play", "Start review", async () => {
+			await this.plugin.startPendingEditsReview();
+		});
+		if (segmentCount === 0) {
+			startButton.setAttribute("disabled", "true");
+			startButton.setAttribute("aria-disabled", "true");
+		}
+		actionCard.createDiv({
+			cls: "editorialist-settings__stat-detail",
+			text: segmentCount === 0
+				? "Nothing to review right now"
+				: "Walk each item across the active book",
+		});
+	}
+
 	private renderActivitySection(
 		parent: HTMLElement,
 		summary: ReturnType<EditorialistPlugin["getReviewActivitySummary"]>,
@@ -666,6 +723,21 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				event.preventDefault();
 				void this.plugin.openSceneNote(record.notePath);
 			});
+			if (this.plugin.hasPendingEditsForScene(record.notePath)) {
+				const badge = sceneEntry.createSpan({
+					cls: "editorialist-settings__inventory-pending-badge",
+					attr: {
+						"aria-label": "Pending edits on this scene",
+						title: "This scene also has pending edits (free-form revision notes).",
+					},
+				});
+				const badgeIcon = badge.createSpan({ cls: "editorialist-settings__inventory-pending-badge-icon" });
+				setIcon(badgeIcon, "clipboard-list");
+				badge.createSpan({
+					cls: "editorialist-settings__inventory-pending-badge-text",
+					text: "pending",
+				});
+			}
 			row.createEl("td", {
 				cls: "editorialist-settings__inventory-col-number",
 				text: `${record.batchCount}`,
