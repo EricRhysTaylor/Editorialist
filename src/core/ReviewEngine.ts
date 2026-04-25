@@ -23,6 +23,7 @@ export class ReviewEngine {
 			hasReviewBlock: parsedDocument.blockCount > 0,
 			parsedAt: Date.now(),
 			suggestions: this.finalizeStatuses(resolvedSuggestions),
+			memos: parsedDocument.memos,
 		};
 	}
 

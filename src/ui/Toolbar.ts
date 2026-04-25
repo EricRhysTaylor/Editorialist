@@ -1,5 +1,13 @@
 import { ButtonComponent, setIcon } from "obsidian";
 import type EditorialistPlugin from "../main";
+import type { SupportedReviewOperationType } from "../models/ReviewSuggestion";
+
+const OPERATION_ICONS: Record<SupportedReviewOperationType, string> = {
+	edit: "file-pen-line",
+	cut: "scissors-line-dashed",
+	condense: "minimize-2",
+	move: "arrow-right-left",
+};
 
 let shiftKeyPressed = false;
 let modKeyPressed = false;
@@ -20,6 +28,7 @@ export interface ReviewToolbarState {
 	completionLabel?: string;
 	deferredCount: number;
 	hasReviewBlock: boolean;
+	operation: SupportedReviewOperationType;
 	operationLabel: string;
 	pendingCount: number;
 	rejectedCount: number;
@@ -182,8 +191,8 @@ export function createReviewToolbarElement(
 	if (state.mode === "applied_review") {
 		toolbar.addClass("editorialist-toolbar--panel");
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
-		buildFlatIconButton(leading, "Exit review", "x", () => {
-			void plugin.closeReviewPanel();
+		buildFlatIconButton(leading, "Hide toolbar", "x", () => {
+			plugin.dismissReviewToolbar();
 		});
 
 		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });
@@ -210,8 +219,8 @@ export function createReviewToolbarElement(
 	if (state.mode === "accepted_review") {
 		toolbar.addClass("editorialist-toolbar--panel");
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
-		buildFlatIconButton(leading, "Exit review", "x", () => {
-			void plugin.closeReviewPanel();
+		buildFlatIconButton(leading, "Hide toolbar", "x", () => {
+			plugin.dismissReviewToolbar();
 		});
 
 		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });
@@ -298,8 +307,8 @@ export function createReviewToolbarElement(
 	if (state.mode === "completed_review") {
 		toolbar.addClass("editorialist-toolbar--completed-review");
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
-		buildFlatIconButton(leading, "Close review", "x", () => {
-			void plugin.closeReviewPanel();
+		buildFlatIconButton(leading, "Hide toolbar", "x", () => {
+			plugin.dismissReviewToolbar();
 		});
 
 		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });
@@ -327,8 +336,8 @@ export function createReviewToolbarElement(
 
 	{
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
-		buildFlatIconButton(leading, "Close review", "x", () => {
-			void plugin.closeReviewPanel();
+		buildFlatIconButton(leading, "Hide toolbar", "x", () => {
+			plugin.dismissReviewToolbar();
 		});
 		if (state.mode === "review" && state.anchorDirection) {
 			const indicator = leading.createSpan({
@@ -349,9 +358,8 @@ export function createReviewToolbarElement(
 
 	const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta" });
 	markAsNonEditorSurface(meta);
-	const metaSegments: Array<{ text: string; cls?: string; title?: string }> = [
-		{ text: state.operationLabel },
-	];
+	renderOperationBadge(meta, state.operation, state.operationLabel);
+	const metaSegments: Array<{ text: string; cls?: string; title?: string }> = [];
 	if (state.sceneProgressLabel) {
 		metaSegments.push({ text: state.sceneProgressLabel });
 	}
@@ -389,10 +397,8 @@ export function createReviewToolbarElement(
 			cls: "editorialist-toolbar__meta-segment--positive",
 		});
 	}
-	metaSegments.forEach((segment, index) => {
-		if (index > 0) {
-			renderMetaSeparator(meta);
-		}
+	metaSegments.forEach((segment) => {
+		renderMetaSeparator(meta);
 		renderMetaSegment(meta, segment.text, segment.cls, segment.title);
 	});
 
@@ -584,6 +590,21 @@ function buildActionButton(
 	bindImmediateAction(button.buttonEl, () => {
 		onClick();
 	});
+}
+
+function renderOperationBadge(
+	parent: HTMLElement,
+	operation: SupportedReviewOperationType,
+	label: string,
+): void {
+	const badge = parent.createSpan({ cls: "editorialist-toolbar__operation" });
+	markAsNonEditorSurface(badge);
+	const iconEl = badge.createSpan({ cls: "editorialist-toolbar__operation-icon" });
+	markAsNonEditorSurface(iconEl);
+	setIcon(iconEl, OPERATION_ICONS[operation]);
+	const labelEl = badge.createSpan({ cls: "editorialist-toolbar__operation-label", text: label });
+	markAsNonEditorSurface(labelEl);
+	badge.setAttribute("aria-label", label);
 }
 
 function renderMetaSegment(parent: HTMLElement, text: string, className?: string, title?: string): void {

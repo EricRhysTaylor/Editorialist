@@ -2,7 +2,7 @@ import { normalizeReviewPaste } from "./PasteNormalizer";
 import { getLinesWithOffsets } from "./TextOffsets";
 
 export const REVIEW_BLOCK_FENCE = "editorialist-review";
-const REVIEW_SECTION_PATTERN = /^\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\[)\s*(EDIT|MOVE|CUT|CONDENSE)\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\])?\s*$/im;
+const REVIEW_SECTION_PATTERN = /^\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\[)\s*(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\])?\s*$/im;
 const REVIEW_METADATA_PATTERN =
 	/^(BatchId|ImportedBy|Template|TemplateYear|SupportedOperations|SceneIdSource|Reviewer|ReviewerType|Provider|Model)\s*:/im;
 const GENERAL_FIELD_PATTERN = /^([A-Za-z][A-Za-z ]+):\s*(.*)$/;
@@ -274,7 +274,10 @@ function extractRawTopReviewBlock(noteText: string): ExtractedReviewBlock | null
 
 			if (REVIEW_SECTION_PATTERN.test(trimmed)) {
 				sawSection = true;
-				currentField = null;
+				// Permissive sentinel: section bodies (especially MEMO) may contain
+				// prose lines without the Field: pattern. Treat them as continuation
+				// content rather than terminating the block.
+				currentField = "__section_body__";
 				lastIncludedIndex = index;
 				endOffset = line.endOffset;
 				continue;

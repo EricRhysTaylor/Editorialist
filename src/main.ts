@@ -163,6 +163,7 @@ export interface PendingEditsSummary {
 	humanCount: number;
 	inquiryCount: number;
 	scenePaths: ReadonlySet<string>;
+	segmentCountsByScene: ReadonlyMap<string, number>;
 }
 
 const PENDING_EDITS_SUMMARY_MIN_REFRESH_MS = 2000;
@@ -215,6 +216,7 @@ export default class EditorialistPlugin extends Plugin {
 	private toolbarOverlayHeight = 0;
 	private toolbarOverlayLastPosition: { hidden: boolean; left: string; top: string } | null = null;
 	private toolbarOverlayState: ToolbarState | null = null;
+	private toolbarOverlayDismissedSignature: string | null = null;
 	private pendingEditsSession: PendingEditsSession | null = null;
 	private pendingEditsSummary: PendingEditsSummary | null = null;
 	private pendingEditsSummaryInflight: Promise<void> | null = null;
@@ -419,6 +421,10 @@ export default class EditorialistPlugin extends Plugin {
 		return this.pendingEditsSummary?.scenePaths.has(scenePath) ?? false;
 	}
 
+	getPendingEditsCountForScene(scenePath: string): number {
+		return this.pendingEditsSummary?.segmentCountsByScene.get(scenePath) ?? 0;
+	}
+
 	async refreshPendingEditsSummary(options?: { force?: boolean }): Promise<void> {
 		const force = options?.force ?? false;
 		const now = Date.now();
@@ -440,8 +446,10 @@ export default class EditorialistPlugin extends Plugin {
 				let humanCount = 0;
 				let inquiryCount = 0;
 				const scenePaths = new Set<string>();
+				const segmentCountsByScene = new Map<string, number>();
 				for (const scene of result.session.scenes) {
 					scenePaths.add(scene.scenePath);
+					segmentCountsByScene.set(scene.scenePath, scene.segments.length);
 					for (const segment of scene.segments) {
 						if (segment.kind === "human") humanCount += 1;
 						else inquiryCount += 1;
@@ -454,6 +462,7 @@ export default class EditorialistPlugin extends Plugin {
 					humanCount,
 					inquiryCount,
 					scenePaths,
+					segmentCountsByScene,
 				};
 			} finally {
 				this.pendingEditsSummaryLastRefreshAt = Date.now();
@@ -956,12 +965,26 @@ export default class EditorialistPlugin extends Plugin {
 		this.store.acknowledgeCompletedSweep(completedSweep?.batchId ?? this.store.getAcknowledgedCompletedSweepBatchId());
 		this.clearActiveHighlights();
 		this.lastAppliedChange = null;
+		this.toolbarOverlayDismissedSignature = null;
 		this.syncActiveEditorDecorations();
 	}
 
 	async closeReviewPanel(): Promise<void> {
 		await this.closeActiveReviewContext();
 		this.app.workspace.detachLeavesOfType(REVIEW_PANEL_VIEW_TYPE);
+	}
+
+	dismissReviewToolbar(): void {
+		this.toolbarOverlayDismissedSignature = this.computeToolbarDismissalSignature(
+			this.toolbarOverlayState,
+		);
+		this.destroyToolbarOverlay();
+	}
+
+	private computeToolbarDismissalSignature(state: ToolbarState | null): string {
+		const mode = state?.mode ?? "none";
+		const selectionId = this.store.getState().selectedSuggestionId ?? "";
+		return `${mode}:${selectionId}`;
 	}
 
 	async continueGuidedSweep(): Promise<void> {
@@ -2386,6 +2409,7 @@ export default class EditorialistPlugin extends Plugin {
 			canPrevious: this.getAdjacentRevealableSuggestionId("previous") !== null,
 			canReject: this.canRejectSelectedSuggestion(),
 			canUndoLastAccept,
+			operation: selected.operation,
 			operationLabel: selected.operation.toUpperCase(),
 			selectedLabel: selectedIndex === -1 ? "Current suggestion" : `Suggestion ${selectedIndex + 1} of ${suggestions.length}`,
 		};
@@ -3152,10 +3176,8 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private isCompletedReviewSuggestion(suggestion: ReviewSuggestion): boolean {
-		return (
-			(suggestion.status === "accepted" || suggestion.status === "rewritten") &&
-			this.hasRevealableAcceptedRange(suggestion)
-		);
+		const status = this.getEffectiveSuggestionStatus(suggestion);
+		return status === "accepted" || status === "rewritten" || status === "rejected";
 	}
 
 	private hasRevealableAcceptedRange(suggestion: ReviewSuggestion): boolean {
@@ -3536,6 +3558,15 @@ export default class EditorialistPlugin extends Plugin {
 		if (!editorView || !toolbarState || (!isHandoff && !isPanel && !isPendingEdits && !hasHighlight)) {
 			this.destroyToolbarOverlay();
 			return;
+		}
+
+		if (this.toolbarOverlayDismissedSignature !== null) {
+			const currentSignature = this.computeToolbarDismissalSignature(toolbarState);
+			if (currentSignature === this.toolbarOverlayDismissedSignature) {
+				this.destroyToolbarOverlay();
+				return;
+			}
+			this.toolbarOverlayDismissedSignature = null;
 		}
 
 		if (this.toolbarOverlayEditorView !== editorView) {

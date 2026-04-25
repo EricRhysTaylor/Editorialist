@@ -10,20 +10,23 @@ import type {
 	ReviewSuggestion,
 	ReviewSourceRef,
 	ReviewSuggestionRouting,
+	SceneMemo,
 } from "../models/ReviewSuggestion";
 import type { ParsedReviewerReference } from "../models/ReviewerProfile";
 import type { ReviewerDirectory } from "../state/ReviewerDirectory";
 import { extractReviewBlocks } from "./ReviewBlockFormat";
 import { getLinesWithOffsets, type LineWithOffsets } from "./TextOffsets";
 
-const SECTION_HEADER_PATTERN = /^\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\[)\s*(EDIT|MOVE|CUT|CONDENSE)\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\])?\s*$/i;
+const SECTION_HEADER_PATTERN = /^\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\[)\s*(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\])?\s*$/i;
 const FIELD_PATTERN = /^([A-Za-z][A-Za-z ]+):\s*(.*)$/;
+
+type SectionKind = SupportedReviewOperationType | "memo";
 
 interface SectionBuffer {
 	entryIndex: number;
 	endOffset: number;
 	lines: LineWithOffsets[];
-	operation: SupportedReviewOperationType;
+	kind: SectionKind;
 	startOffset: number;
 }
 
@@ -45,6 +48,11 @@ const OPERATION_HEADERS: Record<string, SupportedReviewOperationType> = {
 	CONDENSE: "condense",
 };
 
+const SECTION_KINDS: Record<string, SectionKind> = {
+	...OPERATION_HEADERS,
+	MEMO: "memo",
+};
+
 export class SuggestionParser {
 	private readonly sectionParsers: Record<SupportedReviewOperationType, SectionParser> = {
 		edit: (fields, suggestionId, source, metadata) => this.parseEditSuggestion(fields, suggestionId, source, metadata),
@@ -58,6 +66,7 @@ export class SuggestionParser {
 
 	parse(noteText: string): ParsedReviewDocument {
 		const suggestions: ReviewSuggestion[] = [];
+		const memos: SceneMemo[] = [];
 		const blocks = extractReviewBlocks(noteText);
 
 		blocks.forEach((block, blockIndex) => {
@@ -69,6 +78,14 @@ export class SuggestionParser {
 			const sections = this.extractSections(lines, blockEnd);
 
 			sections.forEach((section) => {
+				if (section.kind === "memo") {
+					const memo = this.parseMemoSection(section, blockIndex, metadata);
+					if (memo) {
+						memos.push(memo);
+					}
+					return;
+				}
+
 				const suggestion = this.parseSection(section, blockIndex, metadata);
 				if (suggestion) {
 					suggestions.push(suggestion);
@@ -84,6 +101,7 @@ export class SuggestionParser {
 				source: block.source,
 			})),
 			suggestions,
+			memos,
 		};
 	}
 
@@ -150,8 +168,8 @@ export class SuggestionParser {
 
 				entryIndex += 1;
 				const headerKey = headerMatch[1]?.toUpperCase();
-				const operation = headerKey ? OPERATION_HEADERS[headerKey] : undefined;
-				if (!operation) {
+				const kind = headerKey ? SECTION_KINDS[headerKey] : undefined;
+				if (!kind) {
 					currentSection = null;
 					continue;
 				}
@@ -160,7 +178,7 @@ export class SuggestionParser {
 					entryIndex,
 					endOffset: blockEnd,
 					lines: [],
-					operation,
+					kind,
 					startOffset: line.startOffset,
 				};
 				continue;
@@ -177,6 +195,9 @@ export class SuggestionParser {
 	}
 
 	private parseSection(section: SectionBuffer, blockIndex: number, metadata: BlockMetadata): ReviewSuggestion | null {
+		if (section.kind === "memo") {
+			return null;
+		}
 		const fields = this.collectFields(section.lines);
 		const source: ReviewSourceRef = {
 			blockIndex,
@@ -185,7 +206,50 @@ export class SuggestionParser {
 			endOffset: section.endOffset,
 		};
 		const suggestionId = `review-${blockIndex + 1}-${section.entryIndex}`;
-		return this.sectionParsers[section.operation](fields, suggestionId, source, metadata);
+		return this.sectionParsers[section.kind](fields, suggestionId, source, metadata);
+	}
+
+	private parseMemoSection(section: SectionBuffer, blockIndex: number, metadata: BlockMetadata): SceneMemo | null {
+		const fields = this.collectFields(section.lines);
+		const strengths = this.cleanField(fields.get("strengths"));
+		const issues = this.cleanField(fields.get("issues"));
+		const body = this.cleanField(fields.get("body")) ?? this.cleanField(fields.get("notes"));
+
+		if (!strengths && !issues && !body) {
+			// Fall back: treat all non-field lines as body so plain prose memos still surface.
+			const inlineBody = section.lines
+				.map((line) => line.text)
+				.join("\n")
+				.trim();
+			if (!inlineBody) {
+				return null;
+			}
+			return {
+				id: `memo-${blockIndex + 1}-${section.entryIndex}`,
+				contributor: this.reviewerDirectory.resolveContributor(metadata.rawReviewer),
+				source: {
+					blockIndex,
+					entryIndex: section.entryIndex - 1,
+					startOffset: section.startOffset,
+					endOffset: section.endOffset,
+				},
+				body: inlineBody,
+			};
+		}
+
+		return {
+			id: `memo-${blockIndex + 1}-${section.entryIndex}`,
+			contributor: this.reviewerDirectory.resolveContributor(metadata.rawReviewer),
+			source: {
+				blockIndex,
+				entryIndex: section.entryIndex - 1,
+				startOffset: section.startOffset,
+				endOffset: section.endOffset,
+			},
+			strengths,
+			issues,
+			body,
+		};
 	}
 
 	private parseEditSuggestion(

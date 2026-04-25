@@ -1,7 +1,7 @@
 import { ButtonComponent, DropdownComponent, ItemView, setIcon, type WorkspaceLeaf } from "obsidian";
 import { formatContributorIdentityLabel } from "../core/ContributorIdentity";
 import { getEffectiveSuggestionStatus, getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isImplicitlyAcceptedCutSuggestion, isMoveSuggestion } from "../core/OperationSupport";
-import type { ReviewSuggestion } from "../models/ReviewSuggestion";
+import type { ReviewSuggestion, SceneMemo } from "../models/ReviewSuggestion";
 import type EditorialistPlugin from "../main";
 
 export const REVIEW_PANEL_VIEW_TYPE = "editorialist-review-panel";
@@ -169,11 +169,17 @@ export class ReviewPanel extends ItemView {
 			});
 		}
 
+		const memos = session.memos ?? [];
+		const pendingEditsCount = this.plugin.getPendingEditsCountForScene(session.notePath);
+		this.renderCommentsCard(memos, pendingEditsCount, session.notePath);
+
 		if (session.suggestions.length === 0) {
-			this.contentEl.createDiv({
-				cls: "editorialist-panel__empty",
-				text: "Formatted revision notes found, but no valid entries were parsed.",
-			});
+			if (memos.length === 0) {
+				this.contentEl.createDiv({
+					cls: "editorialist-panel__empty",
+					text: "Formatted revision notes found, but no valid entries were parsed.",
+				});
+			}
 			return;
 		}
 
@@ -430,6 +436,110 @@ export class ReviewPanel extends ItemView {
 		operationsStep.createSpan({
 			cls: "editorialist-panel__completion-step-text",
 			text: "Review revision and contributor details in settings.",
+		});
+	}
+
+	private renderCommentsCard(memos: SceneMemo[], pendingEditsCount: number, notePath: string): void {
+		const hasMemos = memos.length > 0;
+		const hasPending = pendingEditsCount > 0;
+		if (!hasMemos && !hasPending) {
+			return;
+		}
+
+		const card = this.contentEl.createDiv({ cls: "editorialist-panel__comments" });
+
+		const header = card.createDiv({ cls: "editorialist-panel__comments-header" });
+		const titleIcon = header.createSpan({ cls: "editorialist-panel__comments-title-icon" });
+		setIcon(titleIcon, "message-square-text");
+		header.createSpan({
+			cls: "editorialist-panel__comments-title",
+			text: "Comments",
+		});
+		const summaryParts: string[] = [];
+		if (hasMemos) {
+			summaryParts.push(`${memos.length} memo${memos.length === 1 ? "" : "s"}`);
+		}
+		if (hasPending) {
+			summaryParts.push(`${pendingEditsCount} pending`);
+		}
+		if (summaryParts.length > 0) {
+			header.createSpan({
+				cls: "editorialist-panel__comments-summary",
+				text: summaryParts.join(" · "),
+			});
+		}
+
+		const body = card.createDiv({ cls: "editorialist-panel__comments-body" });
+
+		memos.forEach((memo) => {
+			this.renderMemoEntry(body, memo);
+		});
+
+		if (hasPending) {
+			this.renderPendingEditsEntry(body, pendingEditsCount, notePath);
+		}
+	}
+
+	private renderMemoEntry(parent: HTMLElement, memo: SceneMemo): void {
+		const entry = parent.createDiv({ cls: "editorialist-panel__comment-entry editorialist-panel__comment-entry--memo" });
+
+		const header = entry.createDiv({ cls: "editorialist-panel__comment-entry-header" });
+		const kindBadge = header.createSpan({ cls: "editorialist-panel__comment-entry-kind" });
+		kindBadge.setText("Memo");
+		header.createSpan({
+			cls: "editorialist-panel__comment-entry-contributor",
+			text: formatContributorIdentityLabel(memo.contributor),
+		});
+
+		if (memo.strengths) {
+			const block = entry.createDiv({ cls: "editorialist-panel__comment-entry-block" });
+			block.createDiv({
+				cls: "editorialist-panel__comment-entry-block-label editorialist-panel__comment-entry-block-label--strengths",
+				text: "Strengths",
+			});
+			block.createDiv({ cls: "editorialist-panel__comment-entry-block-text", text: memo.strengths });
+		}
+
+		if (memo.issues) {
+			const block = entry.createDiv({ cls: "editorialist-panel__comment-entry-block" });
+			block.createDiv({
+				cls: "editorialist-panel__comment-entry-block-label editorialist-panel__comment-entry-block-label--issues",
+				text: "Issues",
+			});
+			block.createDiv({ cls: "editorialist-panel__comment-entry-block-text", text: memo.issues });
+		}
+
+		if (memo.body && !memo.strengths && !memo.issues) {
+			entry.createDiv({ cls: "editorialist-panel__comment-entry-block-text", text: memo.body });
+		} else if (memo.body) {
+			const block = entry.createDiv({ cls: "editorialist-panel__comment-entry-block" });
+			block.createDiv({
+				cls: "editorialist-panel__comment-entry-block-label",
+				text: "Notes",
+			});
+			block.createDiv({ cls: "editorialist-panel__comment-entry-block-text", text: memo.body });
+		}
+	}
+
+	private renderPendingEditsEntry(parent: HTMLElement, count: number, _notePath: string): void {
+		const entry = parent.createDiv({ cls: "editorialist-panel__comment-entry editorialist-panel__comment-entry--pending" });
+
+		const header = entry.createDiv({ cls: "editorialist-panel__comment-entry-header" });
+		const kindBadge = header.createSpan({ cls: "editorialist-panel__comment-entry-kind" });
+		kindBadge.setText("Pending edits");
+		header.createSpan({
+			cls: "editorialist-panel__comment-entry-contributor",
+			text: `${count} item${count === 1 ? "" : "s"} on this scene`,
+		});
+
+		const actionRow = entry.createDiv({ cls: "editorialist-panel__comment-entry-action" });
+		const link = actionRow.createEl("a", {
+			cls: "editorialist-panel__comment-entry-action-link",
+			attr: { href: "#", title: "Start a pending-edits review across the active book" },
+		});
+		link.createSpan({ text: "→ Review pending edits" });
+		this.bindImmediateAction(link, () => {
+			void this.plugin.startPendingEditsReview();
 		});
 	}
 

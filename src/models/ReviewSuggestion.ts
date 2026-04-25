@@ -121,11 +121,21 @@ export type CondenseSuggestion = ReviewSuggestionBase<"condense", CondenseSugges
 
 export type ReviewSuggestion = EditSuggestion | MoveSuggestion | CutSuggestion | CondenseSuggestion;
 
+export interface SceneMemo {
+	id: string;
+	contributor: ReviewContributor;
+	source: ReviewSourceRef;
+	strengths?: string;
+	issues?: string;
+	body?: string;
+}
+
 export interface ReviewSession {
 	notePath: string;
 	hasReviewBlock: boolean;
 	parsedAt: number;
 	suggestions: ReviewSuggestion[];
+	memos: SceneMemo[];
 }
 
 export interface ParsedReviewBlock {
@@ -138,6 +148,7 @@ export interface ParsedReviewDocument {
 	blockCount: number;
 	blocks: ParsedReviewBlock[];
 	suggestions: ReviewSuggestion[];
+	memos: SceneMemo[];
 }
 
 export function isEditSuggestion(suggestion: ReviewSuggestion): suggestion is EditSuggestion {
