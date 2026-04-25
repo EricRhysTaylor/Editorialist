@@ -90,6 +90,8 @@ export function getActiveNoteScopeRoot(activeNotePath: string | undefined): stri
 export async function readRadialTimelineActiveBookScope(app: App): Promise<ActiveBookScopeInfo> {
 	try {
 		const radialDataPath = normalizePath(`${app.vault.configDir}/plugins/radial-timeline/data.json`);
+		// vault.adapter is required here: the file lives under .obsidian/plugins, which is
+		// outside the Markdown file index that Vault API methods operate on.
 		const adapter = app.vault.adapter;
 		if (!(await adapter.exists(radialDataPath))) {
 			return {

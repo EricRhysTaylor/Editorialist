@@ -31,32 +31,18 @@ Editorialist can modify vault content in these explicit cases:
 ## Getting started
 
 1. Open the command palette and run `Editorialist: Open review launcher`.
-2. Paste or copy a formatted review batch.
+2. Paste a formatted review batch into the launcher.
 3. Preview the destination notes.
 4. Import the batch and review suggestions from the side panel.
-5. Apply, reject, defer, or rewrite suggestions explicitly.
+5. Apply, reject, defer, or rewrite suggestions explicitly from the panel toolbar.
 
 ## Commands
 
-- `Open review launcher`
-- `Import review batch`
-- `Copy review format template`
-- `Parse review blocks in current note`
-- `Open review panel`
-- `Select next suggestion`
-- `Select previous suggestion`
-- `Apply selected suggestion`
-- `Apply selected suggestion and select next`
-- `Reject selected suggestion`
-- `Defer selected suggestion`
-- `Rewrite selected suggestion manually`
-- `Jump to selected target`
-- `Jump to selected anchor`
-- `Jump to selected source entry`
-- `Remove imported review blocks in this note`
-- `Clean up current review batch`
+- `Open review launcher` — opens the launcher modal to import a review batch or start pending-edits review.
+- `Open review panel` — opens the review side panel for the active note.
+- `Review pending edits in active book` — starts the pending-edits review flow across the active book.
 
-Editorialist does not ship default hotkeys. Users can assign their own shortcuts from Obsidian settings.
+Review actions (apply, reject, defer, rewrite, navigate) are performed from the review panel and toolbar UI rather than as separate commands. Editorialist does not ship default hotkeys. Users can assign their own shortcuts from Obsidian settings.
 
 ## Development
 

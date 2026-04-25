@@ -1,5 +1,12 @@
 // Canonical provider brand marks for contributor avatars.
-// The AnthropIc / Claude SVG is preserved here from the user-provided asset
+//
+// Hardcoded hex colors in this file are INTENTIONAL and MUST NOT be replaced
+// with Obsidian theme variables. These are trademarked brand logos
+// (OpenAI, Anthropic, Google Gemini, xAI Grok) that must render in their
+// official brand colors regardless of the user's theme. Using theme variables
+// here would distort the marks and could violate trademark usage guidelines.
+//
+// The Anthropic / Claude SVG is preserved here from the user-provided asset
 // so the exact logo remains reusable in future contributor surfaces.
 
 export type ContributorBrand = "openai" | "anthropic" | "gemini" | "grok";

@@ -2,8 +2,8 @@ import type EditorialistPlugin from "../main";
 
 export function registerCommands(plugin: EditorialistPlugin): void {
 	plugin.addCommand({
-		id: "editorialist",
-		name: "Begin",
+		id: "open-review-launcher",
+		name: "Open review launcher",
 		callback: () => {
 			void plugin.openEditorialistModal();
 		},

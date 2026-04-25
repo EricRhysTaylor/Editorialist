@@ -671,6 +671,13 @@ function teardownShiftTracking(): void {
 	updateModifierKeyState({ modPressed: false, shiftPressed: false });
 }
 
+// Safety net for plugin unload: force-teardown even if subscribers remain.
+// Normal teardown happens via refcount in subscribeToModifierKeys().
+export function forceTeardownToolbarSubscriptions(): void {
+	modifierSubscribers.clear();
+	teardownShiftTracking();
+}
+
 function updateModifierKeyState(nextValue: { modPressed: boolean; shiftPressed: boolean }): void {
 	if (shiftKeyPressed === nextValue.shiftPressed && modKeyPressed === nextValue.modPressed) {
 		return;

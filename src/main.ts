@@ -64,7 +64,7 @@ import { openContributorStrengthsModal } from "./ui/ContributorStrengthsModal";
 import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
 import { EditorialistSettingTab } from "./ui/EditorialistSettingTab";
 import { createReviewDecorationsExtension, syncReviewDecorations } from "./ui/Decorations";
-import { createReviewToolbarElement, type ToolbarState } from "./ui/Toolbar";
+import { createReviewToolbarElement, forceTeardownToolbarSubscriptions, type ToolbarState } from "./ui/Toolbar";
 
 interface ActiveNoteContext {
 	filePath: string;
@@ -231,7 +231,7 @@ export default class EditorialistPlugin extends Plugin {
 		this.registerEditorExtension(createReviewDecorationsExtension());
 		this.registerView(REVIEW_PANEL_VIEW_TYPE, (leaf) => new ReviewPanel(leaf, this));
 		this.addSettingTab(new EditorialistSettingTab(this.app, this));
-		this.addRibbonIcon("pen-tool", "Open Editorialist Review", () => {
+		this.addRibbonIcon("pen-tool", "Open review panel", () => {
 			void this.openReviewPanel();
 		});
 		registerCommands(this);
@@ -278,8 +278,10 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async onunload(): Promise<void> {
+		// Obsidian submission guideline: do NOT detach leaves of your own view type here —
+		// Obsidian restores workspace state on reload, and registerView() already handles cleanup.
 		this.destroyToolbarOverlay();
-		this.app.workspace.detachLeavesOfType(REVIEW_PANEL_VIEW_TYPE);
+		forceTeardownToolbarSubscriptions();
 	}
 
 	async parseCurrentNote(options?: { suppressNotice?: boolean }): Promise<void> {
@@ -481,6 +483,9 @@ export default class EditorialistPlugin extends Plugin {
 			`Pending edits: ${segmentCount} item${segmentCount === 1 ? "" : "s"} across ${result.session.scenes.length} scene${result.session.scenes.length === 1 ? "" : "s"}.`,
 		);
 
+		this.closeSettingsModal();
+		await this.openReviewPanel();
+
 		const firstSegment = result.session.scenes[0]?.segments[0] ?? null;
 		if (firstSegment) {
 			await this.openPendingEditSegment(firstSegment);
@@ -597,21 +602,17 @@ export default class EditorialistPlugin extends Plugin {
 		}
 
 		const activeFilePath = this.app.workspace.getActiveFile()?.path;
-		if (!activeFilePath) {
+		// If the user navigated to a file that is not part of the session, hide the toolbar.
+		// During cross-scene Next, the active file may briefly lag the selected segment — that's fine,
+		// as long as the active file is some scene in the session we keep showing the toolbar.
+		if (activeFilePath && !session.scenes.some((scene) => scene.scenePath === activeFilePath)) {
 			return null;
 		}
 
+		const selected = this.getSelectedPendingEditSegment();
 		const sceneForActive = session.scenes.find((scene) => scene.scenePath === activeFilePath);
-		if (!sceneForActive) {
-			return null;
-		}
-
-		const segment = this.getSelectedPendingEditSegment() ?? sceneForActive.segments[0] ?? null;
+		const segment = selected ?? sceneForActive?.segments[0] ?? session.scenes[0]?.segments[0] ?? null;
 		if (!segment) {
-			return null;
-		}
-
-		if (segment.scenePath !== activeFilePath) {
 			return null;
 		}
 
@@ -734,6 +735,15 @@ export default class EditorialistPlugin extends Plugin {
 
 		appWithSettings.setting?.open();
 		appWithSettings.setting?.openTabById?.(this.manifest.id);
+	}
+
+	private closeSettingsModal(): void {
+		const appWithSettings = this.app as App & {
+			setting?: {
+				close?: () => void;
+			};
+		};
+		appWithSettings.setting?.close?.();
 	}
 
 	async selectSuggestion(id: string): Promise<void> {
