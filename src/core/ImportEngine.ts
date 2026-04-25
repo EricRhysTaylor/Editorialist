@@ -68,8 +68,11 @@ export class ImportEngine {
 		const scopeFiles = await this.getActiveBookScopeFiles(options?.activeNotePath, markdownFiles);
 		const noteTextCache = new Map<string, string>();
 
+		const activeNotePath = options?.activeNotePath;
 		for (const suggestion of parsedDocument.suggestions) {
-			results.push(await this.inspectSuggestion(suggestion, markdownFiles, scopeFiles, noteTextCache));
+			results.push(
+				await this.inspectSuggestion(suggestion, markdownFiles, scopeFiles, noteTextCache, activeNotePath),
+			);
 		}
 
 		const groups = this.buildGroups(results);
@@ -112,12 +115,14 @@ export class ImportEngine {
 		markdownFiles: TFile[],
 		scopeFiles: TFile[],
 		noteTextCache: Map<string, string>,
+		activeNotePath?: string,
 	): Promise<ReviewImportSuggestionResult> {
 		const resolvedFileMatch = await this.resolveFileForSuggestion(
 			suggestion,
 			markdownFiles,
 			scopeFiles,
 			noteTextCache,
+			activeNotePath,
 		);
 
 		if (!resolvedFileMatch.file) {
@@ -152,6 +157,7 @@ export class ImportEngine {
 		markdownFiles: TFile[],
 		scopeFiles: TFile[],
 		noteTextCache: Map<string, string>,
+		activeNotePath?: string,
 	): Promise<ResolvedFileMatch> {
 		const routing = suggestion.routing;
 		const sceneId = routing?.sceneId?.trim();
@@ -228,6 +234,23 @@ export class ImportEngine {
 			};
 		}
 
+		// Fallback: use the active note when nothing else routes the suggestion.
+		// Common case: AI emits descriptive Targets for CONDENSE/CUT/MOVE that don't anchor in scene text,
+		// or hallucinated SceneIds. The user is reviewing the active scene — route the suggestion there
+		// so it surfaces in the embed and side panel as advisory rather than getting silently dropped.
+		const activeFallback = this.resolveActiveNoteFallback(activeNotePath, scopeFiles);
+		if (activeFallback) {
+			return {
+				file: activeFallback,
+				status: "resolved",
+				strategy: "fallback_active_note",
+				reason: this.combineRoutingReasons(
+					sceneIdFailureReason,
+					`Routed to the active note (${activeFallback.basename}) as a fallback; verify the suggestion manually.`,
+				),
+			};
+		}
+
 		if (sceneIdFailureReason) {
 			return {
 				status: "unresolved",
@@ -249,6 +272,24 @@ export class ImportEngine {
 					? "No SceneId, Path, Note, or safe inferred scene match could be resolved."
 					: "No SceneId, Path, or Note hint could be resolved, and no active-book scene scope was available for inferred matching.",
 		};
+	}
+
+	private resolveActiveNoteFallback(activeNotePath: string | undefined, scopeFiles: TFile[]): TFile | null {
+		if (!activeNotePath) {
+			return null;
+		}
+		const file = this.app.vault.getAbstractFileByPath(activeNotePath);
+		if (!(file instanceof TFile)) {
+			return null;
+		}
+		// Restrict to scene-class files inside the active book scope when scope is known.
+		if (scopeFiles.length > 0 && !scopeFiles.some((scope) => scope.path === file.path)) {
+			return null;
+		}
+		if (scopeFiles.length === 0 && !isSceneClassFile(this.app, file)) {
+			return null;
+		}
+		return file;
 	}
 
 	private combineRoutingReasons(primary: string | null | undefined, fallback: string): string {

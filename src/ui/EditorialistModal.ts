@@ -836,6 +836,8 @@ export class EditorialistModal extends Modal {
 				return "Exact text";
 			case "inferred_normalized":
 				return "Normalized text";
+			case "fallback_active_note":
+				return "Active note (fallback)";
 			case "unresolved":
 				return "Needs attention";
 		}

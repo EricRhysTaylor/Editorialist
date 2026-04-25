@@ -6,10 +6,12 @@ import {
 } from "./core/PendingEditsCollector";
 import {
 	drainSegmentFromFrontmatter,
+	extractInquiryBriefLinkTarget,
 	formatPendingEditForDisplay,
 	parsePendingEditsField,
 	readPendingEditsField,
 } from "./core/PendingEditsSegments";
+import { InquiryBriefResolver, type InquiryBriefContext } from "./core/InquiryBriefContext";
 import type {
 	PendingEditSegment,
 	PendingEditsSession,
@@ -221,6 +223,9 @@ export default class EditorialistPlugin extends Plugin {
 	private pendingEditsSummary: PendingEditsSummary | null = null;
 	private pendingEditsSummaryInflight: Promise<void> | null = null;
 	private pendingEditsSummaryLastRefreshAt = 0;
+	private inquiryBriefResolver: InquiryBriefResolver | null = null;
+	private inquiryBriefContextBySegmentId = new Map<string, InquiryBriefContext | null>();
+	private inquiryBriefRequestsInflight = new Set<string>();
 	private readonly toolbarOverlayScrollHandler = (): void => {
 		this.scheduleToolbarOverlayPositionUpdate();
 	};
@@ -230,6 +235,7 @@ export default class EditorialistPlugin extends Plugin {
 		await this.persistContributorProfilesIfNeeded();
 		await this.registry.refreshActiveBookScope();
 		this.importEngine = new ImportEngine(this.app, this.parser, this.matchEngine);
+		this.inquiryBriefResolver = new InquiryBriefResolver(this.app);
 		this.registerEditorExtension(createReviewDecorationsExtension());
 		this.registerView(REVIEW_PANEL_VIEW_TYPE, (leaf) => new ReviewPanel(leaf, this));
 		this.addSettingTab(new EditorialistSettingTab(this.app, this));
@@ -633,6 +639,7 @@ export default class EditorialistPlugin extends Plugin {
 				: `Item ${currentIndex + 1} of ${ordered.length}`;
 		const segmentKindLabel = segment.kind === "human" ? "HUMAN NOTE" : "INQUIRY ITEM";
 		const display = formatPendingEditForDisplay(segment);
+		const briefContext = this.getOrFetchInquiryBriefContext(segment);
 
 		return {
 			mode: "pending_edits_review",
@@ -642,10 +649,49 @@ export default class EditorialistPlugin extends Plugin {
 			segmentIndexLabel,
 			segmentMutedPrefix: display.mutedPrefix,
 			segmentActionText: display.actionText,
+			briefContext: briefContext
+				? {
+					noteTitle: briefContext.noteTitle,
+					notePath: briefContext.notePath,
+					summary: briefContext.summary,
+				}
+				: undefined,
 			canComplete: true,
 			canNext: currentIndex !== -1 && currentIndex < ordered.length - 1,
 			canPrevious: currentIndex > 0,
 		};
+	}
+
+	private getOrFetchInquiryBriefContext(segment: PendingEditSegment): InquiryBriefContext | null {
+		if (segment.kind !== "inquiry") {
+			return null;
+		}
+		const linkTarget = extractInquiryBriefLinkTarget(segment);
+		if (!linkTarget) {
+			return null;
+		}
+		if (this.inquiryBriefContextBySegmentId.has(segment.id)) {
+			return this.inquiryBriefContextBySegmentId.get(segment.id) ?? null;
+		}
+		if (!this.inquiryBriefRequestsInflight.has(segment.id) && this.inquiryBriefResolver) {
+			this.inquiryBriefRequestsInflight.add(segment.id);
+			void this.inquiryBriefResolver
+				.resolve(linkTarget, segment.scenePath)
+				.then((context) => {
+					this.inquiryBriefContextBySegmentId.set(segment.id, context);
+					this.inquiryBriefRequestsInflight.delete(segment.id);
+					this.syncActiveEditorDecorations();
+				})
+				.catch(() => {
+					this.inquiryBriefContextBySegmentId.set(segment.id, null);
+					this.inquiryBriefRequestsInflight.delete(segment.id);
+				});
+		}
+		return null;
+	}
+
+	openInquiryBriefNote(notePath: string): void {
+		void this.app.workspace.openLinkText(notePath, "", false);
 	}
 
 	private async advancePendingEditSegmentBy(

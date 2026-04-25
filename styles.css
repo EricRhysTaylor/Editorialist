@@ -62,6 +62,64 @@
 	white-space: normal;
 }
 
+.editorialist-toolbar__pending-brief {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	padding: 0.5rem 0.65rem;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--text-accent) 8%, var(--background-primary));
+	border: 1px solid color-mix(in srgb, var(--text-accent) 24%, var(--background-modifier-border));
+	font-family: var(--font-text);
+	text-transform: none;
+	letter-spacing: normal;
+	max-height: 9rem;
+	overflow-y: auto;
+}
+
+.editorialist-toolbar__pending-brief-header {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	font-size: var(--font-ui-smaller);
+	color: color-mix(in srgb, var(--text-accent) 80%, var(--text-normal));
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.editorialist-toolbar__pending-brief-icon {
+	display: inline-flex;
+	align-items: center;
+}
+
+.editorialist-toolbar__pending-brief-icon svg {
+	width: 0.85em;
+	height: 0.85em;
+}
+
+.editorialist-toolbar__pending-brief-link {
+	color: inherit;
+	text-decoration-line: underline;
+	text-decoration-style: dashed;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.14em;
+	cursor: pointer;
+}
+
+.editorialist-toolbar__pending-brief-link:hover,
+.editorialist-toolbar__pending-brief-link:focus-visible {
+	text-decoration-style: solid;
+}
+
+.editorialist-toolbar__pending-brief-summary {
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
+	color: var(--text-normal);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
 .editorialist-toolbar__pending-body {
 	font-family: var(--font-text);
 	font-size: var(--font-ui-medium);

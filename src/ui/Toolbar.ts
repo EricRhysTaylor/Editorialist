@@ -86,6 +86,12 @@ export interface CompletedReviewToolbarState {
 	title: string;
 }
 
+export interface PendingEditsBriefContextState {
+	noteTitle: string;
+	notePath: string;
+	summary: string;
+}
+
 export interface PendingEditsReviewToolbarState {
 	mode: "pending_edits_review";
 	title: string;
@@ -94,6 +100,7 @@ export interface PendingEditsReviewToolbarState {
 	segmentIndexLabel: string;
 	segmentMutedPrefix?: string;
 	segmentActionText: string;
+	briefContext?: PendingEditsBriefContextState;
 	canComplete: boolean;
 	canNext: boolean;
 	canPrevious: boolean;
@@ -260,6 +267,33 @@ export function createReviewToolbarElement(
 		renderMetaSegment(meta, state.segmentKindLabel);
 		renderMetaSeparator(meta);
 		renderMetaSegment(meta, state.segmentIndexLabel);
+
+		if (state.briefContext) {
+			const briefBlock = toolbar.createDiv({ cls: "editorialist-toolbar__pending-brief" });
+			markAsNonEditorSurface(briefBlock);
+			const briefHeader = briefBlock.createDiv({ cls: "editorialist-toolbar__pending-brief-header" });
+			markAsNonEditorSurface(briefHeader);
+			const briefIcon = briefHeader.createSpan({ cls: "editorialist-toolbar__pending-brief-icon" });
+			setIcon(briefIcon, "book-open");
+			const briefLink = briefHeader.createEl("a", {
+				cls: "editorialist-toolbar__pending-brief-link",
+				attr: {
+					href: "#",
+					title: `Open brief: ${state.briefContext.noteTitle}`,
+				},
+				text: state.briefContext.noteTitle,
+			});
+			markAsNonEditorSurface(briefLink);
+			const targetPath = state.briefContext.notePath;
+			bindImmediateAction(briefLink, () => {
+				plugin.openInquiryBriefNote(targetPath);
+			});
+			const briefSummary = briefBlock.createDiv({
+				cls: "editorialist-toolbar__pending-brief-summary",
+				text: state.briefContext.summary,
+			});
+			markAsNonEditorSurface(briefSummary);
+		}
 
 		const body = toolbar.createDiv({ cls: "editorialist-toolbar__pending-body" });
 		markAsNonEditorSurface(body);

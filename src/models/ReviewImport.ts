@@ -8,6 +8,7 @@ export type ReviewRouteStrategy =
 	| "declared_scene"
 	| "inferred_exact"
 	| "inferred_normalized"
+	| "fallback_active_note"
 	| "unresolved";
 
 export type ReviewVerificationStatus =

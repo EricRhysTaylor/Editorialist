@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
 	computeFieldAfterDrain,
+	extractInquiryBriefLinkTarget,
 	formatPendingEditForDisplay,
 	isInquiryLine,
 	parsePendingEditsField,
 	hasPendingEdits,
 	buildSceneItems,
 } from "./PendingEditsSegments";
+import { extractFirstParagraph } from "./InquiryBriefContext";
 
 describe("isInquiryLine", () => {
 	it("detects the Inquiry Brief token", () => {
@@ -192,6 +194,66 @@ describe("formatPendingEditForDisplay", () => {
 		const display = formatPendingEditForDisplay(segment);
 		expect(display.mutedPrefix).toBeUndefined();
 		expect(display.actionText).toBe(field);
+	});
+});
+
+describe("extractInquiryBriefLinkTarget", () => {
+	const path = "Book/Scene-01.md";
+	const title = "Scene 01";
+	const order = 1;
+
+	it("returns the wiki-link target for an Inquiry line", () => {
+		const field = "[[Inquiry Brief — Pay4: Premature Resolution Apr 15 2026 @ 3.36pm|Briefing]] — Revise the opening.";
+		const [segment] = parsePendingEditsField(path, title, order, field);
+		expect(extractInquiryBriefLinkTarget(segment)).toBe("Inquiry Brief — Pay4: Premature Resolution Apr 15 2026 @ 3.36pm");
+	});
+
+	it("returns null for a human segment", () => {
+		const [segment] = parsePendingEditsField(path, title, order, "Tighten dialogue.");
+		expect(extractInquiryBriefLinkTarget(segment)).toBeNull();
+	});
+
+	it("returns null for a malformed Inquiry line missing the wiki-link", () => {
+		const segments = parsePendingEditsField(path, title, order, "[[Inquiry Brief — broken without close");
+		expect(extractInquiryBriefLinkTarget(segments[0])).toBeNull();
+	});
+});
+
+describe("extractFirstParagraph", () => {
+	it("returns the first non-heading paragraph", () => {
+		const note = [
+			"# Inquiry Brief: Pay4",
+			"",
+			"This brief surfaces a structural risk in the post-crisis arc — Trisan's voice loses momentum.",
+			"",
+			"More detail follows here that should be ignored.",
+		].join("\n");
+		const result = extractFirstParagraph(note);
+		expect(result).toContain("structural risk");
+		expect(result).not.toContain("More detail");
+	});
+
+	it("strips frontmatter before reading the body", () => {
+		const note = [
+			"---",
+			"reviewer: ai",
+			"---",
+			"",
+			"The actual brief copy.",
+		].join("\n");
+		expect(extractFirstParagraph(note)).toBe("The actual brief copy.");
+	});
+
+	it("returns null when only headings or empty content present", () => {
+		const note = "# H1\n\n## H2\n\n";
+		expect(extractFirstParagraph(note)).toBeNull();
+	});
+
+	it("truncates very long paragraphs with an ellipsis", () => {
+		const long = "X ".repeat(400).trim();
+		const result = extractFirstParagraph(long);
+		expect(result).toBeTruthy();
+		expect(result?.endsWith("…")).toBe(true);
 	});
 });
 

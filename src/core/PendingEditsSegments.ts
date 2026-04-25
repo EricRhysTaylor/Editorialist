@@ -18,6 +18,23 @@ export interface PendingEditDisplay {
 }
 
 /**
+ * Extract the wiki-link target (note name) from an Inquiry-line segment.
+ * Returns the bare note name (e.g. `Inquiry Brief — Pay4: Premature Resolution Apr 15 2026 @ 3.36pm`)
+ * or null when the segment is not an Inquiry line or the link is malformed.
+ */
+export function extractInquiryBriefLinkTarget(segment: PendingEditSegment): string | null {
+	if (segment.kind !== "inquiry") {
+		return null;
+	}
+	const match = segment.text.match(/\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/);
+	if (!match) {
+		return null;
+	}
+	const target = match[1]?.trim();
+	return target && target.length > 0 ? target : null;
+}
+
+/**
  * Split an Inquiry-line segment for display so the wiki-link prefix renders muted
  * and the author's eye locks onto the actual revision action.
  *
