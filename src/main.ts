@@ -550,7 +550,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async completeSelectedPendingEditSegment(): Promise<void> {
-		const segment = this.getSelectedPendingEditSegment();
+		const segment = this.resolveActivePendingEditSegment();
 		if (!segment) {
 			return;
 		}
@@ -558,7 +558,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async skipSelectedPendingEditSegment(): Promise<void> {
-		const segment = this.getSelectedPendingEditSegment();
+		const segment = this.resolveActivePendingEditSegment();
 		if (!segment) {
 			return;
 		}
@@ -566,7 +566,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async selectNextPendingEditSegment(): Promise<void> {
-		const segment = this.getSelectedPendingEditSegment();
+		const segment = this.resolveActivePendingEditSegment();
 		if (!segment) {
 			return;
 		}
@@ -574,11 +574,32 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async selectPreviousPendingEditSegment(): Promise<void> {
-		const segment = this.getSelectedPendingEditSegment();
+		const segment = this.resolveActivePendingEditSegment();
 		if (!segment) {
 			return;
 		}
 		await this.advancePendingEditSegmentBy(segment, "previous");
+	}
+
+	/**
+	 * Source-of-truth resolver shared by the toolbar render and the action handlers.
+	 * Returns whichever segment the toolbar is *currently displaying*, so Next/Prev/Complete
+	 * always operate on what the user sees — even if `selectedSegmentId` is null/stale.
+	 */
+	private resolveActivePendingEditSegment(): PendingEditSegment | null {
+		const session = this.pendingEditsSession;
+		if (!session || session.scenes.length === 0) {
+			return null;
+		}
+		const explicit = this.getSelectedPendingEditSegment();
+		if (explicit) {
+			return explicit;
+		}
+		const activeFilePath = this.app.workspace.getActiveFile()?.path;
+		const sceneForActive = activeFilePath
+			? session.scenes.find((scene) => scene.scenePath === activeFilePath)
+			: undefined;
+		return sceneForActive?.segments[0] ?? session.scenes[0]?.segments[0] ?? null;
 	}
 
 	async closePendingEditsReview(): Promise<void> {
@@ -624,9 +645,7 @@ export default class EditorialistPlugin extends Plugin {
 			return null;
 		}
 
-		const selected = this.getSelectedPendingEditSegment();
-		const sceneForActive = session.scenes.find((scene) => scene.scenePath === activeFilePath);
-		const segment = selected ?? sceneForActive?.segments[0] ?? session.scenes[0]?.segments[0] ?? null;
+		const segment = this.resolveActivePendingEditSegment();
 		if (!segment) {
 			return null;
 		}

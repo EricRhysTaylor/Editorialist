@@ -636,8 +636,9 @@
 }
 
 .editorialist-panel__launch-target {
-	display: block;
-	gap: 0;
+	display: flex;
+	align-items: baseline;
+	gap: 0.4rem;
 	margin-top: 0;
 	font-size: var(--font-ui-small);
 }
@@ -649,11 +650,18 @@
 }
 
 .editorialist-panel__launch-target-prefix {
+	flex: 0 0 auto;
+	white-space: nowrap;
 	color: var(--text-muted);
 }
 
 .editorialist-panel__launch-target-prefix--primary {
 	color: color-mix(in srgb, var(--color-green) 56%, var(--text-normal));
+}
+
+.editorialist-panel__launch-target-link {
+	flex: 1 1 auto;
+	min-width: 0;
 }
 
 .editorialist-panel__launch-target-text {
