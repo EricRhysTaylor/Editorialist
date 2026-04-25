@@ -1,40 +1,41 @@
-# Editorialist
+<!-- Logo placeholder — replace src with the Editorialist logo once supplied. -->
+<p align="center">
+  <img src="https://raw.githubusercontent.com/EricRhysTaylor/Editorialist/master/logo.png" alt="Editorialist Logo" width="10%" style="border-radius: 0;">
+</p>
+<p align="center" style="font-family: sans-serif; font-weight: 100; font-size: 14px; margin-top: 12px; margin-bottom: 0; letter-spacing: 8px;">
+  Editorialist
+</p>
+<p align="center" style="font-family: sans-serif; font-size: 14px; margin-bottom: 10px;">
+  by Eric Rhys Taylor
+</p>
 
-Editorialist is a local-first editorial review workspace for Obsidian. It imports structured revision notes into the manuscript you are already editing, matches suggestions conservatively against note content, and keeps every manuscript change explicit.
 
-## What the plugin does
+<p align="center">
+  <a href="https://github.com/EricRhysTaylor/Editorialist/stargazers" target="_blank" rel="noopener"><img src="https://img.shields.io/github/stars/EricRhysTaylor/Editorialist?colorA=363a4f&colorB=e0ac00&style=for-the-badge" alt="GitHub star count"></a>
+  <a href="https://obsidian.md/plugins?id=editorialist" target="_blank" rel="noopener"><img src="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/community-plugin-stats.json&query=$.editorialist.downloads&label=Downloads&style=for-the-badge&colorA=363a4f&colorB=d53984" alt="Plugin Downloads"/></a>
+  <a href="https://github.com/EricRhysTaylor/Editorialist/blob/master/LICENSE" target="_blank" rel="noopener"><img src="https://img.shields.io/static/v1.svg?style=for-the-badge&label=LICENSE&message=NON-COMMERCIAL%20SOFTWARE%20LICENSE&colorA=363a4f&colorB=b7bdf8" alt="LICENSE — NON-COMMERCIAL SOFTWARE LICENSE"/></a>
+  <br/>
+  <a href="https://github.com/EricRhysTaylor/Editorialist/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement" target="_blank" rel="noopener"><img src="https://img.shields.io/github/issues/EricRhysTaylor/Editorialist/enhancement?colorA=363a4f&colorB=00bfa5&style=for-the-badge&label=enhancements" alt="Open enhancements on GitHub"></a>
+  <a href="https://github.com/EricRhysTaylor/Editorialist/issues?q=is%3Aclosed+label%3Aenhancement" target="_blank" rel="noopener"><img src="https://img.shields.io/github/issues-closed/EricRhysTaylor/Editorialist/enhancement?colorA=363a4f&colorB=4a90e2&style=for-the-badge&label=closed%20enhancements" alt="Closed enhancements on GitHub"></a>
+  <a href="https://github.com/EricRhysTaylor/Editorialist/issues?q=is%3Aissue+is%3Aopen+label%3Abug" target="_blank" rel="noopener"><img src="https://img.shields.io/github/issues/EricRhysTaylor/Editorialist/bug?colorA=363a4f&colorB=e93147&style=for-the-badge&label=bugs" alt="Open bugs on GitHub"></a>
+</p>
 
-- Imports formatted review batches into one or more notes.
-- Shows pending suggestions in a dedicated review panel.
-- Lets you apply, reject, defer, or manually rewrite suggestions one by one.
-- Tracks contributor history and review outcomes locally inside plugin data.
-- Optionally integrates with Radial Timeline for scene-aware inventory and routing.
+---
+
+## What it does
+
+Editorialist is a local-first editorial review workspace for Obsidian. It imports structured revision notes — from human editors, beta readers, or AI — into the manuscript you are already editing, matches suggestions conservatively against note content, and keeps every manuscript change explicit and author-controlled.
+
+<!-- Screenshot placeholder — drop screenshots into /docs/images and reference them here. -->
+
+---
 
 ## How it behaves
 
-- Editorialist does not make hidden network requests.
-- Editorialist does not require an account, payment, cloud service, or telemetry.
-- Editorialist only changes note text when you explicitly import review blocks, apply a suggestion, clean imported review blocks, or choose a maintenance action that modifies frontmatter.
-- Bulk maintenance actions now require confirmation before they change notes.
-- Backup export writes a JSON file to the vault root containing Editorialist metadata only. It does not export manuscript text.
-
-## Current note and frontmatter mutations
-
-Editorialist can modify vault content in these explicit cases:
-
-- Importing a review batch appends an Editorialist review block to the destination note.
-- Applying a suggestion edits the active note in the editor.
-- Cleaning review blocks removes only Editorialist-imported fenced review blocks.
-- Injecting stable note IDs adds an `editorial_id` field to tracked notes that do not already have a stable identifier.
-- Recording scene progress may update `editorial.revision` frontmatter for tracked Radial Timeline scenes.
-
-## Getting started
-
-1. Open the command palette and run `Editorialist: Open review launcher`.
-2. Paste a formatted review batch into the launcher.
-3. Preview the destination notes.
-4. Import the batch and review suggestions from the side panel.
-5. Apply, reject, defer, or rewrite suggestions explicitly from the panel toolbar.
+- No hidden network requests, no account, no telemetry.
+- Notes are only modified when you explicitly import a batch, apply a suggestion, clean review blocks, or run a maintenance action.
+- Bulk maintenance actions require confirmation.
+- Backup export writes contributor + revision metadata only — never manuscript text.
 
 ## Commands
 
@@ -42,40 +43,12 @@ Editorialist can modify vault content in these explicit cases:
 - `Open review panel` — opens the review side panel for the active note.
 - `Review pending edits in active book` — starts the pending-edits review flow across the active book.
 
-Review actions (apply, reject, defer, rewrite, navigate) are performed from the review panel and toolbar UI rather than as separate commands. Editorialist does not ship default hotkeys. Users can assign their own shortcuts from Obsidian settings.
-
-## Development
-
-```bash
-npm install
-npm run check
-npm run build
-```
-
-`npm run build` produces the release bundle locally without copying files into a vault or running git backup automation.
-
-If you want to copy the plugin into a dev vault after building:
-
-```bash
-export EDITORIALIST_DEV_PLUGIN_DIR="/absolute/path/to/.obsidian/plugins/editorialist"
-npm run build:dev
-```
-
-## Release checklist
-
-For an Obsidian community-plugin release:
-
-1. Update `manifest.json` version and verify `versions.json` if `minAppVersion` changes.
-2. Run `npm run release:check`.
-3. Create a GitHub release whose tag matches `manifest.json`.
-4. Attach `manifest.json`, `main.js`, and `styles.css` to the release.
-
-`manifest.json` remains at the repository root as required for submission.
-
-## Attribution
-
-No vendored third-party source files were found in this repository during the current release-readiness pass. Dependency licenses are recorded through `package-lock.json`.
+Editorialist ships no default hotkeys. Assign your own from Obsidian's hotkey settings.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Source-Available, Non-Commercial Software License. Free for personal,
+educational, and professional creative work — including manuscripts and other
+commercial creative output produced with the plugin. Commercial use of the
+software itself, redistribution, and forks for public distribution require
+written permission. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for full terms.

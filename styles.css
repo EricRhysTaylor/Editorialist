@@ -3711,3 +3711,94 @@
 	border-bottom: 2px solid color-mix(in srgb, var(--color-cyan) 44%, transparent);
 	box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-cyan) 50%, transparent);
 }
+
+/* About footer (rendered at the bottom of the Core settings tab). */
+.editorialist-settings__about-footer {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.6rem;
+	margin-top: 1.25rem;
+	padding: 1.5rem var(--editorialist-settings-panel-pad);
+	text-align: center;
+	background: color-mix(in srgb, var(--background-secondary) 50%, transparent);
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 60%, transparent);
+}
+
+.editorialist-settings__about-footer-heading {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.15rem;
+}
+
+.editorialist-settings__about-footer-title {
+	font-family: var(--font-interface);
+	font-weight: 200;
+	font-size: 1.05rem;
+	letter-spacing: 0.5em;
+	text-transform: uppercase;
+	color: var(--text-normal);
+	padding-left: 0.5em; /* offset trailing letter-spacing so the word looks centered */
+}
+
+.editorialist-settings__about-footer-author {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	font-style: italic;
+}
+
+.editorialist-settings__about-footer-description {
+	max-width: 56ch;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--text-muted);
+}
+
+.editorialist-settings__about-footer-links {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.4rem 0.75rem;
+	margin-top: 0.25rem;
+}
+
+.editorialist-settings__about-footer-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	padding: 0.25rem 0.55rem;
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	color: var(--text-muted);
+	text-decoration: none;
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 60%, transparent);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--background-primary) 60%, transparent);
+}
+
+.editorialist-settings__about-footer-link:hover {
+	color: var(--text-normal);
+	background: color-mix(in srgb, var(--background-primary) 90%, transparent);
+	border-color: color-mix(in srgb, var(--interactive-accent) 40%, var(--background-modifier-border));
+}
+
+.editorialist-settings__about-footer-link-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.editorialist-settings__about-footer-link-icon svg {
+	width: 13px;
+	height: 13px;
+	stroke-width: 1.9;
+}
+
+.editorialist-settings__about-footer-license {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	margin-top: 0.25rem;
+}

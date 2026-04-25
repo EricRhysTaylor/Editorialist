@@ -1,7 +1,8 @@
+import { normalizeReviewPaste } from "./PasteNormalizer";
 import { getLinesWithOffsets } from "./TextOffsets";
 
 export const REVIEW_BLOCK_FENCE = "editorialist-review";
-const REVIEW_SECTION_PATTERN = /^===\s*(EDIT|MOVE|CUT|CONDENSE)\s*===\s*$/im;
+const REVIEW_SECTION_PATTERN = /^\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\[)\s*(EDIT|MOVE|CUT|CONDENSE)\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\])?\s*$/im;
 const REVIEW_METADATA_PATTERN =
 	/^(BatchId|ImportedBy|Template|TemplateYear|SupportedOperations|SceneIdSource|Reviewer|ReviewerType|Provider|Model)\s*:/im;
 const GENERAL_FIELD_PATTERN = /^([A-Za-z][A-Za-z ]+):\s*(.*)$/;
@@ -61,21 +62,26 @@ export function noteContainsReviewBlock(noteText: string): boolean {
 }
 
 export function normalizeImportedReviewText(rawText: string): string | null {
-	const extractedBlocks = extractReviewBlocks(rawText);
-	if (extractedBlocks.length === 0) {
-		return null;
+	const candidates = [rawText, normalizeReviewPaste(rawText)];
+	for (const candidate of candidates) {
+		if (!candidate || !candidate.trim()) {
+			continue;
+		}
+
+		const extractedBlocks = extractReviewBlocks(candidate);
+		const firstBlock = extractedBlocks[0];
+		if (!firstBlock) {
+			continue;
+		}
+
+		if (firstBlock.source === "fenced") {
+			return candidate.trim();
+		}
+
+		return createReviewBlock(firstBlock.bodyText);
 	}
 
-	const [firstBlock] = extractedBlocks;
-	if (!firstBlock) {
-		return null;
-	}
-
-	if (firstBlock.source === "fenced") {
-		return rawText.trim();
-	}
-
-	return createReviewBlock(firstBlock.bodyText);
+	return null;
 }
 
 export function getReviewBlockFenceLabel(): string {

@@ -22,6 +22,9 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private static readonly RADIAL_TIMELINE_INSTALL_URL = "obsidian://show-plugin?id=radial-timeline";
 	private static readonly RADIAL_TIMELINE_REPOSITORY_URL = "https://github.com/EricRhysTaylor/Obsidian-Manuscript-Timeline";
 	private static readonly RADIAL_TIMELINE_WIKI_URL = "https://github.com/EricRhysTaylor/Obsidian-Manuscript-Timeline/wiki";
+	private static readonly REPOSITORY_URL = "https://github.com/EricRhysTaylor/Editorialist";
+	private static readonly RELEASES_URL = "https://github.com/EricRhysTaylor/Editorialist/releases";
+	private static readonly ISSUES_URL = "https://github.com/EricRhysTaylor/Editorialist/issues";
 	private activeBookOnly = true;
 	private activeTab: "core" | "reviewer" = "core";
 	private displayRunId = 0;
@@ -94,6 +97,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		this.renderActivitySection(coreContent, summary);
 		this.renderTrackingSection(coreContent, activeBook);
 		this.renderMaintenanceSection(coreContent, activeBook.label);
+		this.renderAboutFooter(coreContent);
 
 		this.renderContributorsHero(reviewerContent);
 		this.renderContributorsSection(reviewerContent);
@@ -304,6 +308,56 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		card.createDiv({
 			cls: "editorialist-settings__rt-card-hint",
 			text: 'Find it in Community Plugins -> search "Radial Timeline"',
+		});
+	}
+
+	private renderAboutFooter(parent: HTMLElement): void {
+		const footer = parent.createDiv({
+			cls: "editorialist-settings__about-footer editorialist-settings__panel",
+		});
+
+		const heading = footer.createDiv({ cls: "editorialist-settings__about-footer-heading" });
+		heading.createDiv({
+			cls: "editorialist-settings__about-footer-title",
+			text: "Editorialist",
+		});
+		heading.createDiv({
+			cls: "editorialist-settings__about-footer-author",
+			text: "by Eric Rhys Taylor",
+		});
+
+		footer.createDiv({
+			cls: "editorialist-settings__about-footer-description",
+			text: "A local-first editorial review workspace for Obsidian. Imports structured revision notes from human editors, beta readers, or AI into the manuscript you are already editing, matches suggestions conservatively, and keeps every change explicit and author-controlled.",
+		});
+
+		const links = footer.createDiv({ cls: "editorialist-settings__about-footer-links" });
+		this.createAboutFooterLink(links, "github", "GitHub", EditorialistSettingTab.REPOSITORY_URL);
+		this.createAboutFooterLink(links, "tag", "Releases", EditorialistSettingTab.RELEASES_URL);
+		this.createAboutFooterLink(links, "bug", "Issues", EditorialistSettingTab.ISSUES_URL);
+		this.createAboutFooterLink(links, "book-open", "Docs", EditorialistSettingTab.SETTINGS_DOCS_URL);
+
+		footer.createDiv({
+			cls: "editorialist-settings__about-footer-license",
+			text: "Non-Commercial Software License",
+		});
+	}
+
+	private createAboutFooterLink(parent: HTMLElement, icon: string, label: string, href: string): void {
+		const link = parent.createEl("a", {
+			href,
+			cls: "editorialist-settings__about-footer-link",
+			attr: {
+				target: "_blank",
+				rel: "noopener",
+				"aria-label": `${label} — opens in browser`,
+			},
+		});
+		const iconEl = link.createSpan({ cls: "editorialist-settings__about-footer-link-icon" });
+		setIcon(iconEl, icon);
+		link.createSpan({
+			cls: "editorialist-settings__about-footer-link-label",
+			text: label,
 		});
 	}
 

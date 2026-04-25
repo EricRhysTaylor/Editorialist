@@ -16,7 +16,7 @@ import type { ReviewerDirectory } from "../state/ReviewerDirectory";
 import { extractReviewBlocks } from "./ReviewBlockFormat";
 import { getLinesWithOffsets, type LineWithOffsets } from "./TextOffsets";
 
-const SECTION_HEADER_PATTERN = /^===\s*(EDIT|MOVE|CUT|CONDENSE)\s*===\s*$/i;
+const SECTION_HEADER_PATTERN = /^\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\[)\s*(EDIT|MOVE|CUT|CONDENSE)\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\])?\s*$/i;
 const FIELD_PATTERN = /^([A-Za-z][A-Za-z ]+):\s*(.*)$/;
 
 interface SectionBuffer {
