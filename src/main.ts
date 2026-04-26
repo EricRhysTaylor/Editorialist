@@ -523,7 +523,10 @@ export default class EditorialistPlugin extends Plugin {
 
 		const activeFilePath = this.app.workspace.getActiveFile()?.path;
 		if (activeFilePath !== segment.scenePath) {
-			await this.app.workspace.openLinkText(segment.scenePath, "", false);
+			// Open the resolved TFile directly. openLinkText struggles when a full vault
+			// path is passed as linktext; we already have the file, just open it.
+			const leaf = this.app.workspace.getLeaf(false);
+			await leaf.openFile(file); // SAFE: openFile is required here — we hold a resolved TFile, openLinkText would re-resolve and can fail on path-shaped link text.
 		}
 		this.syncActiveEditorDecorations();
 	}
