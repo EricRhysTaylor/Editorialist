@@ -216,14 +216,26 @@ export async function clearPendingEditsField(app: App, file: TFile): Promise<voi
 export function buildSceneItems(
 	sceneInputs: Array<{ path: string; title: string; order: number; rawField: string }>,
 ): PendingEditsSceneItem[] {
-	return sceneInputs
-		.map((input) => ({
+	// Deduplicate by scenePath. Upstream sources (e.g. radial-timeline's getSceneData)
+	// can occasionally emit the same scene more than once; without this guard the queue
+	// would contain duplicate segment IDs and Next would appear stuck because findIndex
+	// always returns the first match.
+	const byPath = new Map<string, PendingEditsSceneItem>();
+	for (const input of sceneInputs) {
+		if (byPath.has(input.path)) {
+			continue;
+		}
+		const segments = parsePendingEditsField(input.path, input.title, input.order, input.rawField);
+		if (segments.length === 0) {
+			continue;
+		}
+		byPath.set(input.path, {
 			scenePath: input.path,
 			sceneTitle: input.title,
 			sceneOrder: input.order,
 			rawField: input.rawField,
-			segments: parsePendingEditsField(input.path, input.title, input.order, input.rawField),
-		}))
-		.filter((item) => item.segments.length > 0)
-		.sort((a, b) => a.sceneOrder - b.sceneOrder);
+			segments,
+		});
+	}
+	return Array.from(byPath.values()).sort((a, b) => a.sceneOrder - b.sceneOrder);
 }

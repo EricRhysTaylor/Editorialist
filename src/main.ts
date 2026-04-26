@@ -523,10 +523,16 @@ export default class EditorialistPlugin extends Plugin {
 
 		const activeFilePath = this.app.workspace.getActiveFile()?.path;
 		if (activeFilePath !== segment.scenePath) {
-			// Open the resolved TFile directly. openLinkText struggles when a full vault
-			// path is passed as linktext; we already have the file, just open it.
-			const leaf = this.app.workspace.getLeaf(false);
-			await leaf.openFile(file); // SAFE: openFile is required here — we hold a resolved TFile, openLinkText would re-resolve and can fail on path-shaped link text.
+			try {
+				// Use a main-area leaf (not the side panel that getLeaf(false) can return after
+				// the side-panel reveal) and explicitly activate it so getActiveViewOfType(MarkdownView)
+				// returns the new view in syncActiveEditorDecorations.
+				const leaf = this.app.workspace.getMostRecentLeaf() ?? this.app.workspace.getLeaf(false);
+				await leaf.openFile(file, { active: true }); // SAFE: we hold a resolved TFile; activate so the markdown view becomes the active view of the workspace.
+			} catch (error) {
+				new Notice(`Couldn't open ${file.basename}: ${error instanceof Error ? error.message : "unknown error"}`);
+				return;
+			}
 		}
 		this.syncActiveEditorDecorations();
 	}

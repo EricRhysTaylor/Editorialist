@@ -266,4 +266,18 @@ describe("buildSceneItems", () => {
 		]);
 		expect(items.map((item) => item.scenePath)).toEqual(["b", "c"]);
 	});
+
+	it("deduplicates scenes by path so the queue can't contain repeated segment IDs", () => {
+		// Upstream getSceneData can occasionally emit the same scene more than once.
+		// Without dedup, ordered.findIndex would always match the first occurrence and
+		// Next would appear stuck because every advance lands on a duplicate slot.
+		const items = buildSceneItems([
+			{ path: "Book/Scene 6.md", title: "6 Trisan's Therapist", order: 6, rawField: "[[Inquiry Brief — abc|Briefing]] — first" },
+			{ path: "Book/Scene 6.md", title: "6 Trisan's Therapist", order: 6, rawField: "[[Inquiry Brief — abc|Briefing]] — first" },
+			{ path: "Book/Scene 7.md", title: "7 Next Scene", order: 7, rawField: "[[Inquiry Brief — xyz|Briefing]] — second" },
+		]);
+		expect(items).toHaveLength(2);
+		const allIds = items.flatMap((item) => item.segments.map((s) => s.id));
+		expect(new Set(allIds).size).toBe(allIds.length);
+	});
 });
