@@ -1,6 +1,6 @@
 import { REVIEW_BLOCK_FENCE } from "./ReviewBlockFormat";
 
-const OPERATION_KEYWORDS = ["EDIT", "MOVE", "CUT", "CONDENSE"] as const;
+const OPERATION_KEYWORDS = ["EDIT", "MOVE", "CUT", "CONDENSE", "MEMO"] as const;
 type OperationKeyword = (typeof OPERATION_KEYWORDS)[number];
 
 const METADATA_KEYS = new Set([
@@ -19,11 +19,11 @@ const METADATA_KEYS = new Set([
 const METADATA_KEY_LINE = /^([A-Za-z][A-Za-z]*)\s*:/;
 
 const DECORATED_SECTION_VARIANTS: RegExp[] = [
-	/^\s*={2,}\s*(EDIT|MOVE|CUT|CONDENSE)\s*={2,}\s*$/i,
-	/^\s*-{2,}\s*(EDIT|MOVE|CUT|CONDENSE)\s*-{2,}\s*$/i,
-	/^\s*#{1,6}\s+(EDIT|MOVE|CUT|CONDENSE)\s*#*\s*$/i,
-	/^\s*\*{1,3}\s*(EDIT|MOVE|CUT|CONDENSE)\s*\*{1,3}\s*$/i,
-	/^\s*\[\s*(EDIT|MOVE|CUT|CONDENSE)\s*\]\s*$/i,
+	/^\s*={2,}\s*(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*={2,}\s*$/i,
+	/^\s*-{2,}\s*(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*-{2,}\s*$/i,
+	/^\s*#{1,6}\s+(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*#*\s*$/i,
+	/^\s*\*{1,3}\s*(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*\*{1,3}\s*$/i,
+	/^\s*\[\s*(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*\]\s*$/i,
 ];
 
 interface StructuredOperation {
@@ -39,6 +39,9 @@ interface StructuredOperation {
 	before?: unknown;
 	after?: unknown;
 	why?: unknown;
+	strengths?: unknown;
+	issues?: unknown;
+	body?: unknown;
 }
 
 interface StructuredDocument {
@@ -247,6 +250,9 @@ function serializeStructuredDocument(document: StructuredDocument, operations: u
 		pushString(lines, "Suggestion", op.suggestion);
 		pushString(lines, "Before", op.before);
 		pushString(lines, "After", op.after);
+		pushString(lines, "Strengths", op.strengths);
+		pushString(lines, "Issues", op.issues);
+		pushString(lines, "Body", op.body);
 		pushString(lines, "Why", op.why);
 	}
 

@@ -22,11 +22,24 @@ export const REVIEW_TEMPLATE_BLOCK = [
 	"Provider: OpenAI",
 	`Model: ${ADVANCED_REVIEW_TEMPLATE_MODEL}`,
 	"",
+	"=== MEMO ===",
+	"Strengths:",
+	"What is working across the scenes you reviewed.",
+	"",
+	"Issues:",
+	"Patterns or risks to surface before the author works through the line edits.",
+	"",
 	"=== EDIT ===",
-	"SceneId: scn_xxxxxxxx",
+	"SceneId: scn_first_scene_id",
 	"Original: ...",
 	"Revised: ...",
 	"Why: ...",
+	"",
+	"=== EDIT ===",
+	"SceneId: scn_second_scene_id",
+	"Original: ...",
+	"Revised: ...",
+	"Why: Items can target a different scene — use the matching SceneId per entry.",
 	"",
 	"=== CUT ===",
 	"SceneId: scn_xxxxxxxx",
@@ -47,8 +60,21 @@ export const REVIEW_TEMPLATE_BLOCK = [
 	"```",
 ].join("\n");
 
+const REVIEW_TEMPLATE_GUIDANCE = [
+	"Return only this fenced block. No extra text.",
+	"",
+	"Use one MEMO section at the top for general commentary on the scenes you reviewed —",
+	"strengths, recurring issues, and patterns the author should consider before working",
+	"through the individual line edits. Strengths and Issues are optional fields; freeform",
+	"prose under the header is also accepted.",
+	"",
+	"Each operation entry (EDIT / CUT / CONDENSE / MOVE) targets a single scene via SceneId.",
+	"Items in the same block may target different scenes — repeat the operation header and",
+	"use the appropriate SceneId for each.",
+];
+
 export function buildReviewTemplate(selectedText?: string): string {
-	const parts = ["Return only this fenced block. No extra text.", "", REVIEW_TEMPLATE_BLOCK];
+	const parts = [REVIEW_TEMPLATE_GUIDANCE.join("\n"), "", REVIEW_TEMPLATE_BLOCK];
 
 	if (selectedText?.trim()) {
 		parts.push("", "Passage:", selectedText);
