@@ -96,6 +96,26 @@ describe("SuggestionParser — MEMO section", () => {
 		expect(parsed.blockCount).toBe(1);
 	});
 
+	it("parses an optional SceneId on a MEMO into routing", () => {
+		const parser = makeParser();
+		const note = fenced([
+			"Reviewer: Caroline",
+			"ReviewerType: ai",
+			"",
+			"=== MEMO ===",
+			"SceneId: scn_5b1e6328",
+			"Issues: Scene-scoped concern.",
+			"",
+			"=== MEMO ===",
+			"Strengths: Manuscript-wide praise.",
+		].join("\n"));
+
+		const parsed = parser.parse(note);
+		expect(parsed.memos).toHaveLength(2);
+		expect(parsed.memos[0].routing?.sceneId).toBe("scn_5b1e6328");
+		expect(parsed.memos[1].routing).toBeUndefined();
+	});
+
 	it("captures multiple memos from multiple review blocks", () => {
 		const parser = makeParser();
 		const note = [

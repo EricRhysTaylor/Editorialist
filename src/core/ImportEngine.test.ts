@@ -129,6 +129,110 @@ describe("ImportEngine — fallback to active note for descriptive targets", () 
 		expect(cut?.routeStatus).toBe("unresolved");
 	});
 
+	it("duplicates an unrouted MEMO to every scene group and serializes it at the top of each block", async () => {
+		const sceneA = "Book/Scenes/Scene A.md";
+		const sceneB = "Book/Scenes/Scene B.md";
+		const app = createMockApp([
+			{
+				path: sceneA,
+				body: "Alpha sentence one.\n\nAlpha sentence two.",
+				frontmatter: { Class: "Scene", id: "scn_aaaa" },
+			},
+			{
+				path: sceneB,
+				body: "Beta sentence one.\n\nBeta sentence two.",
+				frontmatter: { Class: "Scene", id: "scn_bbbb" },
+			},
+		]);
+		const engine = createImportEngine(app);
+
+		const paste = [
+			"Reviewer: GPT-5.4",
+			"ReviewerType: ai-editor",
+			"",
+			"=== MEMO ===",
+			"Strengths: Both scenes share a strong voice.",
+			"Issues: Pacing dips between them.",
+			"",
+			"=== EDIT ===",
+			"SceneId: scn_aaaa",
+			"Original: Alpha sentence one.",
+			"Revised: Alpha sentence first.",
+			"Why: tighter",
+			"",
+			"=== EDIT ===",
+			"SceneId: scn_bbbb",
+			"Original: Beta sentence one.",
+			"Revised: Beta sentence first.",
+			"Why: tighter",
+		].join("\n");
+
+		const batch = await engine.inspectBatch(paste);
+		expect(batch.groups).toHaveLength(2);
+		for (const group of batch.groups) {
+			expect(group.memos).toHaveLength(1);
+			expect(group.memos[0].strengths).toContain("strong voice");
+		}
+
+		await engine.importBatch(batch);
+		const writtenA = app.peek(sceneA);
+		const writtenB = app.peek(sceneB);
+		expect(writtenA).toContain("=== MEMO ===");
+		expect(writtenA).toContain("Strengths: Both scenes share a strong voice.");
+		expect(writtenB).toContain("=== MEMO ===");
+		expect(writtenB).toContain("Issues: Pacing dips between them.");
+
+		// MEMO should appear before EDIT in the serialized block.
+		const memoIdxA = writtenA.indexOf("=== MEMO ===");
+		const editIdxA = writtenA.indexOf("=== EDIT ===");
+		expect(memoIdxA).toBeGreaterThan(0);
+		expect(memoIdxA).toBeLessThan(editIdxA);
+	});
+
+	it("routes a MEMO with SceneId only to the matching group", async () => {
+		const sceneA = "Book/Scenes/Scene A.md";
+		const sceneB = "Book/Scenes/Scene B.md";
+		const app = createMockApp([
+			{
+				path: sceneA,
+				body: "Alpha sentence one.",
+				frontmatter: { Class: "Scene", id: "scn_aaaa" },
+			},
+			{
+				path: sceneB,
+				body: "Beta sentence one.",
+				frontmatter: { Class: "Scene", id: "scn_bbbb" },
+			},
+		]);
+		const engine = createImportEngine(app);
+
+		const paste = [
+			"Reviewer: GPT-5.4",
+			"ReviewerType: ai-editor",
+			"",
+			"=== MEMO ===",
+			"SceneId: scn_bbbb",
+			"Issues: Beta-specific concern.",
+			"",
+			"=== EDIT ===",
+			"SceneId: scn_aaaa",
+			"Original: Alpha sentence one.",
+			"Revised: Alpha sentence first.",
+			"",
+			"=== EDIT ===",
+			"SceneId: scn_bbbb",
+			"Original: Beta sentence one.",
+			"Revised: Beta sentence first.",
+		].join("\n");
+
+		const batch = await engine.inspectBatch(paste);
+		const groupA = batch.groups.find((g) => g.filePath === sceneA);
+		const groupB = batch.groups.find((g) => g.filePath === sceneB);
+		expect(groupA?.memos).toHaveLength(0);
+		expect(groupB?.memos).toHaveLength(1);
+		expect(groupB?.memos[0].issues).toContain("Beta-specific");
+	});
+
 	it("does NOT fall back when the active note is outside the scene scope", async () => {
 		const app = createMockApp([
 			{

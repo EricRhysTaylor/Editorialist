@@ -1,4 +1,4 @@
-import type { ReviewSuggestion } from "./ReviewSuggestion";
+import type { ReviewSuggestion, SceneMemo } from "./ReviewSuggestion";
 
 export type ReviewRouteStatus = "resolved" | "mismatch" | "unresolved";
 export type ReviewRouteStrategy =
@@ -72,6 +72,7 @@ export interface ReviewImportNoteGroup {
 	fileName: string;
 	sceneId?: string;
 	suggestions: ReviewImportSuggestionResult[];
+	memos: SceneMemo[];
 	exactCount: number;
 	declaredCount: number;
 	inferredCount: number;

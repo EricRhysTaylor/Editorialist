@@ -345,47 +345,6 @@ export class ReviewRegistryService {
 		};
 	}
 
-	getReviewPanelWarnings(notePath: string): string[] {
-		const warnings: string[] = [];
-		const activeBookSourceFolder = this.activeBookScope.sourceFolder;
-		const hasActiveBook = Boolean(activeBookSourceFolder);
-		const isScene = this.isSceneClassNote(notePath);
-		const isOutsideActiveBook = activeBookSourceFolder
-			? !isPathInFolderScope(notePath, activeBookSourceFolder)
-			: false;
-		const isExportLike = /(^|\/)(exports?|archives?|drafts?|revisions?)(\/|$)/i.test(notePath);
-
-		if (hasActiveBook && (!isScene || isOutsideActiveBook || isExportLike)) {
-			warnings.push(
-				"Warning: this note is not one of the tracked scenes in the active book.",
-			);
-			warnings.push(
-				"Warning: review blocks found here still count as active until they are cleaned from this note.",
-			);
-			if (isExportLike || isOutsideActiveBook) {
-				warnings.push(
-					"Warning: open a tracked scene to continue the pass normally, or clean these review blocks if this note is only an export or reference copy.",
-				);
-			}
-			return warnings;
-		}
-
-		if (!isScene) {
-			warnings.push("Warning: current note is not a scene.");
-		}
-
-		if (isOutsideActiveBook) {
-			const activeBookLabel = this.activeBookScope.label ?? "the active book";
-			warnings.push(`Warning: current note is outside the active book, ${activeBookLabel}.`);
-		}
-
-		if (isExportLike) {
-			warnings.push("Warning: current note appears to be an export, archive, draft, or revision note.");
-		}
-
-		return warnings;
-	}
-
 	findDuplicateSweep(batch: ReviewImportBatch): ReviewSweepRegistryEntry | null {
 		return (
 			Object.values(this.sweepRegistry).find(

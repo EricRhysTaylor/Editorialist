@@ -21,7 +21,7 @@ import type {
 	ReviewImportSummary,
 	ReviewRouteStrategy,
 } from "../models/ReviewImport";
-import type { ParsedReviewDocument, ReviewSuggestion, SupportedReviewOperationType } from "../models/ReviewSuggestion";
+import type { ParsedReviewDocument, ReviewSuggestion, SceneMemo, SupportedReviewOperationType } from "../models/ReviewSuggestion";
 
 interface ResolvedFileMatch {
 	file?: TFile;
@@ -76,6 +76,7 @@ export class ImportEngine {
 		}
 
 		const groups = this.buildGroups(results);
+		this.routeMemosToGroups(parsedDocument.memos, groups);
 		const summary = this.buildSummary(results, groups);
 
 		return {
@@ -640,6 +641,7 @@ export class ImportEngine {
 					fileName: first?.resolvedNoteTitle ?? filePath,
 					sceneId: first?.suggestion.routing?.sceneId,
 					suggestions: suggestionResults,
+					memos: [],
 					exactCount,
 					declaredCount,
 					inferredCount,
@@ -650,6 +652,41 @@ export class ImportEngine {
 					isReady: suggestionResults.every((result) => result.routeStatus === "resolved"),
 				};
 			});
+	}
+
+	private routeMemosToGroups(memos: SceneMemo[], groups: ReviewImportNoteGroup[]): void {
+		if (groups.length === 0) {
+			return;
+		}
+
+		for (const memo of memos) {
+			const sceneId = memo.routing?.sceneId?.trim();
+			const note = memo.routing?.note?.trim();
+			const path = memo.routing?.path?.trim();
+
+			if (sceneId || note || path) {
+				const target = groups.find((group) => {
+					if (sceneId && group.sceneId === sceneId) {
+						return true;
+					}
+					if (path && normalizePath(group.filePath) === normalizePath(path)) {
+						return true;
+					}
+					if (note && group.fileName === note) {
+						return true;
+					}
+					return false;
+				});
+				if (target) {
+					target.memos.push(memo);
+				}
+				continue;
+			}
+
+			for (const group of groups) {
+				group.memos.push(memo);
+			}
+		}
 	}
 
 	private buildSummary(results: ReviewImportSuggestionResult[], groups: ReviewImportNoteGroup[]): ReviewImportSummary {
@@ -691,6 +728,22 @@ export class ImportEngine {
 
 		if (metadata.model) {
 			lines.push(`Model: ${metadata.model}`);
+		}
+
+		for (const memo of group.memos) {
+			lines.push("");
+			lines.push("=== MEMO ===");
+			if (memo.strengths) {
+				lines.push(`Strengths: ${memo.strengths}`);
+			}
+			if (memo.issues) {
+				lines.push(`Issues: ${memo.issues}`);
+			}
+			if (memo.body && !memo.strengths && !memo.issues) {
+				lines.push(memo.body);
+			} else if (memo.body) {
+				lines.push(`Notes: ${memo.body}`);
+			}
 		}
 
 		for (const result of group.suggestions) {

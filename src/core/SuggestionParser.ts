@@ -214,6 +214,7 @@ export class SuggestionParser {
 		const strengths = this.cleanField(fields.get("strengths"));
 		const issues = this.cleanField(fields.get("issues"));
 		const body = this.cleanField(fields.get("body")) ?? this.cleanField(fields.get("notes"));
+		const routing = this.parseRouting(fields);
 
 		if (!strengths && !issues && !body) {
 			// Fall back: treat all non-field lines as body so plain prose memos still surface.
@@ -233,6 +234,7 @@ export class SuggestionParser {
 					startOffset: section.startOffset,
 					endOffset: section.endOffset,
 				},
+				routing,
 				body: inlineBody,
 			};
 		}
@@ -246,6 +248,7 @@ export class SuggestionParser {
 				startOffset: section.startOffset,
 				endOffset: section.endOffset,
 			},
+			routing,
 			strengths,
 			issues,
 			body,

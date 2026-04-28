@@ -125,6 +125,7 @@ export interface SceneMemo {
 	id: string;
 	contributor: ReviewContributor;
 	source: ReviewSourceRef;
+	routing?: ReviewSuggestionRouting;
 	strengths?: string;
 	issues?: string;
 	body?: string;

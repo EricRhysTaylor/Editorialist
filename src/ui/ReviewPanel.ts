@@ -2,7 +2,7 @@ import { ButtonComponent, DropdownComponent, ItemView, setIcon, type WorkspaceLe
 import { formatContributorIdentityLabel } from "../core/ContributorIdentity";
 import { getEffectiveSuggestionStatus, getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isImplicitlyAcceptedCutSuggestion, isMoveSuggestion } from "../core/OperationSupport";
 import type { ReviewSuggestion, SceneMemo } from "../models/ReviewSuggestion";
-import type EditorialistPlugin from "../main";
+import EditorialistPlugin, { type ReviewStateIndexEntry, type ReviewStateOverview } from "../main";
 
 export const REVIEW_PANEL_VIEW_TYPE = "editorialist-review-panel";
 
@@ -15,6 +15,7 @@ export class ReviewPanel extends ItemView {
 	private reviewerMenuAction: ReviewerMenuAction | null = null;
 	private reviewerPickerValue: string | null = null;
 	private starredOnly = false;
+	private reviewStateProcessedExpanded = false;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -143,6 +144,11 @@ export class ReviewPanel extends ItemView {
 				void this.plugin.openEditorialistModal();
 			});
 			sentence.appendText(launchTarget ? " for further options." : " to import and review a new batch.");
+
+			const overview = this.plugin.getReviewStateOverview();
+			if (overview) {
+				this.renderReviewStateCard(overview);
+			}
 			return;
 		}
 
@@ -151,23 +157,6 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-panel__summary",
 			text: headerDetails.summary,
 		});
-		if (headerDetails.warnings.length > 0) {
-			const warningBox = header.createDiv({ cls: "editorialist-panel__warnings" });
-			warningBox.createDiv({
-				cls: "editorialist-panel__warnings-title",
-				text: "Attention",
-			});
-			const warningList = warningBox.createDiv({ cls: "editorialist-panel__warnings-list" });
-			headerDetails.warnings.forEach((warning) => {
-				const item = warningList.createDiv({ cls: "editorialist-panel__warning" });
-				const icon = item.createSpan({ cls: "editorialist-panel__warning-icon" });
-				setIcon(icon, "alert-triangle");
-				item.createSpan({
-					cls: "editorialist-panel__warning-text",
-					text: warning.replace(/^Warning:\s*/i, ""),
-				});
-			});
-		}
 
 		const memos = session.memos ?? [];
 		const pendingEditsCount = this.plugin.getPendingEditsCountForScene(session.notePath);
@@ -437,6 +426,142 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-panel__completion-step-text",
 			text: "Review revision and contributor details in settings.",
 		});
+	}
+
+	private renderReviewStateCard(overview: ReviewStateOverview): void {
+		const card = this.contentEl.createDiv({ cls: "editorialist-panel__review-state" });
+
+		const header = card.createDiv({ cls: "editorialist-panel__review-state-header" });
+		const titleIcon = header.createSpan({ cls: "editorialist-panel__review-state-title-icon" });
+		setIcon(titleIcon, "list-checks");
+		header.createSpan({
+			cls: "editorialist-panel__review-state-title",
+			text: "Review state",
+		});
+		const summaryParts: string[] = [];
+		if (overview.pending.length > 0) {
+			summaryParts.push(`${overview.pending.length} pending`);
+		}
+		if (overview.processed.length > 0) {
+			summaryParts.push(`${overview.processed.length} ready to clean`);
+		}
+		if (summaryParts.length > 0) {
+			header.createSpan({
+				cls: "editorialist-panel__review-state-summary",
+				text: summaryParts.join(" · "),
+			});
+		}
+
+		if (overview.pending.length > 0) {
+			this.renderReviewStateGroup(card, "Pending", overview.pending, false);
+		}
+
+		if (overview.processed.length > 0) {
+			const expanded = this.reviewStateProcessedExpanded;
+			this.renderReviewStateGroup(card, "Ready to clean", overview.processed, true, expanded);
+		}
+	}
+
+	private renderReviewStateGroup(
+		parent: HTMLElement,
+		label: string,
+		entries: ReviewStateIndexEntry[],
+		showCleanAction: boolean,
+		expanded: boolean = true,
+	): void {
+		const group = parent.createDiv({ cls: "editorialist-panel__review-state-group" });
+		const isCollapsible = showCleanAction;
+		const isOpen = !isCollapsible || expanded;
+
+		const groupHeader = group.createDiv({
+			cls: `editorialist-panel__review-state-group-header${isCollapsible ? " editorialist-panel__review-state-group-header--collapsible" : ""}`,
+		});
+
+		if (isCollapsible) {
+			const caret = groupHeader.createSpan({ cls: "editorialist-panel__review-state-group-caret" });
+			setIcon(caret, isOpen ? "chevron-down" : "chevron-right");
+			this.bindImmediateAction(groupHeader, () => {
+				this.reviewStateProcessedExpanded = !this.reviewStateProcessedExpanded;
+				this.render();
+			});
+		}
+
+		groupHeader.createSpan({
+			cls: "editorialist-panel__review-state-group-label",
+			text: label,
+		});
+		groupHeader.createSpan({
+			cls: "editorialist-panel__review-state-group-count",
+			text: `${entries.length}`,
+		});
+
+		if (!isOpen) {
+			return;
+		}
+
+		const list = group.createDiv({ cls: "editorialist-panel__review-state-list" });
+
+		const sorted = [...entries].sort((a, b) => b.lastUpdated - a.lastUpdated);
+		for (const entry of sorted) {
+			this.renderReviewStateRow(list, entry, showCleanAction);
+		}
+	}
+
+	private renderReviewStateRow(
+		parent: HTMLElement,
+		entry: ReviewStateIndexEntry,
+		showCleanAction: boolean,
+	): void {
+		const row = parent.createDiv({ cls: "editorialist-panel__review-state-row" });
+
+		const link = row.createEl("a", {
+			cls: "editorialist-panel__review-state-row-link",
+			attr: {
+				href: "#",
+				title: `Open ${entry.noteTitle}`,
+			},
+		});
+		link.createSpan({
+			cls: "editorialist-panel__review-state-row-title",
+			text: entry.noteTitle,
+		});
+		this.bindImmediateAction(link, () => {
+			void this.plugin.startOrResumeReviewForNote(entry.notePath);
+		});
+
+		const metaParts: string[] = [];
+		if (entry.pendingCount > 0) {
+			metaParts.push(`${entry.pendingCount} pending`);
+		}
+		if (entry.deferredCount > 0) {
+			metaParts.push(`${entry.deferredCount} deferred`);
+		}
+		if (entry.processedCount > 0) {
+			metaParts.push(`${entry.processedCount} processed`);
+		}
+		if (metaParts.length > 0) {
+			row.createSpan({
+				cls: "editorialist-panel__review-state-row-meta",
+				text: metaParts.join(" · "),
+			});
+		}
+
+		if (showCleanAction) {
+			const cleanButton = row.createEl("button", {
+				cls: "editorialist-panel__review-state-row-clean",
+				attr: { type: "button", title: "Clean review block from this scene" },
+			});
+			const cleanIcon = cleanButton.createSpan({ cls: "editorialist-panel__review-state-row-clean-icon" });
+			setIcon(cleanIcon, "eraser");
+			cleanButton.createSpan({
+				cls: "editorialist-panel__review-state-row-clean-text",
+				text: "Clean",
+			});
+			this.bindImmediateAction(cleanButton, async () => {
+				await this.plugin.cleanSceneReviewNote(entry.notePath);
+				this.render();
+			});
+		}
 	}
 
 	private renderCommentsCard(memos: SceneMemo[], pendingEditsCount: number, notePath: string): void {

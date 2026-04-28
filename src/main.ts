@@ -148,6 +148,21 @@ interface PostCompletionIdleState {
 	title: string;
 }
 
+export interface ReviewStateIndexEntry {
+	notePath: string;
+	noteTitle: string;
+	sceneId?: string;
+	pendingCount: number;
+	deferredCount: number;
+	processedCount: number;
+	lastUpdated: number;
+}
+
+export interface ReviewStateOverview {
+	pending: ReviewStateIndexEntry[];
+	processed: ReviewStateIndexEntry[];
+}
+
 interface BulkApplyConfirmState {
 	notePath: string;
 }
@@ -1606,13 +1621,11 @@ export default class EditorialistPlugin extends Plugin {
 
 	getReviewPanelHeaderDetails(): {
 		summary: string;
-		warnings: string[];
 	} {
 		const session = this.store.getSession();
 		if (!session) {
 			return {
 				summary: "",
-				warnings: [],
 			};
 		}
 
@@ -1633,7 +1646,6 @@ export default class EditorialistPlugin extends Plugin {
 
 		return {
 			summary: parts.join(" • "),
-			warnings: this.getReviewPanelWarnings(session.notePath),
 		};
 	}
 
@@ -1718,9 +1730,9 @@ export default class EditorialistPlugin extends Plugin {
 			}
 		}
 
-		const activeBookCandidate =
-			this.getSceneReviewRecords({ activeBookOnly: true }).find((record) => this.isSweepableSceneRecord(record)) ??
-			this.getSceneReviewRecords().find((record) => this.isSweepableSceneRecord(record));
+		const activeBookCandidate = this.getSceneReviewRecords({ activeBookOnly: true }).find((record) =>
+			this.isSweepableSceneRecord(record),
+		);
 		if (!activeBookCandidate) {
 			return null;
 		}
@@ -1763,6 +1775,42 @@ export default class EditorialistPlugin extends Plugin {
 			durationLabel: this.getCompletedSweepDurationLabel(completedSweep),
 			nextSteps,
 		};
+	}
+
+	getReviewStateOverview(): ReviewStateOverview | null {
+		const records = this.getSceneReviewRecords({ activeBookOnly: true }).filter(
+			(record) => record.batchCount > 0 && record.status !== "cleaned",
+		);
+		if (records.length === 0) {
+			return null;
+		}
+
+		const pending: ReviewStateIndexEntry[] = [];
+		const processed: ReviewStateIndexEntry[] = [];
+
+		for (const record of records) {
+			const entry: ReviewStateIndexEntry = {
+				notePath: record.notePath,
+				noteTitle: record.noteTitle,
+				sceneId: record.sceneId,
+				pendingCount: record.pendingCount + record.unresolvedCount,
+				deferredCount: record.deferredCount,
+				processedCount: record.acceptedCount + record.rejectedCount + record.rewrittenCount,
+				lastUpdated: record.lastUpdated,
+			};
+
+			if (record.status === "in_progress" || entry.pendingCount > 0 || entry.deferredCount > 0) {
+				pending.push(entry);
+			} else {
+				processed.push(entry);
+			}
+		}
+
+		if (pending.length === 0 && processed.length === 0) {
+			return null;
+		}
+
+		return { pending, processed };
 	}
 
 	getPostCompletionIdleState(): PostCompletionIdleState | null {
@@ -3894,10 +3942,6 @@ export default class EditorialistPlugin extends Plugin {
 		return targetPath;
 	}
 
-	private getReviewPanelWarnings(notePath: string): string[] {
-		return this.registry.getReviewPanelWarnings(notePath);
-	}
-
 	private async copyReviewTemplateToClipboard(selectedText?: string): Promise<void> {
 		const template = buildReviewTemplate(selectedText);
 		await this.copyTextToClipboard(template, "Review template copied", "Could not copy the review template.");
@@ -4047,6 +4091,7 @@ export default class EditorialistPlugin extends Plugin {
 					fileName: context.view.file?.basename ?? context.filePath,
 					sceneId: undefined,
 					suggestions: batch.results,
+					memos: [],
 					exactCount: batch.summary.totalExactMatches,
 					declaredCount: batch.summary.totalDeclaredRoutes,
 					inferredCount: batch.summary.totalInferredRoutes,
