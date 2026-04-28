@@ -1,6 +1,7 @@
 import { ButtonComponent, DropdownComponent, ItemView, setIcon, type WorkspaceLeaf } from "obsidian";
-import { formatContributorIdentityLabel } from "../core/ContributorIdentity";
+import { formatContributorIdentityLabel, formatReviewerTypeLabel } from "../core/ContributorIdentity";
 import { getEffectiveSuggestionStatus, getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isImplicitlyAcceptedCutSuggestion, isMoveSuggestion } from "../core/OperationSupport";
+import type { ReviewSweepStatus } from "../models/ReviewImport";
 import type { ReviewSuggestion, SceneMemo } from "../models/ReviewSuggestion";
 import EditorialistPlugin, { type ReviewStateIndexEntry, type ReviewStateOverview } from "../main";
 
@@ -50,11 +51,23 @@ export class ReviewPanel extends ItemView {
 		this.contentEl.empty();
 		this.contentEl.addClass("editorialist-panel");
 
+		const completedSweep = this.plugin.getCompletedSweepPanelState();
+		const postCompletionIdle = !session && !completedSweep ? this.plugin.getPostCompletionIdleState() : null;
+		const launchTarget = !session && !completedSweep && !postCompletionIdle
+			? this.plugin.getNextLogicalReviewLaunchTarget()
+			: null;
+		const isColdIdle = !session && !completedSweep && !postCompletionIdle && !launchTarget;
+
 		const header = this.contentEl.createDiv({ cls: "editorialist-panel__header" });
 		const titleRow = header.createDiv({ cls: "editorialist-panel__title-row" });
 		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__title-icon" });
 		setIcon(titleIcon, "pen-tool");
 		titleRow.createEl("h2", { text: "Editorialist review" });
+
+		if (isColdIdle) {
+			this.renderHeaderLauncherChip(titleRow);
+		}
+
 		const settingsButton = titleRow.createEl("button", {
 			cls: "editorialist-panel__settings-button",
 			attr: {
@@ -69,25 +82,22 @@ export class ReviewPanel extends ItemView {
 			this.plugin.openSettings();
 		});
 
-		const completedSweep = this.plugin.getCompletedSweepPanelState();
 		if (completedSweep) {
 			this.renderCompletedSweepCard(completedSweep);
 			return;
 		}
 
 		if (!session) {
-			const postCompletionIdle = this.plugin.getPostCompletionIdleState();
 			if (postCompletionIdle) {
 				this.renderIdleStateCard(postCompletionIdle);
 				return;
 			}
 
-			const launchTarget = this.plugin.getNextLogicalReviewLaunchTarget();
-			const actionStrip = header.createDiv({
-				cls: `editorialist-panel__launch-strip${launchTarget ? " editorialist-panel__launch-strip--continuation" : ""}`,
-			});
-
 			if (launchTarget) {
+				const actionStrip = header.createDiv({
+					cls: "editorialist-panel__launch-strip editorialist-panel__launch-strip--continuation",
+				});
+
 				const next = actionStrip.createDiv({
 					cls: "editorialist-panel__launch-section editorialist-panel__launch-section--next editorialist-panel__launch-section--next-primary",
 				});
@@ -112,38 +122,32 @@ export class ReviewPanel extends ItemView {
 				});
 
 				actionStrip.createDiv({ cls: "editorialist-panel__launch-divider" });
-			}
 
-			const intro = actionStrip.createDiv({ cls: "editorialist-panel__launch-section editorialist-panel__launch-section--intro" });
-			const sentence = intro.createDiv({ cls: "editorialist-panel__empty editorialist-panel__launch-copy" });
-			if (launchTarget) {
+				const intro = actionStrip.createDiv({ cls: "editorialist-panel__launch-section editorialist-panel__launch-section--intro" });
+				const sentence = intro.createDiv({ cls: "editorialist-panel__empty editorialist-panel__launch-copy" });
 				sentence.appendText("Continue revision sweep or use ");
 				const shortcut = sentence.createSpan({ cls: "editorialist-panel__command-shortcut" });
 				shortcut.createEl("kbd", { text: "⌘" });
 				shortcut.createEl("kbd", { text: "P" });
 				sentence.appendText(" to open ");
+				const launchLink = sentence.createEl("a", {
+					cls: "editorialist-panel__command-link",
+					attr: {
+						href: "#",
+						title: "Open the Editorialist launcher",
+					},
+				});
+				launchLink.createSpan({
+					cls: "editorialist-panel__command-name",
+					text: "Open review launcher",
+				});
+				this.bindImmediateAction(launchLink, () => {
+					void this.plugin.openEditorialistModal();
+				});
+				sentence.appendText(" for further options.");
 			} else {
-				sentence.appendText("Use ");
-				const shortcut = sentence.createSpan({ cls: "editorialist-panel__command-shortcut" });
-				shortcut.createEl("kbd", { text: "⌘" });
-				shortcut.createEl("kbd", { text: "P" });
-				sentence.appendText(" to open ");
+				this.renderColdIdleBody(this.contentEl);
 			}
-			const launchLink = sentence.createEl("a", {
-				cls: "editorialist-panel__command-link",
-				attr: {
-					href: "#",
-					title: "Open the Editorialist launcher",
-				},
-			});
-			launchLink.createSpan({
-				cls: "editorialist-panel__command-name",
-				text: "Open review launcher",
-			});
-			this.bindImmediateAction(launchLink, () => {
-				void this.plugin.openEditorialistModal();
-			});
-			sentence.appendText(launchTarget ? " for further options." : " to import and review a new batch.");
 
 			const overview = this.plugin.getReviewStateOverview();
 			if (overview) {
@@ -426,6 +430,206 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-panel__completion-step-text",
 			text: "Review revision and contributor details in settings.",
 		});
+	}
+
+	private renderHeaderLauncherChip(parent: HTMLElement): void {
+		const chip = parent.createDiv({ cls: "editorialist-panel__launcher-chip" });
+		const keys = chip.createSpan({ cls: "editorialist-panel__launcher-chip-keys" });
+		keys.createEl("kbd", { text: "⌘" });
+		keys.createEl("kbd", { text: "P" });
+		const link = chip.createEl("a", {
+			cls: "editorialist-panel__launcher-chip-link",
+			attr: { href: "#", title: "Open the Editorialist launcher" },
+		});
+		link.setText("Open review launcher");
+		this.bindImmediateAction(link, () => {
+			void this.plugin.openEditorialistModal();
+		});
+	}
+
+	private renderColdIdleBody(parent: HTMLElement): void {
+		this.renderWorkflowsBlock(parent);
+		this.renderRecentActivityBlock(parent);
+		this.renderContributorsBlock(parent);
+	}
+
+	private renderWorkflowsBlock(parent: HTMLElement): void {
+		const section = parent.createDiv({ cls: "editorialist-panel__workflows" });
+		const heading = section.createDiv({ cls: "editorialist-panel__section-header" });
+		heading.createDiv({ cls: "editorialist-panel__section-title", text: "How to use Editorialist" });
+		heading.createDiv({
+			cls: "editorialist-panel__section-meta",
+			text: "Two passes, one directory",
+		});
+
+		const grid = section.createDiv({ cls: "editorialist-panel__workflow-grid" });
+		const workflows: Array<{ icon: string; title: string; body: string }> = [
+			{
+				icon: "download-cloud",
+				title: "Imported review pass",
+				body: "Pull in contributor notes from a human reader or AI editor, then accept, reject, or rewrite each suggestion in turn.",
+			},
+			{
+				icon: "clipboard-list",
+				title: "Pending edits sweep",
+				body: "Walk through free-form revision notes you've left across the active book, scene by scene.",
+			},
+			{
+				icon: "users",
+				title: "Contributor directory",
+				body: "Star trusted reviewers, resolve aliases on imported batches, and track who shaped each draft.",
+			},
+		];
+		for (const wf of workflows) {
+			const card = grid.createDiv({ cls: "editorialist-panel__workflow-card" });
+			const iconWrap = card.createSpan({ cls: "editorialist-panel__workflow-icon" });
+			setIcon(iconWrap, wf.icon);
+			const text = card.createDiv({ cls: "editorialist-panel__workflow-text" });
+			text.createDiv({ cls: "editorialist-panel__workflow-title", text: wf.title });
+			text.createDiv({ cls: "editorialist-panel__workflow-body", text: wf.body });
+		}
+	}
+
+	private renderRecentActivityBlock(parent: HTMLElement): void {
+		const allEntries = this.plugin.getSweepRegistryEntries();
+		if (allEntries.length === 0) {
+			return;
+		}
+
+		const entries = allEntries.slice(0, 5);
+		const section = parent.createDiv({ cls: "editorialist-panel__history" });
+		const heading = section.createDiv({ cls: "editorialist-panel__section-header" });
+		heading.createDiv({ cls: "editorialist-panel__section-title", text: "Recent reviews" });
+		heading.createDiv({
+			cls: "editorialist-panel__section-meta",
+			text: `${allEntries.length} total`,
+		});
+
+		const list = section.createDiv({ cls: "editorialist-panel__history-list" });
+		for (const entry of entries) {
+			const row = list.createDiv({ cls: "editorialist-panel__history-row" });
+			const main = row.createDiv({ cls: "editorialist-panel__history-main" });
+
+			const titleText = entry.activeBookLabel?.trim()
+				|| entry.currentNotePath?.split("/").pop()?.replace(/\.md$/, "")
+				|| entry.importedNotePaths[0]?.split("/").pop()?.replace(/\.md$/, "")
+				|| "Review pass";
+			main.createDiv({
+				cls: "editorialist-panel__history-title",
+				text: titleText,
+			});
+
+			const metaParts: string[] = [];
+			const noteCount = entry.importedNotePaths.length;
+			if (noteCount > 0) {
+				metaParts.push(`${noteCount} ${noteCount === 1 ? "scene" : "scenes"}`);
+			}
+			if (entry.totalSuggestions > 0) {
+				metaParts.push(`${entry.totalSuggestions} ${entry.totalSuggestions === 1 ? "suggestion" : "suggestions"}`);
+			}
+			metaParts.push(this.formatRelativeTime(entry.updatedAt));
+			main.createDiv({
+				cls: "editorialist-panel__history-meta",
+				text: metaParts.join(" · "),
+			});
+
+			const statusModifier = entry.status.replace(/_/g, "-");
+			const status = row.createDiv({
+				cls: `editorialist-panel__history-status editorialist-panel__history-status--${statusModifier}`,
+			});
+			const statusIcon = status.createSpan({ cls: "editorialist-panel__history-status-icon" });
+			setIcon(statusIcon, this.getSweepStatusIcon(entry.status));
+			status.createSpan({
+				cls: "editorialist-panel__history-status-text",
+				text: this.getSweepStatusLabel(entry.status),
+			});
+		}
+	}
+
+	private renderContributorsBlock(parent: HTMLElement): void {
+		const allProfiles = this.plugin.getSortedReviewerProfiles();
+		if (allProfiles.length === 0) {
+			return;
+		}
+
+		const profiles = allProfiles.slice(0, 5);
+		const section = parent.createDiv({ cls: "editorialist-panel__contributors" });
+		const heading = section.createDiv({ cls: "editorialist-panel__section-header" });
+		heading.createDiv({ cls: "editorialist-panel__section-title", text: "Contributors" });
+		heading.createDiv({
+			cls: "editorialist-panel__section-meta",
+			text: `${allProfiles.length} total`,
+		});
+
+		const list = section.createDiv({ cls: "editorialist-panel__contributors-list" });
+		for (const profile of profiles) {
+			const row = list.createDiv({ cls: "editorialist-panel__contributors-row" });
+
+			const starSlot = row.createSpan({ cls: "editorialist-panel__contributors-star" });
+			if (profile.isStarred) {
+				starSlot.addClass("is-starred");
+				setIcon(starSlot, "star");
+			}
+
+			const main = row.createDiv({ cls: "editorialist-panel__contributors-main" });
+			main.createDiv({ cls: "editorialist-panel__contributors-name", text: profile.displayName });
+
+			const metaParts: string[] = [formatReviewerTypeLabel(profile.reviewerType)];
+			if (profile.kind === "ai" && profile.provider) {
+				metaParts.push(profile.provider);
+			}
+			main.createDiv({
+				cls: "editorialist-panel__contributors-meta",
+				text: metaParts.join(" · "),
+			});
+
+			const stat = profile.stats?.totalSuggestions ?? 0;
+			if (stat > 0) {
+				row.createDiv({
+					cls: "editorialist-panel__contributors-stat",
+					text: `${stat} ${stat === 1 ? "edit" : "edits"}`,
+				});
+			}
+		}
+	}
+
+	private formatRelativeTime(timestamp: number): string {
+		const diff = Date.now() - timestamp;
+		if (diff < 60_000) return "just now";
+		const minutes = Math.floor(diff / 60_000);
+		if (minutes < 60) return `${minutes}m ago`;
+		const hours = Math.floor(minutes / 60);
+		if (hours < 24) return `${hours}h ago`;
+		const days = Math.floor(hours / 24);
+		if (days < 7) return `${days}d ago`;
+		const weeks = Math.floor(days / 7);
+		if (weeks < 5) return `${weeks}w ago`;
+		const months = Math.floor(days / 30);
+		if (months < 12) return `${months}mo ago`;
+		const years = Math.floor(days / 365);
+		return `${years}y ago`;
+	}
+
+	private getSweepStatusIcon(status: ReviewSweepStatus): string {
+		switch (status) {
+			case "in_progress":
+				return "circle-dot";
+			case "completed":
+				return "check-circle-2";
+			case "cleaned":
+				return "sparkles";
+		}
+	}
+
+	private getSweepStatusLabel(status: ReviewSweepStatus): string {
+		switch (status) {
+			case "in_progress":
+				return "In progress";
+			case "completed":
+				return "Done";
+			case "cleaned":
+				return "Cleaned";
+		}
 	}
 
 	private renderReviewStateCard(overview: ReviewStateOverview): void {

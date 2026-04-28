@@ -82,10 +82,6 @@ export class EditorialistModal extends Modal {
 			this.clipboardState = "empty";
 		}
 
-		if (!this.clipboardBatch && !this.options.currentNoteHasReviewBlock) {
-			this.showManualPaste = true;
-		}
-
 		this.render();
 	}
 
@@ -226,6 +222,19 @@ export class EditorialistModal extends Modal {
 		});
 
 		const actions = section.createDiv({ cls: "editorialist-control-modal__actions" });
+		this.buildButton(actions, "Import and start review", async () => {
+			const batch = await this.ensureManualBatch();
+			if (!batch) {
+				return;
+			}
+
+			await this.options.onImportBatch(batch, true);
+			this.close();
+		}, {
+			cta: true,
+			disabled: !this.manualText.trim(),
+			icon: "download",
+		});
 		this.buildButton(actions, "Preview destinations", async () => {
 			const batch = await this.ensureManualBatch();
 			if (!batch) {
@@ -238,50 +247,7 @@ export class EditorialistModal extends Modal {
 		}, {
 			disabled: !this.manualText.trim(),
 			icon: "navigation",
-		});
-		this.buildButton(actions, this.getImportActionLabel(this.manualBatch), async () => {
-			const batch = await this.ensureManualBatch();
-			if (!batch) {
-				return;
-			}
-
-			await this.options.onImportBatch(batch, false);
-			this.close();
-		}, {
-			disabled: !this.manualText.trim(),
-			icon: "download",
-		});
-		this.buildButton(actions, "Import and start review", async () => {
-			const batch = await this.ensureManualBatch();
-			if (!batch) {
-				return;
-			}
-
-			await this.options.onImportBatch(batch, true);
-			this.close();
-		}, {
-			disabled: !this.manualText.trim(),
-			icon: "download",
-		});
-		this.buildButton(actions, "Import into this note", async () => {
-			if (!this.manualText.trim()) {
-				return;
-			}
-
-			await this.options.onImportRawToActiveNote(this.manualText, true);
-			this.close();
-		}, {
-			disabled: !this.manualText.trim(),
-			icon: "download",
-		});
-		this.buildButton(actions, "Clear input", async () => {
-			this.manualText = "";
-			this.manualBatch = null;
-			this.showAssignments = false;
-			this.render();
-		}, {
-			disabled: !this.manualText.trim(),
-			icon: "x",
+			subtle: true,
 		});
 	}
 
@@ -871,11 +837,4 @@ export class EditorialistModal extends Modal {
 		return plural ? `${noun}s` : noun;
 	}
 
-	private getImportActionLabel(batch: ReviewImportBatch | null): string {
-		if (batch && this.isLocalNoteBatch(batch)) {
-			return "Import into this note";
-		}
-
-		return "Import into matching scenes";
-	}
 }
