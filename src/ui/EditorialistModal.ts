@@ -498,6 +498,29 @@ export class EditorialistModal extends Modal {
 		return batch.groups.some((group) => group.isReady);
 	}
 
+	private getReadySceneShortLabels(batch: ReviewImportBatch): string[] {
+		const labels: string[] = [];
+		for (const group of batch.groups) {
+			if (!group.isReady) continue;
+			const match = group.fileName.match(/\d+/);
+			labels.push(match ? `S${parseInt(match[0], 10)}` : group.fileName);
+		}
+		return labels;
+	}
+
+	private formatReadyScenesDescription(batch: ReviewImportBatch): string {
+		const total = batch.summary.totalResolvedScenes ?? 0;
+		const noun = total === 1 ? "scene" : "scenes";
+		const labels = this.getReadySceneShortLabels(batch);
+		if (labels.length === 0) {
+			return `${total} matched ${noun} ready`;
+		}
+		const maxShown = 6;
+		const shown = labels.slice(0, maxShown).join(", ");
+		const more = labels.length > maxShown ? ` +${labels.length - maxShown}` : "";
+		return `${total} matched ${noun} ready · ${shown}${more}`;
+	}
+
 	private hasAnySceneMatch(batch: ReviewImportBatch): boolean {
 		return batch.summary.totalMatchedScenes > 0 || batch.summary.totalResolvedScenes > 0;
 	}
@@ -663,8 +686,8 @@ export class EditorialistModal extends Modal {
 						: "Matching scenes",
 					description: localNoteBatch
 						? "Ready for this note"
-						: readyGroups
-							? `${activeBatch?.summary.totalResolvedScenes ?? 0} matched scene${(activeBatch?.summary.totalResolvedScenes ?? 0) === 1 ? "" : "s"} ready`
+						: readyGroups && activeBatch
+							? this.formatReadyScenesDescription(activeBatch)
 						: hasSceneMatches
 							? "Only ambiguous or unresolved scene matches found"
 							: "No matching scene text found",

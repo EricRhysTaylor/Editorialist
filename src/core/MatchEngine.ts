@@ -8,6 +8,7 @@ import type {
 	ReviewSuggestion,
 	ReviewTargetRef,
 } from "../models/ReviewSuggestion";
+import { rewriteAnchorEdit } from "./AnchorDirective";
 import { findExactMatches, normalizeMatchText } from "./TextMatching";
 
 interface TextResolution {
@@ -34,13 +35,16 @@ export class MatchEngine {
 	}
 
 	private resolveEditSuggestion(noteText: string, suggestion: EditSuggestion): EditSuggestion {
-		if (suggestion.payload.original === suggestion.payload.revised) {
+		const rewritten = this.rewriteForAnchorDirective(noteText, suggestion);
+		const effective = rewritten ?? suggestion;
+
+		if (effective.payload.original === effective.payload.revised) {
 			return {
-				...suggestion,
-				status: this.preserveTerminalStatus(suggestion.status, "unresolved"),
+				...effective,
+				status: this.preserveTerminalStatus(effective.status, "unresolved"),
 				location: {
 					primary: {
-						text: suggestion.payload.original,
+						text: effective.payload.original,
 						matchType: "none",
 						reason: "Original and revised text are identical. Check this suggestion.",
 					},
@@ -50,16 +54,43 @@ export class MatchEngine {
 
 		const resolution = this.resolveTextTarget(
 			noteText,
+			effective.payload.original,
+			effective.payload.revised,
+		);
+
+		const target = rewritten && resolution.target.matchType === "exact"
+			? { ...resolution.target, reason: rewritten.directiveReason }
+			: resolution.target;
+
+		return {
+			...effective,
+			status: this.resolveSuggestionStatus(effective.status, resolution),
+			location: {
+				primary: target,
+			},
+		};
+	}
+
+	private rewriteForAnchorDirective(
+		noteText: string,
+		suggestion: EditSuggestion,
+	): (EditSuggestion & { directiveReason: string }) | null {
+		const rewrite = rewriteAnchorEdit(
+			noteText,
 			suggestion.payload.original,
 			suggestion.payload.revised,
 		);
+		if (!rewrite) {
+			return null;
+		}
 
 		return {
 			...suggestion,
-			status: this.resolveSuggestionStatus(suggestion.status, resolution),
-			location: {
-				primary: resolution.target,
+			payload: {
+				original: rewrite.original,
+				revised: rewrite.revised,
 			},
+			directiveReason: rewrite.reason,
 		};
 	}
 
