@@ -57,12 +57,14 @@ import type {
 } from "./models/ReviewerProfile";
 import { ReviewStore, type AppliedReviewChange, type AppliedReviewState, type CompletedSweepState, type GuidedSweepState } from "./state/ReviewStore";
 import { ReviewerDirectory } from "./state/ReviewerDirectory";
+import { EditorialismService } from "./services/EditorialismService";
 import { ReviewRegistryService } from "./services/ReviewRegistryService";
 import { ReviewWorkflowService } from "./services/ReviewWorkflowService";
 import { EditorialistModal, type ClipboardReviewBatch } from "./ui/EditorialistModal";
 import { openEditorialistChoiceModal } from "./ui/EditorialistChoiceModal";
 import { openContributorReassignmentModal, type ContributorReassignmentMode } from "./ui/ContributorReassignmentModal";
 import { openContributorStrengthsModal } from "./ui/ContributorStrengthsModal";
+import { EDITORIALISM_PANEL_VIEW_TYPE, EditorialismPanel } from "./ui/EditorialismPanel";
 import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
 import { EditorialistSettingTab } from "./ui/EditorialistSettingTab";
 import { createReviewDecorationsExtension, syncReviewDecorations } from "./ui/Decorations";
@@ -198,6 +200,7 @@ export default class EditorialistPlugin extends Plugin {
 		this.reviewerDirectory,
 		() => this.savePluginData(),
 	);
+	private readonly editorialismService = new EditorialismService(this.app);
 	private readonly workflow = new ReviewWorkflowService(this.store, this.registry, {
 		clearReviewSelection: async () => {
 			this.store.selectSuggestion(null);
@@ -253,9 +256,13 @@ export default class EditorialistPlugin extends Plugin {
 		this.inquiryBriefResolver = new InquiryBriefResolver(this.app);
 		this.registerEditorExtension(createReviewDecorationsExtension());
 		this.registerView(REVIEW_PANEL_VIEW_TYPE, (leaf) => new ReviewPanel(leaf, this));
+		this.registerView(EDITORIALISM_PANEL_VIEW_TYPE, (leaf) => new EditorialismPanel(leaf, this));
 		this.addSettingTab(new EditorialistSettingTab(this.app, this));
 		this.addRibbonIcon("pen-tool", "Open review panel", () => {
 			void this.openReviewPanel();
+		});
+		this.addRibbonIcon("list-checks", "Open Editorialism panel", () => {
+			void this.openEditorialismPanel();
 		});
 		registerCommands(this);
 		this.registerDomEvent(window, "resize", () => {
@@ -428,6 +435,47 @@ export default class EditorialistPlugin extends Plugin {
 
 	isReviewPanelOpen(): boolean {
 		return this.app.workspace.getLeavesOfType(REVIEW_PANEL_VIEW_TYPE).length > 0;
+	}
+
+	async openEditorialismPanel(): Promise<void> {
+		const existing = this.app.workspace.getLeavesOfType(EDITORIALISM_PANEL_VIEW_TYPE);
+		const [primary, ...duplicates] = existing;
+		for (const duplicate of duplicates) {
+			duplicate.detach();
+		}
+		const leaf = primary ?? this.app.workspace.getRightLeaf(false);
+		if (!leaf) {
+			return;
+		}
+		await leaf.setViewState({
+			type: EDITORIALISM_PANEL_VIEW_TYPE,
+			active: true,
+		});
+		this.app.workspace.revealLeaf(leaf);
+	}
+
+	getEditorialismFolder(): string {
+		return this.editorialismService.getRootFolderName();
+	}
+
+	async listEditorialismsForActiveBook(bookLabel: string | null): Promise<
+		Awaited<ReturnType<EditorialismService["listForBook"]>>
+	> {
+		return this.editorialismService.listForBook(bookLabel);
+	}
+
+	async loadEditorialism(filePath: string): Promise<
+		Awaited<ReturnType<EditorialismService["load"]>>
+	> {
+		return this.editorialismService.load(filePath);
+	}
+
+	async setEditorialismItemStatus(
+		filePath: string,
+		lineIndex: number,
+		nextStatus: Parameters<EditorialismService["setItemStatus"]>[2],
+	): Promise<void> {
+		await this.editorialismService.setItemStatus(filePath, lineIndex, nextStatus);
 	}
 
 	getPendingEditsSession(): PendingEditsSession | null {
