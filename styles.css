@@ -4142,12 +4142,33 @@
 	stroke-width: 1.9;
 }
 
-.editorialist-settings__about-footer-license {
-	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
-	margin-top: 0.25rem;
+.editorialist-settings__about-footer-stats {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.45rem;
+	margin-top: 0.85rem;
+}
+
+.editorialist-settings__about-footer-stats-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 0.45rem;
+}
+
+.editorialist-settings__about-footer-stat {
+	display: inline-flex;
+	text-decoration: none;
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.editorialist-settings__about-footer-stat img {
+	display: block;
+	height: 28px;
+	max-width: 100%;
 }
 
 /* === Cold idle: launcher chip in title row =============================== */

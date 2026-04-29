@@ -4,7 +4,7 @@ import { formatContributorIdentityLabel, formatReviewerTypeLabel } from "../core
 import { getEffectiveSuggestionStatus, getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isImplicitlyAcceptedCutSuggestion, isMoveSuggestion } from "../core/OperationSupport";
 import type { ReviewSweepStatus } from "../models/ReviewImport";
 import type { ReviewSuggestion, SceneMemo } from "../models/ReviewSuggestion";
-import EditorialistPlugin, { type ReviewStateIndexEntry, type ReviewStateOverview } from "../main";
+import type { default as EditorialistPlugin, ReviewStateIndexEntry, ReviewStateOverview } from "../main";
 
 export const REVIEW_PANEL_VIEW_TYPE = "editorialist-review-panel";
 
@@ -489,7 +489,12 @@ export class ReviewPanel extends ItemView {
 			return;
 		}
 
-		const entries = allEntries.slice(0, 5);
+		const sortKey = (entry: typeof allEntries[number]): number =>
+			entry.cleanedAt ?? entry.importedAt;
+		const entries = allEntries
+			.slice()
+			.sort((left, right) => sortKey(right) - sortKey(left))
+			.slice(0, 5);
 		const section = parent.createDiv({ cls: "editorialist-panel__history" });
 		const heading = section.createDiv({ cls: "editorialist-panel__section-header" });
 		heading.createDiv({ cls: "editorialist-panel__section-title", text: "Recent reviews" });

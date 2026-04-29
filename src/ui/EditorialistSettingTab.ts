@@ -23,6 +23,10 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private static readonly REPOSITORY_URL = "https://github.com/EricRhysTaylor/Editorialist";
 	private static readonly RELEASES_URL = "https://github.com/EricRhysTaylor/Editorialist/releases";
 	private static readonly ISSUES_URL = "https://github.com/EricRhysTaylor/Editorialist/issues";
+	private static readonly LICENSE_URL = "https://github.com/EricRhysTaylor/Editorialist/blob/master/LICENSE";
+	private static readonly OBSIDIAN_PLUGIN_PAGE_URL = "https://obsidian.md/plugins?id=editorialist";
+	private static readonly STATS_REPO_SLUG = "EricRhysTaylor/Editorialist";
+	private static readonly STATS_PLUGIN_ID = "editorialist";
 	private activeBookOnly = true;
 	private activeTab: "core" | "reviewer" = "core";
 	private displayRunId = 0;
@@ -203,11 +207,11 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const titleRow = hero.createDiv({ cls: "editorialist-settings__hero-intro-title-row" });
 		titleRow.createDiv({
 			cls: "editorialist-settings__hero-intro-title",
-			text: "Know which edits to trust",
+			text: "See how each voice shapes your draft",
 		});
 		hero.createDiv({
 			cls: "editorialist-settings__hero-intro-subtitle",
-			text: "Editorialist keeps track of who contributed each revision note so you can see what’s working and what isn’t. Whether feedback comes from a human editor, a beta reader, or AI, you can compare how often suggestions are accepted and decide which voices you want to rely on. Over time, this helps you build a clear sense of which contributors strengthen your writing and which ones to use more selectively.",
+			text: "Editorialist keeps track of who contributed each revision note so you can see what’s working and what isn’t. Whether feedback comes from a human editor, a beta reader, or AI, you can compare how often suggestions are accepted across each contributor. Over time, this helps you understand how each voice shapes your work and where each one tends to add the most value.",
 		});
 
 		const features = hero.createDiv({ cls: "editorialist-settings__hero-features" });
@@ -335,9 +339,69 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		this.createAboutFooterLink(links, "bug", "Issues", EditorialistSettingTab.ISSUES_URL);
 		this.createAboutFooterLink(links, "book-open", "Docs", EditorialistSettingTab.SETTINGS_DOCS_URL);
 
-		footer.createDiv({
-			cls: "editorialist-settings__about-footer-license",
-			text: "Non-Commercial Software License",
+		this.renderAboutFooterStats(footer);
+	}
+
+	private renderAboutFooterStats(parent: HTMLElement): void {
+		const repo = EditorialistSettingTab.STATS_REPO_SLUG;
+		const pluginId = EditorialistSettingTab.STATS_PLUGIN_ID;
+		const wrap = parent.createDiv({ cls: "editorialist-settings__about-footer-stats" });
+
+		const rowOne = wrap.createDiv({ cls: "editorialist-settings__about-footer-stats-row" });
+		this.createAboutFooterStat(rowOne, {
+			href: `${EditorialistSettingTab.REPOSITORY_URL}/stargazers`,
+			src: `https://img.shields.io/github/stars/${repo}?colorA=363a4f&colorB=e0ac00&style=for-the-badge`,
+			alt: "GitHub star count",
+		});
+		this.createAboutFooterStat(rowOne, {
+			href: EditorialistSettingTab.OBSIDIAN_PLUGIN_PAGE_URL,
+			src: `https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/community-plugin-stats.json&query=$.${pluginId}.downloads&label=Downloads&style=for-the-badge&colorA=363a4f&colorB=d53984`,
+			alt: "Plugin downloads",
+		});
+		this.createAboutFooterStat(rowOne, {
+			href: EditorialistSettingTab.LICENSE_URL,
+			src: "https://img.shields.io/static/v1.svg?style=for-the-badge&label=LICENSE&message=NON-COMMERCIAL%20SOFTWARE%20LICENSE&colorA=363a4f&colorB=b7bdf8",
+			alt: "License — Non-Commercial Software License",
+		});
+
+		const rowTwo = wrap.createDiv({ cls: "editorialist-settings__about-footer-stats-row" });
+		this.createAboutFooterStat(rowTwo, {
+			href: `${EditorialistSettingTab.REPOSITORY_URL}/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement`,
+			src: `https://img.shields.io/github/issues/${repo}/enhancement?colorA=363a4f&colorB=00bfa5&style=for-the-badge&label=enhancements`,
+			alt: "Open enhancements",
+		});
+		this.createAboutFooterStat(rowTwo, {
+			href: `${EditorialistSettingTab.REPOSITORY_URL}/issues?q=is%3Aclosed+label%3Aenhancement`,
+			src: `https://img.shields.io/github/issues-closed/${repo}/enhancement?colorA=363a4f&colorB=4a90e2&style=for-the-badge&label=closed%20enhancements`,
+			alt: "Closed enhancements",
+		});
+		this.createAboutFooterStat(rowTwo, {
+			href: `${EditorialistSettingTab.REPOSITORY_URL}/issues?q=is%3Aissue+is%3Aopen+label%3Abug`,
+			src: `https://img.shields.io/github/issues/${repo}/bug?colorA=363a4f&colorB=e93147&style=for-the-badge&label=bugs`,
+			alt: "Open bugs",
+		});
+	}
+
+	private createAboutFooterStat(
+		parent: HTMLElement,
+		opts: { href: string; src: string; alt: string },
+	): void {
+		const link = parent.createEl("a", {
+			href: opts.href,
+			cls: "editorialist-settings__about-footer-stat",
+			attr: {
+				target: "_blank",
+				rel: "noopener noreferrer",
+				"aria-label": opts.alt,
+			},
+		});
+		link.createEl("img", {
+			attr: {
+				src: opts.src,
+				alt: opts.alt,
+				loading: "lazy",
+				referrerpolicy: "no-referrer",
+			},
 		});
 	}
 
