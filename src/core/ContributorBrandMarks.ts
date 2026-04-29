@@ -9,7 +9,48 @@
 // The Anthropic / Claude SVG is preserved here from the user-provided asset
 // so the exact logo remains reusable in future contributor surfaces.
 
+import { normalizeContributorValue } from "./ContributorIdentity";
+
 export type ContributorBrand = "openai" | "anthropic" | "gemini" | "grok";
+
+export interface ContributorBrandLookup {
+	aliases?: ReadonlyArray<string>;
+	displayName?: string;
+	model?: string;
+	provider?: string;
+}
+
+export const resolveContributorBrand = (
+	lookup: ContributorBrandLookup,
+): ContributorBrand | "generic" => {
+	const parts = [lookup.provider, lookup.model, lookup.displayName, ...(lookup.aliases ?? [])];
+	const signature = normalizeContributorValue(
+		parts.filter((value): value is string => Boolean(value?.trim())).join(" "),
+	);
+
+	if (signature.includes("claude") || signature.includes("anthropic")) {
+		return "anthropic";
+	}
+
+	if (signature.includes("gemini") || signature.includes("google")) {
+		return "gemini";
+	}
+
+	if (signature.includes("grok") || signature.includes("xai") || signature.includes("x ai")) {
+		return "grok";
+	}
+
+	if (
+		signature.includes("openai")
+		|| signature.includes("chatgpt")
+		|| /\bgpt\b/.test(signature)
+		|| /\bo[134]\b/.test(signature)
+	) {
+		return "openai";
+	}
+
+	return "generic";
+};
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 

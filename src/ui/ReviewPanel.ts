@@ -1,4 +1,5 @@
 import { ButtonComponent, DropdownComponent, ItemView, setIcon, type WorkspaceLeaf } from "obsidian";
+import { renderContributorBrandMark, resolveContributorBrand } from "../core/ContributorBrandMarks";
 import { formatContributorIdentityLabel, formatReviewerTypeLabel } from "../core/ContributorIdentity";
 import { getEffectiveSuggestionStatus, getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isImplicitlyAcceptedCutSuggestion, isMoveSuggestion } from "../core/OperationSupport";
 import type { ReviewSweepStatus } from "../models/ReviewImport";
@@ -56,17 +57,12 @@ export class ReviewPanel extends ItemView {
 		const launchTarget = !session && !completedSweep && !postCompletionIdle
 			? this.plugin.getNextLogicalReviewLaunchTarget()
 			: null;
-		const isColdIdle = !session && !completedSweep && !postCompletionIdle && !launchTarget;
 
 		const header = this.contentEl.createDiv({ cls: "editorialist-panel__header" });
 		const titleRow = header.createDiv({ cls: "editorialist-panel__title-row" });
 		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__title-icon" });
 		setIcon(titleIcon, "pen-tool");
 		titleRow.createEl("h2", { text: "Editorialist review" });
-
-		if (isColdIdle) {
-			this.renderHeaderLauncherChip(titleRow);
-		}
 
 		const settingsButton = titleRow.createEl("button", {
 			cls: "editorialist-panel__settings-button",
@@ -441,7 +437,7 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-panel__launcher-chip-link",
 			attr: { href: "#", title: "Open the Editorialist launcher" },
 		});
-		link.setText("Open review launcher");
+		link.setText("Launcher");
 		this.bindImmediateAction(link, () => {
 			void this.plugin.openEditorialistModal();
 		});
@@ -457,10 +453,7 @@ export class ReviewPanel extends ItemView {
 		const section = parent.createDiv({ cls: "editorialist-panel__workflows" });
 		const heading = section.createDiv({ cls: "editorialist-panel__section-header" });
 		heading.createDiv({ cls: "editorialist-panel__section-title", text: "How to use Editorialist" });
-		heading.createDiv({
-			cls: "editorialist-panel__section-meta",
-			text: "Two passes, one directory",
-		});
+		this.renderHeaderLauncherChip(heading);
 
 		const grid = section.createDiv({ cls: "editorialist-panel__workflow-grid" });
 		const workflows: Array<{ icon: string; title: string; body: string }> = [
@@ -527,7 +520,8 @@ export class ReviewPanel extends ItemView {
 			if (entry.totalSuggestions > 0) {
 				metaParts.push(`${entry.totalSuggestions} ${entry.totalSuggestions === 1 ? "suggestion" : "suggestions"}`);
 			}
-			metaParts.push(this.formatRelativeTime(entry.updatedAt));
+			const displayTimestamp = entry.cleanedAt ?? entry.importedAt;
+			metaParts.push(this.formatRelativeTime(displayTimestamp));
 			main.createDiv({
 				cls: "editorialist-panel__history-meta",
 				text: metaParts.join(" · "),
@@ -565,10 +559,35 @@ export class ReviewPanel extends ItemView {
 		for (const profile of profiles) {
 			const row = list.createDiv({ cls: "editorialist-panel__contributors-row" });
 
-			const starSlot = row.createSpan({ cls: "editorialist-panel__contributors-star" });
+			const aiBrand = profile.kind === "ai"
+				? resolveContributorBrand({
+					aliases: profile.aliases,
+					displayName: profile.displayName,
+					model: profile.model,
+					provider: profile.provider,
+				})
+				: null;
+			const avatarClasses = ["editorialist-panel__contributors-avatar"];
+			if (profile.kind === "ai") {
+				avatarClasses.push("is-ai");
+			}
 			if (profile.isStarred) {
-				starSlot.addClass("is-starred");
-				setIcon(starSlot, "star");
+				avatarClasses.push("is-starred");
+			}
+			if (aiBrand && aiBrand !== "generic") {
+				avatarClasses.push(`is-provider-${aiBrand}`);
+			}
+			const avatar = row.createSpan({ cls: avatarClasses.join(" ") });
+			const avatarIcon = avatar.createSpan({ cls: "editorialist-panel__contributors-avatar-icon" });
+			if (profile.kind === "ai") {
+				if (aiBrand && aiBrand !== "generic") {
+					avatarIcon.addClass("is-brand");
+					renderContributorBrandMark(avatarIcon, aiBrand);
+				} else {
+					setIcon(avatarIcon, "cpu");
+				}
+			} else {
+				setIcon(avatarIcon, profile.isStarred ? "user-star" : "user-round");
 			}
 
 			const main = row.createDiv({ cls: "editorialist-panel__contributors-main" });

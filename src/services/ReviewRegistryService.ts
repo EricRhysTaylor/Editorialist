@@ -847,10 +847,27 @@ export class ReviewRegistryService {
 		}
 	}
 
+	// Stamps an active-book scene's frontmatter with a "sweep close" marker:
+	//   Editorialist:
+	//     revision: <N>           — incremented each completed sweep pass
+	//     revision_updated: <ISO> — millisecond-precision timestamp
+	//
+	// Counts distinct sweep passes that *closed* on a scene with all suggestions
+	// resolved — not visits, not edits, not interactions. The four gates below
+	// (RT scene, sweep-complete, inside guided sweep, not already bumped this
+	// batch) all enforce that strict semantic.
+	//
+	// Currently the only consumer is the "Sweeps" column in the Settings scene
+	// inventory. The shape was scaffolded for richer workflows that haven't
+	// shipped: "edited since last sweep" detection (compare revision_updated
+	// against file mtime), default-skip already-polished scenes in the next
+	// sweep, per-revision archive/diff, and a Radial Timeline polish-state
+	// overlay. The data shape supports those as-is.
 	async incrementSceneEditorialRevision(
 		notePath: string,
 		batchId?: string,
 	): Promise<{ from: number; to: number } | null> {
+		// Gate 1: must be a scene-class note inside the active book scope.
 		if (!this.isRadialTimelineScene(notePath)) {
 			return null;
 		}
@@ -860,6 +877,8 @@ export class ReviewRegistryService {
 			return null;
 		}
 
+		// Gate 2: dedupe within a batch. Re-entering the same scene during the
+		// same sweep should not double-bump the counter.
 		const entry = batchId ? this.getSweepRegistryEntry(batchId) : null;
 		if (batchId && entry?.editorialRevisionUpdatedNotePaths?.includes(notePath)) {
 			return null;
@@ -878,18 +897,26 @@ export class ReviewRegistryService {
 		let from = 0;
 		let to = 0;
 		await fileManager.processFrontMatter(file, (frontmatter) => {
-			const existingEditorial =
-				frontmatter.editorial && typeof frontmatter.editorial === "object" && !Array.isArray(frontmatter.editorial)
-					? (frontmatter.editorial as Record<string, unknown>)
-					: {};
-			const currentRevision = Number(existingEditorial.revision);
+			const readBlock = (key: string): Record<string, unknown> | null => {
+				const value = frontmatter[key];
+				return value && typeof value === "object" && !Array.isArray(value)
+					? (value as Record<string, unknown>)
+					: null;
+			};
+			// Read from the canonical key first; fall back to the legacy lower-case
+			// `editorial:` key so vaults predating the rename keep their counter.
+			const existing = readBlock("Editorialist") ?? readBlock("editorial") ?? {};
+			const currentRevision = Number(existing.revision);
 			from = Number.isFinite(currentRevision) ? currentRevision : 0;
 			to = from + 1;
-			frontmatter.editorial = {
-				...existingEditorial,
+			frontmatter.Editorialist = {
+				...existing,
 				revision: to,
 				revision_updated: new Date().toISOString(),
 			};
+			if ("editorial" in frontmatter) {
+				delete frontmatter.editorial;
+			}
 		});
 
 		if (batchId) {

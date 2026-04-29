@@ -1084,10 +1084,15 @@ export default class EditorialistPlugin extends Plugin {
 		await this.workflow.finishGuidedSweep();
 	}
 
+	// Bridges the guided-sweep workflow to the per-scene polish counter
+	// (Editorialist.revision in scene frontmatter — see
+	// incrementSceneEditorialRevision for the full intent and gates).
 	async recordCompletedSceneRevision(
 		notePath: string,
 		batchId: string,
 	): Promise<{ from: number; to: number } | null> {
+		// Gate 3: only bump when the user has actually closed all suggestions
+		// for this scene. Abandoning mid-review must not advance the counter.
 		const session = this.getReviewSession();
 		if (session?.notePath === notePath && !this.isSweepComplete(session.suggestions)) {
 			return null;

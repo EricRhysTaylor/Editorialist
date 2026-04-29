@@ -1,10 +1,8 @@
 import { ButtonComponent, Notice, PluginSettingTab, setIcon, TFile, type App } from "obsidian";
-import {
-	formatReviewerTypeLabel,
-	normalizeContributorValue,
-} from "../core/ContributorIdentity";
+import { formatReviewerTypeLabel } from "../core/ContributorIdentity";
 import {
 	renderContributorBrandMark,
+	resolveContributorBrand,
 	type ContributorBrand,
 } from "../core/ContributorBrandMarks";
 import {
@@ -718,7 +716,8 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		[
 			"",
 			vocabulary.singularLabel,
-			"Revisions",
+			"Imports",
+			"Sweeps",
 			"Open",
 			"Done",
 		].forEach((label, index) => {
@@ -801,6 +800,14 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				cls: "editorialist-settings__inventory-col-number",
 				text: `${record.batchCount}`,
 			});
+			const polish = this.readScenePolishState(record.notePath);
+			const sweepsCell = row.createEl("td", {
+				cls: "editorialist-settings__inventory-col-number",
+				text: `${polish.revision}`,
+			});
+			if (polish.lastUpdatedLabel) {
+				sweepsCell.setAttribute("title", `Last sweep close: ${polish.lastUpdatedLabel}`);
+			}
 			row.createEl("td", {
 				cls: "editorialist-settings__inventory-col-number",
 				text: `${openCount}`,
@@ -810,6 +817,30 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				text: `${record.acceptedCount + record.rewrittenCount}`,
 			});
 		}
+	}
+
+	// Reads the per-scene polish state written by the guided-sweep workflow
+	// (see incrementSceneEditorialRevision). Falls back to the legacy lower-case
+	// `editorial:` key for vaults predating the rename.
+	private readScenePolishState(notePath: string): { revision: number; lastUpdatedLabel: string | null } {
+		const file = this.app.vault.getAbstractFileByPath(notePath);
+		if (!(file instanceof TFile)) {
+			return { revision: 0, lastUpdatedLabel: null };
+		}
+		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+		if (!frontmatter) {
+			return { revision: 0, lastUpdatedLabel: null };
+		}
+		const block = (frontmatter.Editorialist ?? frontmatter.editorial) as Record<string, unknown> | undefined;
+		if (!block || typeof block !== "object" || Array.isArray(block)) {
+			return { revision: 0, lastUpdatedLabel: null };
+		}
+		const rawRevision = Number(block.revision);
+		const revision = Number.isFinite(rawRevision) && rawRevision > 0 ? rawRevision : 0;
+		const rawUpdated = typeof block.revision_updated === "string" ? block.revision_updated : null;
+		const parsed = rawUpdated ? Date.parse(rawUpdated) : Number.NaN;
+		const lastUpdatedLabel = Number.isFinite(parsed) ? new Date(parsed).toLocaleString() : null;
+		return { revision, lastUpdatedLabel };
 	}
 
 	private shouldRenderRtSceneGlyphs(activeBook: { label: string | null; sourceFolder: string | null }): boolean {
@@ -1472,35 +1503,12 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private getContributorAvatarBrand(
 		profile: ReturnType<EditorialistPlugin["getSortedReviewerProfiles"]>[number],
 	): ContributorBrand | "generic" {
-		const signature = normalizeContributorValue([
-			profile.provider,
-			profile.model,
-			profile.displayName,
-			...profile.aliases,
-		].filter((value): value is string => Boolean(value?.trim())).join(" "));
-
-		if (signature.includes("claude") || signature.includes("anthropic")) {
-			return "anthropic";
-		}
-
-		if (signature.includes("gemini") || signature.includes("google")) {
-			return "gemini";
-		}
-
-		if (signature.includes("grok") || signature.includes("xai") || signature.includes("x ai")) {
-			return "grok";
-		}
-
-		if (
-			signature.includes("openai")
-			|| signature.includes("chatgpt")
-			|| /\bgpt\b/.test(signature)
-			|| /\bo[134]\b/.test(signature)
-		) {
-			return "openai";
-		}
-
-		return "generic";
+		return resolveContributorBrand({
+			aliases: profile.aliases,
+			displayName: profile.displayName,
+			model: profile.model,
+			provider: profile.provider,
+		});
 	}
 
 	private renderContributorUseIcons(
