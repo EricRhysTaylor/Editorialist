@@ -13,6 +13,7 @@ export interface ClipboardReviewBatch {
 }
 
 export interface EditorialistModalOptions {
+	activeBookLabel?: string | null;
 	activeNoteLabel?: string;
 	currentNoteHasReviewBlock: boolean;
 	currentNoteStatus?: "ready" | "completed";
@@ -27,6 +28,12 @@ export interface EditorialistModalOptions {
 	onOpenReviewPanel: () => Promise<void>;
 	onStartReviewInCurrentNote: () => Promise<void>;
 	onStartReviewInNextNote: () => Promise<void>;
+}
+
+interface ManualImportError {
+	headline: string;
+	details: string[];
+	hint?: string;
 }
 
 type ClipboardState = "checking" | "ready" | "empty";
@@ -48,6 +55,7 @@ interface DetectionItem {
 export class EditorialistModal extends Modal {
 	private clipboardBatch: ClipboardReviewBatch | null = null;
 	private clipboardState: ClipboardState = "checking";
+	private manualImportError: ManualImportError | null = null;
 	private isWorking = false;
 	private manualBatch: ReviewImportBatch | null = null;
 	private manualText = "";
@@ -219,7 +227,13 @@ export class EditorialistModal extends Modal {
 		textArea.onChange((value) => {
 			this.manualText = value;
 			this.manualBatch = null;
+			// Don't re-render on every keystroke; the diagnostic refreshes on next click.
+			this.manualImportError = null;
 		});
+
+		if (this.manualImportError) {
+			this.renderManualImportError(section, this.manualImportError);
+		}
 
 		const actions = section.createDiv({ cls: "editorialist-control-modal__actions" });
 		this.buildButton(actions, "Import and start review", async () => {
@@ -427,25 +441,131 @@ export class EditorialistModal extends Modal {
 		});
 	}
 
+	private renderManualImportError(parent: HTMLElement, error: ManualImportError): void {
+		const panel = parent.createDiv({ cls: "editorialist-control-modal__import-error" });
+		const head = panel.createDiv({ cls: "editorialist-control-modal__import-error-head" });
+		const icon = head.createSpan({ cls: "editorialist-control-modal__import-error-icon" });
+		setIcon(icon, "alert-triangle");
+		head.createDiv({
+			cls: "editorialist-control-modal__import-error-headline",
+			text: error.headline,
+		});
+		for (const detail of error.details) {
+			panel.createDiv({
+				cls: "editorialist-control-modal__import-error-detail",
+				text: detail,
+			});
+		}
+		if (error.hint) {
+			const hint = panel.createDiv({ cls: "editorialist-control-modal__import-error-hint" });
+			const hintIcon = hint.createSpan({ cls: "editorialist-control-modal__import-error-hint-icon" });
+			setIcon(hintIcon, "lightbulb");
+			hint.createSpan({
+				cls: "editorialist-control-modal__import-error-hint-text",
+				text: error.hint,
+			});
+		}
+	}
+
 	private async ensureManualBatch(): Promise<ReviewImportBatch | null> {
 		const rawText = this.manualText.trim();
 		if (!rawText) {
 			return null;
 		}
 
+		let batch: ReviewImportBatch;
 		try {
-			const batch = await this.options.onInspectBatch(rawText);
-			if (!this.hasDetectedSuggestions(batch)) {
-				new Notice("No formatted revision notes found in the pasted text.");
-				return null;
-			}
-
-			this.manualBatch = batch;
-			return batch;
+			batch = await this.options.onInspectBatch(rawText);
 		} catch {
-			new Notice("Could not inspect the pasted notes.");
+			this.setManualImportError({
+				headline: "Could not parse the pasted text",
+				details: [
+					"Editorialist tried to read the paste as formatted revision notes but the parser threw an error.",
+					"If you copied from a chat UI, the response may have been truncated or wrapped in extra formatting.",
+				],
+				hint: "Try copying the AI's reply again — only the metadata header through the last operation block.",
+			});
 			return null;
 		}
+
+		const diagnostic = this.diagnoseManualBatch(batch);
+		if (diagnostic) {
+			this.setManualImportError(diagnostic);
+			return null;
+		}
+
+		this.clearManualImportError();
+		this.manualBatch = batch;
+		return batch;
+	}
+
+	private diagnoseManualBatch(batch: ReviewImportBatch): ManualImportError | null {
+		if (batch.summary.totalSuggestions === 0) {
+			return {
+				headline: "No formatted revision notes detected",
+				details: [
+					"Editorialist looks for `=== EDIT ===`, `=== MEMO ===`, `=== CUT ===`, `=== CONDENSE ===`, or `=== MOVE ===` section markers.",
+					"The paste needs a metadata header (Template:, Reviewer:, etc.) followed by at least one operation block.",
+				],
+				hint: "Click 'Copy formatting instructions' below to see the expected shape, then run it through your AI again.",
+			};
+		}
+
+		const hasReadyGroup = batch.groups.some((group) => group.isReady);
+		if (!hasReadyGroup) {
+			const unmatchedIds = this.collectUniqueUnmatchedSceneIds(batch, 3);
+			const details: string[] = [];
+			if (this.options.activeBookLabel) {
+				details.push(`Active book: ${this.options.activeBookLabel}.`);
+			} else {
+				details.push("No active book is set. Editorialist needs an active book to route scene-level suggestions — open a scene in your manuscript folder first.");
+			}
+			if (unmatchedIds.length > 0) {
+				const noun = unmatchedIds.length === 1 ? "id" : "ids";
+				details.push(`Unmatched SceneId ${noun}: ${unmatchedIds.join(", ")}.`);
+				details.push("These ids don't exist in the active book. Most likely the AI invented them — they look like real ids (e.g. `scn_eb08b7ef`) but no scene file in your vault has them.");
+			} else {
+				details.push("Suggestions had no SceneId or had routing values that didn't resolve to a scene.");
+			}
+			return {
+				headline: `${batch.summary.totalSuggestions} suggestion${batch.summary.totalSuggestions === 1 ? "" : "s"} parsed, but none matched a scene`,
+				details,
+				hint: "Open the scene you want reviewed, then click 'Copy formatting instructions' — the prompt includes your real scene ids and tells the AI not to invent them.",
+			};
+		}
+
+		return null;
+	}
+
+	private collectUniqueUnmatchedSceneIds(batch: ReviewImportBatch, limit: number): string[] {
+		const seen = new Set<string>();
+		const out: string[] = [];
+		for (const result of batch.results) {
+			if (result.routeStatus === "resolved") {
+				continue;
+			}
+			const id = result.suggestion.routing?.sceneId?.trim();
+			if (!id || seen.has(id)) {
+				continue;
+			}
+			seen.add(id);
+			out.push(id);
+			if (out.length >= limit) {
+				break;
+			}
+		}
+		return out;
+	}
+
+	private setManualImportError(error: ManualImportError): void {
+		this.manualImportError = error;
+		this.manualBatch = null;
+		this.showAssignments = false;
+		this.render();
+	}
+
+	private clearManualImportError(): void {
+		this.manualImportError = null;
 	}
 
 	private getPreviewBatch(): ReviewImportBatch | null {

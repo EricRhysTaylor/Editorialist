@@ -39,7 +39,8 @@ import {
 	removeImportedReviewBlocks,
 } from "./core/ReviewBlockFormat";
 import { ReviewEngine } from "./core/ReviewEngine";
-import { buildReviewTemplate } from "./core/ReviewTemplate";
+import { buildReviewTemplate, type ReviewTemplateContext } from "./core/ReviewTemplate";
+import { getSceneIdForFile, isPathInFolderScope, isSceneClassFile } from "./core/VaultScope";
 import { SuggestionParser } from "./core/SuggestionParser";
 import type {
 	EditorialistMetadataExport,
@@ -382,6 +383,7 @@ export default class EditorialistPlugin extends Plugin {
 		const selectedText = this.getActiveEditorSelection();
 		const launchState = this.getEditorialistLaunchState(context);
 		new EditorialistModal(this.app, {
+			activeBookLabel: this.registry.getActiveBookScopeInfo().label,
 			activeNoteLabel: context?.view.file?.basename,
 			currentNoteHasReviewBlock: launchState.currentNoteHasReviewBlock,
 			currentNoteStatus: launchState.currentNoteStatus,
@@ -3996,8 +3998,49 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private async copyReviewTemplateToClipboard(selectedText?: string): Promise<void> {
-		const template = buildReviewTemplate(selectedText);
+		const context = this.gatherReviewTemplateContext();
+		const template = buildReviewTemplate(selectedText, context);
 		await this.copyTextToClipboard(template, "Review template copied", "Could not copy the review template.");
+	}
+
+	// Collects the active book label, the active note's scene id (if any), and
+	// the full list of scene ids in the active book — so the copied prompt can
+	// give the AI a concrete set of valid SceneIds. Without this, AIs invent
+	// plausible-looking ids (e.g. `scn_eb08b7ef`) that fail to route.
+	private gatherReviewTemplateContext(): ReviewTemplateContext {
+		const scope = this.registry.getActiveBookScopeInfo();
+		const activeFile = this.app.workspace.getActiveFile();
+		const sceneIds: { id: string; title: string }[] = [];
+		let activeSceneId: string | null = null;
+
+		if (scope.sourceFolder) {
+			const seenIds = new Set<string>();
+			for (const file of this.app.vault.getMarkdownFiles()) {
+				if (!isPathInFolderScope(file.path, scope.sourceFolder)) {
+					continue;
+				}
+				if (!isSceneClassFile(this.app, file)) {
+					continue;
+				}
+				const sceneId = getSceneIdForFile(this.app, file);
+				if (!sceneId || seenIds.has(sceneId)) {
+					continue;
+				}
+				seenIds.add(sceneId);
+				sceneIds.push({ id: sceneId, title: file.basename });
+			}
+			sceneIds.sort((left, right) => left.title.localeCompare(right.title, undefined, { numeric: true }));
+		}
+
+		if (activeFile) {
+			activeSceneId = getSceneIdForFile(this.app, activeFile) ?? null;
+		}
+
+		return {
+			bookLabel: scope.label,
+			activeSceneId,
+			sceneIds,
+		};
 	}
 
 	async copyTextToClipboard(

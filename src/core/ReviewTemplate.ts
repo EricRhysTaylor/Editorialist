@@ -72,20 +72,23 @@ const REVIEW_TEMPLATE_GUIDANCE = [
 	"",
 	"  Format A — REVIEW BLOCK (per-scene line edits, memos, cuts, condenses, moves).",
 	"             Use when the work is concrete prose-level changes targeting specific",
-	"             scenes. Output the fenced block exactly as shown below.",
+	"             scenes.",
 	"",
 	"  Format B — EDITORIALISM FILE (structural / multi-scene / doctrinal agenda).",
 	"             Use when the work spans scene ranges, applies to the whole",
 	"             manuscript, defines design intent, or organizes a checklist the",
 	"             author needs to walk through across multiple sessions. Output the",
-	"             markdown file exactly as shown below — the author saves it to",
+	"             markdown file in full — the author saves it to",
 	`             \`Editorialist/<Book>/<Title>.md\` and the ${EDITORIALISM_TYPE_VALUE} panel picks it up.`,
+	"",
+	"Note on code fences: most chat UIs strip outer triple-backtick fences when the user",
+	"copies your reply. Editorialist's importer accepts both fenced and unfenced output —",
+	"what matters is the metadata header and the `=== SECTION ===` markers. Don't worry",
+	"about preserving the fences; produce the content cleanly either way.",
 	"",
 	"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
 	"FORMAT A — REVIEW BLOCK",
 	"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-	"",
-	"Return only the fenced block — no surrounding prose.",
 	"",
 	"Use === MEMO === sections for editorial commentary that doesn't belong inline as a line",
 	"edit. Use as many MEMO blocks as you need — they can be freeform prose, or use the",
@@ -100,6 +103,11 @@ const REVIEW_TEMPLATE_GUIDANCE = [
 	"Each operation entry (EDIT / CUT / CONDENSE / MOVE) targets a single scene via SceneId.",
 	"Items in the same block may target different scenes — repeat the operation header and",
 	"use the appropriate SceneId for each.",
+	"",
+	"SceneIds: every entry's SceneId MUST be a real value drawn from the manuscript or the",
+	"\"Scene IDs in this context\" list provided below. Do NOT invent IDs. Do NOT use the",
+	"literal placeholder `scn_xxxxxxxx` — entries with that placeholder will fail to route",
+	"and the import will produce nothing visible.",
 ];
 
 export const EDITORIALISM_FILE_TEMPLATE = [
@@ -156,7 +164,51 @@ const EDITORIALISM_TEMPLATE_GUIDANCE = [
 	"section heading. Default new items to `[ ]` open.",
 ];
 
-export function buildReviewTemplate(selectedText?: string): string {
+export interface ReviewTemplateContext {
+	bookLabel?: string | null;
+	activeSceneId?: string | null;
+	sceneIds?: ReadonlyArray<{ id: string; title: string }>;
+}
+
+function buildSceneIdContextSection(context: ReviewTemplateContext): string | null {
+	const hasAnyContext = Boolean(
+		context.bookLabel || context.activeSceneId || (context.sceneIds && context.sceneIds.length > 0),
+	);
+	if (!hasAnyContext) {
+		return null;
+	}
+	const lines: string[] = [
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+		"SCENE IDS — USE THESE EXACT VALUES",
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+		"",
+	];
+	if (context.bookLabel) {
+		lines.push(`Active book: ${context.bookLabel}`);
+	}
+	if (context.activeSceneId) {
+		lines.push(`Active scene id: ${context.activeSceneId}`);
+	}
+	if (context.sceneIds && context.sceneIds.length > 0) {
+		lines.push("", `Available scenes in this book (${context.sceneIds.length}):`);
+		for (const entry of context.sceneIds) {
+			lines.push(`- ${entry.id} — ${entry.title}`);
+		}
+	}
+	lines.push(
+		"",
+		"Every SceneId in your output must match one of the values above exactly.",
+		"If your input includes a Radial Timeline manuscript export, scene ids appear",
+		"inline in that export — those match the list here. Never use the placeholder",
+		"`scn_xxxxxxxx`; never invent ids.",
+	);
+	return lines.join("\n");
+}
+
+export function buildReviewTemplate(
+	selectedText?: string,
+	context?: ReviewTemplateContext,
+): string {
 	const parts = [
 		REVIEW_TEMPLATE_GUIDANCE.join("\n"),
 		"",
@@ -166,6 +218,11 @@ export function buildReviewTemplate(selectedText?: string): string {
 		"",
 		EDITORIALISM_FILE_TEMPLATE,
 	];
+
+	const sceneIdSection = context ? buildSceneIdContextSection(context) : null;
+	if (sceneIdSection) {
+		parts.push("", sceneIdSection);
+	}
 
 	if (selectedText?.trim()) {
 		parts.push("", "Passage:", selectedText);
