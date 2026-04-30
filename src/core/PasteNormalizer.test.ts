@@ -1,6 +1,55 @@
 import { describe, expect, it } from "vitest";
 import { normalizeReviewPaste } from "./PasteNormalizer";
 
+describe("normalizeReviewPaste — bare fence label as start signal", () => {
+	it("strips a leading bare 'editorialist-review' line (chat UI dropped the ```)", () => {
+		const input = [
+			"editorialist-review",
+			"Template: Editorialist advanced",
+			"=== EDIT ===",
+			"SceneId: scn_a",
+			"Original: foo",
+			"Revised: bar",
+		].join("\n");
+
+		const out = normalizeReviewPaste(input);
+		expect(out.split("\n")[0]).toBe("Template: Editorialist advanced");
+	});
+
+	it("treats the bare label as a stronger signal than later prelude prose", () => {
+		const input = [
+			"Sure, here's the review:",
+			"",
+			"editorialist-review",
+			"Template: Editorialist advanced",
+			"=== EDIT ===",
+			"SceneId: scn_a",
+			"Original: foo",
+			"Revised: bar",
+		].join("\n");
+
+		const out = normalizeReviewPaste(input);
+		expect(out).not.toContain("Sure, here's the review");
+		expect(out).not.toContain("editorialist-review");
+		expect(out.split("\n")[0]).toBe("Template: Editorialist advanced");
+	});
+
+	it("leaves a proper fenced ```editorialist-review block intact", () => {
+		const input = [
+			"```editorialist-review",
+			"Template: Editorialist advanced",
+			"=== EDIT ===",
+			"SceneId: scn_a",
+			"Original: foo",
+			"Revised: bar",
+			"```",
+		].join("\n");
+
+		const out = normalizeReviewPaste(input);
+		expect(out).toContain("```editorialist-review");
+	});
+});
+
 describe("normalizeReviewPaste", () => {
 	it("rewrites markdown-heading delimiters to canonical form", () => {
 		const input = [

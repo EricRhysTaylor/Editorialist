@@ -268,9 +268,10 @@ function extractRawTopReviewBlock(noteText: string): ExtractedReviewBlock | null
 
 			const trimmed = line.text.trim();
 			if (trimmed === "") {
-				if (sawSection) {
-					currentField = null;
-				}
+				// Inside a section body, blank lines are paragraph breaks — they do
+				// NOT terminate the field continuation. Keeping currentField intact
+				// lets memo sections contain bullet lists, multi-paragraph prose,
+				// and dividers without dropping out of the block.
 				lastIncludedIndex = index;
 				endOffset = line.endOffset;
 				continue;

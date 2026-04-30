@@ -4,6 +4,41 @@ import { SuggestionParser } from "./SuggestionParser";
 import { ReviewerDirectory } from "../state/ReviewerDirectory";
 
 describe("user paste #2 — leading bare fence label", () => {
+  it("preserves trailing memo with bullet-list prose after blank lines", () => {
+    const paste = `editorialist-review
+Template: Editorialist advanced
+Reviewer: GPT-5.4
+
+=== EDIT ===
+SceneId: scn_a
+Original: foo
+Revised: bar
+Why: tighter
+
+⸻
+
+=== MEMO ===
+SceneId: scn_a
+Issues:
+The hybrid transformation sequence is now strong, but you can push it one step further by clarifying the choice moment:
+
+* Add a clearer beat where she refuses → delays → gives in
+* Right now it flows as escalation → inevitability
+* You want: moral resistance → collapse → action
+
+This will make the act feel like a defining character moment, not just a survival reflex.`;
+
+    const normalized = normalizeImportedReviewText(paste);
+    expect(normalized).not.toBeNull();
+    expect(normalized).toContain("=== MEMO ===");
+    expect(normalized).toContain("moral resistance");
+
+    const parser = new SuggestionParser(new ReviewerDirectory());
+    const parsed = parser.parse(normalized!);
+    expect(parsed.suggestions).toHaveLength(1);
+    expect(parsed.memos).toHaveLength(1);
+  });
+
   it("strips bare 'editorialist-review' line and parses everything", () => {
     const paste = `editorialist-review
 Template: Editorialist advanced

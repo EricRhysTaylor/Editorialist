@@ -1,5 +1,17 @@
 import { REVIEW_BLOCK_FENCE } from "./ReviewBlockFormat";
 
+// A line whose trimmed content is ONLY the bare fence label (e.g.
+// `editorialist-review`) with NO leading triple-backticks. Many chat UIs strip
+// the surrounding ``` fences when users copy a reply, leaving the language
+// label dangling on its own line — that's the symptom we anchor on here.
+// Proper fenced opens like ```editorialist-review are caught by the existing
+// "starts with ```" check and must NOT match this pattern (otherwise we'd
+// strip the leading fence and break canonical fenced blocks).
+const FENCE_LABEL_LINE_PATTERN = new RegExp(
+	`^\\s*${REVIEW_BLOCK_FENCE}\\s*$`,
+	"i",
+);
+
 const OPERATION_KEYWORDS = ["EDIT", "MOVE", "CUT", "CONDENSE", "MEMO"] as const;
 type OperationKeyword = (typeof OPERATION_KEYWORDS)[number];
 
@@ -77,10 +89,19 @@ export function normalizeReviewPaste(rawText: string): string {
 function stripChatPrelude(text: string): string {
 	const lines = text.split("\n");
 	let firstSignal = -1;
+	let signalIsFenceLabel = false;
 	for (let index = 0; index < lines.length; index += 1) {
 		const trimmed = (lines[index] ?? "").trim();
 		if (!trimmed) {
 			continue;
+		}
+
+		// A bare `editorialist-review` line is the strongest start signal — chat UIs
+		// strip the surrounding ``` fences but usually leave the label intact.
+		if (FENCE_LABEL_LINE_PATTERN.test(trimmed)) {
+			firstSignal = index;
+			signalIsFenceLabel = true;
+			break;
 		}
 
 		if (trimmed.startsWith("```")) {
@@ -100,11 +121,17 @@ function stripChatPrelude(text: string): string {
 		}
 	}
 
-	if (firstSignal <= 0) {
+	if (firstSignal < 0) {
 		return text;
 	}
 
-	return lines.slice(firstSignal).join("\n");
+	// When the signal is the bare fence label, drop that label line itself —
+	// downstream extractors look for metadata or section markers, not the label.
+	const sliceFrom = signalIsFenceLabel ? firstSignal + 1 : firstSignal;
+	if (sliceFrom <= 0) {
+		return text;
+	}
+	return lines.slice(sliceFrom).join("\n");
 }
 
 function unwrapOuterFenceLeniently(text: string): string {

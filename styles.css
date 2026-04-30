@@ -3984,6 +3984,31 @@
 	color: var(--text-normal);
 }
 
+.editorialist-control-modal__validation-ok {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	margin-top: 0.65rem;
+	padding: 0.4rem 0.65rem;
+	border-radius: 999px;
+	border: 1px solid color-mix(in srgb, var(--color-green) 45%, var(--background-modifier-border));
+	background: color-mix(in srgb, var(--color-green) 10%, var(--background-secondary));
+	font-size: var(--font-ui-smaller);
+	color: var(--text-normal);
+	align-self: flex-start;
+}
+
+.editorialist-control-modal__validation-ok-icon {
+	display: inline-flex;
+	align-items: center;
+	color: color-mix(in srgb, var(--color-green) 80%, var(--text-normal));
+}
+
+.editorialist-control-modal__validation-ok-icon svg {
+	width: 0.95rem;
+	height: 0.95rem;
+}
+
 .editorialist-control-modal__import-error-head {
 	display: flex;
 	align-items: center;

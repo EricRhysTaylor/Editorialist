@@ -56,6 +56,9 @@ export class EditorialistModal extends Modal {
 	private clipboardBatch: ClipboardReviewBatch | null = null;
 	private clipboardState: ClipboardState = "checking";
 	private manualImportError: ManualImportError | null = null;
+	private manualValidationState: "idle" | "pending" | "ok" | "error" = "idle";
+	private manualValidationToken = 0;
+	private manualValidationTimer: number | null = null;
 	private isWorking = false;
 	private manualBatch: ReviewImportBatch | null = null;
 	private manualText = "";
@@ -74,6 +77,10 @@ export class EditorialistModal extends Modal {
 	}
 
 	onClose(): void {
+		if (this.manualValidationTimer !== null) {
+			window.clearTimeout(this.manualValidationTimer);
+			this.manualValidationTimer = null;
+		}
 		this.contentEl.empty();
 		this.modalEl.removeClass("editorialist-control-modal");
 	}
@@ -165,6 +172,7 @@ export class EditorialistModal extends Modal {
 					this.showManualPaste = !this.showManualPaste;
 					if (this.showManualPaste && !this.manualText.trim()) {
 						this.manualText = clipboardBatch.rawText;
+						this.scheduleManualValidation();
 					}
 					this.render();
 				},
@@ -227,16 +235,23 @@ export class EditorialistModal extends Modal {
 		textArea.onChange((value) => {
 			this.manualText = value;
 			this.manualBatch = null;
-			// Don't re-render on every keystroke; the diagnostic refreshes on next click.
-			this.manualImportError = null;
+			this.scheduleManualValidation();
 		});
 
 		if (this.manualImportError) {
 			this.renderManualImportError(section, this.manualImportError);
+		} else if (this.manualValidationState === "ok" && this.manualBatch) {
+			this.renderManualValidationOk(section, this.manualBatch);
 		}
 
+		const hasText = Boolean(this.manualText.trim());
+		const importDisabled = !hasText
+			|| this.manualValidationState === "pending"
+			|| this.manualValidationState === "error";
+		const importLabel = this.getImportButtonLabel();
+
 		const actions = section.createDiv({ cls: "editorialist-control-modal__actions" });
-		this.buildButton(actions, "Import and start review", async () => {
+		this.buildButton(actions, importLabel, async () => {
 			const batch = await this.ensureManualBatch();
 			if (!batch) {
 				return;
@@ -246,8 +261,8 @@ export class EditorialistModal extends Modal {
 			this.close();
 		}, {
 			cta: true,
-			disabled: !this.manualText.trim(),
-			icon: "download",
+			disabled: importDisabled,
+			icon: this.manualValidationState === "error" ? "alert-triangle" : "download",
 		});
 		this.buildButton(actions, "Preview destinations", async () => {
 			const batch = await this.ensureManualBatch();
@@ -259,9 +274,32 @@ export class EditorialistModal extends Modal {
 			this.showAssignments = true;
 			this.render();
 		}, {
-			disabled: !this.manualText.trim(),
+			disabled: !hasText || this.manualValidationState === "pending",
 			icon: "navigation",
 			subtle: true,
+		});
+	}
+
+	private getImportButtonLabel(): string {
+		switch (this.manualValidationState) {
+			case "pending":
+				return "Checking paste…";
+			case "error":
+				return "Can't import — see issues above";
+			default:
+				return "Import and start review";
+		}
+	}
+
+	private renderManualValidationOk(parent: HTMLElement, batch: ReviewImportBatch): void {
+		const banner = parent.createDiv({ cls: "editorialist-control-modal__validation-ok" });
+		const icon = banner.createSpan({ cls: "editorialist-control-modal__validation-ok-icon" });
+		setIcon(icon, "check-circle-2");
+		const matched = batch.summary.totalMatchedScenes;
+		const sceneNoun = matched === 1 ? "scene" : "scenes";
+		banner.createSpan({
+			cls: "editorialist-control-modal__validation-ok-text",
+			text: `${batch.summary.totalSuggestions} suggestion${batch.summary.totalSuggestions === 1 ? "" : "s"} ready · ${matched} matched ${sceneNoun}`,
 		});
 	}
 
@@ -496,7 +534,76 @@ export class EditorialistModal extends Modal {
 
 		this.clearManualImportError();
 		this.manualBatch = batch;
+		this.manualValidationState = "ok";
 		return batch;
+	}
+
+	// Schedules a debounced validation pass so the diagnostic panel and the
+	// import button update reactively as the user pastes/edits — they don't have
+	// to click a button to find out the paste is rejected.
+	private scheduleManualValidation(): void {
+		if (this.manualValidationTimer !== null) {
+			window.clearTimeout(this.manualValidationTimer);
+		}
+		const trimmed = this.manualText.trim();
+		if (!trimmed) {
+			this.manualValidationState = "idle";
+			this.manualImportError = null;
+			this.manualBatch = null;
+			this.render();
+			return;
+		}
+		this.manualValidationState = "pending";
+		this.manualImportError = null;
+		this.manualValidationTimer = window.setTimeout(() => {
+			this.manualValidationTimer = null;
+			void this.runManualValidation();
+		}, 450);
+	}
+
+	private async runManualValidation(): Promise<void> {
+		const myToken = ++this.manualValidationToken;
+		const rawText = this.manualText.trim();
+		if (!rawText) {
+			return;
+		}
+
+		let batch: ReviewImportBatch;
+		try {
+			batch = await this.options.onInspectBatch(rawText);
+		} catch {
+			if (myToken !== this.manualValidationToken) {
+				return;
+			}
+			this.manualBatch = null;
+			this.manualValidationState = "error";
+			this.manualImportError = {
+				headline: "Could not parse the pasted text",
+				details: [
+					"Editorialist tried to read the paste as formatted revision notes but the parser threw an error.",
+					"If you copied from a chat UI, the response may have been truncated or wrapped in extra formatting.",
+				],
+				hint: "Try copying the AI's reply again — only the metadata header through the last operation block.",
+			};
+			this.render();
+			return;
+		}
+
+		if (myToken !== this.manualValidationToken) {
+			return;
+		}
+
+		const diagnostic = this.diagnoseManualBatch(batch);
+		if (diagnostic) {
+			this.manualBatch = null;
+			this.manualValidationState = "error";
+			this.manualImportError = diagnostic;
+		} else {
+			this.manualBatch = batch;
+			this.manualValidationState = "ok";
+			this.manualImportError = null;
+		}
+		this.render();
 	}
 
 	private diagnoseManualBatch(batch: ReviewImportBatch): ManualImportError | null {
