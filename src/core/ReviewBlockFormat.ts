@@ -6,6 +6,10 @@ const REVIEW_SECTION_PATTERN = /^\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\[)\s*(EDIT|MO
 const REVIEW_METADATA_PATTERN =
 	/^(BatchId|ImportedBy|Template|TemplateYear|SupportedOperations|SceneIdSource|Reviewer|ReviewerType|Provider|Model)\s*:/im;
 const GENERAL_FIELD_PATTERN = /^([A-Za-z][A-Za-z ]+):\s*(.*)$/;
+// Decorative dividers some LLMs emit between sections (e.g. `⸻`, `---`, `***`,
+// `═══`). Detected as a line of punctuation/symbol characters with no letters
+// or digits — skipped without terminating the raw block.
+const DIVIDER_LINE_PATTERN = /^[^\p{L}\p{N}]+$/u;
 const REVIEW_METADATA_KEYS = new Set([
 	"batchid",
 	"importedby",
@@ -301,6 +305,13 @@ function extractRawTopReviewBlock(noteText: string): ExtractedReviewBlock | null
 			}
 
 			if (currentField) {
+				lastIncludedIndex = index;
+				endOffset = line.endOffset;
+				continue;
+			}
+
+			// Decorative divider between sections — skip without ending the block.
+			if (DIVIDER_LINE_PATTERN.test(trimmed)) {
 				lastIncludedIndex = index;
 				endOffset = line.endOffset;
 				continue;
