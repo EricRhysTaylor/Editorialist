@@ -9,7 +9,7 @@ import type {
 	ReviewTargetRef,
 } from "../models/ReviewSuggestion";
 import { rewriteAnchorEdit } from "./AnchorDirective";
-import { findExactMatches, normalizeMatchText } from "./TextMatching";
+import { findExactMatches, findFuzzyMatches, normalizeMatchText } from "./TextMatching";
 
 interface TextResolution {
 	matchCount: number;
@@ -300,6 +300,37 @@ export class MatchEngine {
 			};
 		}
 
+		// Byte-exact match failed. Try a quote/dash/whitespace-tolerant pass
+		// before giving up — AIs frequently emit curly quotes, em-dashes, or
+		// collapsed whitespace that wouldn't match a manuscript with straight
+		// punctuation.
+		const fuzzyRanges = findFuzzyMatches(noteText, text);
+		if (fuzzyRanges.length === 1) {
+			const range = fuzzyRanges[0];
+			if (range) {
+				return {
+					matchCount: 1,
+					target: {
+						text,
+						startOffset: range.startOffset,
+						endOffset: range.endOffset,
+						matchType: "exact",
+						reason: "Match found after normalizing quotes/dashes/whitespace.",
+					},
+				};
+			}
+		}
+		if (fuzzyRanges.length > 1) {
+			return {
+				matchCount: fuzzyRanges.length,
+				target: {
+					text,
+					matchType: "multiple",
+					reason: "Multiple matches found after normalizing quotes/dashes/whitespace.",
+				},
+			};
+		}
+
 		if (alternateText && noteText.includes(alternateText)) {
 			const alternateMatches = findExactMatches(noteText, alternateText);
 			if (alternateMatches.length === 1) {
@@ -326,6 +357,27 @@ export class MatchEngine {
 					reason: "Suggestion may already be applied.",
 				},
 			};
+		}
+
+		// One more pass for the alternate text (revised), in case the user has
+		// already partially applied a suggestion under fuzzy-equivalent punctuation.
+		if (alternateText) {
+			const alternateFuzzy = findFuzzyMatches(noteText, alternateText);
+			if (alternateFuzzy.length >= 1) {
+				const range = alternateFuzzy[0];
+				if (range) {
+					return {
+						matchCount: 0,
+						target: {
+							text,
+							startOffset: range.startOffset,
+							endOffset: range.endOffset,
+							matchType: "already_applied",
+							reason: "Suggestion may already be applied (matched after normalizing punctuation).",
+						},
+					};
+				}
+			}
 		}
 
 		return {

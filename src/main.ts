@@ -1607,6 +1607,34 @@ export default class EditorialistPlugin extends Plugin {
 		return this.registry.getSweepRegistryEntries();
 	}
 
+	// Aggregates per-suggestion decisions across scenes that participated in a
+	// given sweep batch. Exact when each touched scene has only seen this one
+	// batch (the common case); approximate when scenes are shared across
+	// batches — in that case counts are the union, which is acceptable for the
+	// at-a-glance Recent Reviews display.
+	getBatchDecisionStats(batchId: string): {
+		accepted: number;
+		rejected: number;
+		rewritten: number;
+		deferred: number;
+	} {
+		const records = this.registry.getSceneReviewRecords();
+		let accepted = 0;
+		let rejected = 0;
+		let rewritten = 0;
+		let deferred = 0;
+		for (const record of records) {
+			if (!record.batchIds.includes(batchId)) {
+				continue;
+			}
+			accepted += record.acceptedCount;
+			rejected += record.rejectedCount;
+			rewritten += record.rewrittenCount;
+			deferred += record.deferredCount;
+		}
+		return { accepted, rejected, rewritten, deferred };
+	}
+
 	getSceneReviewRecords(options?: { activeBookOnly?: boolean }): SceneReviewRecord[] {
 		return this.registry.getSceneReviewRecords(options);
 	}

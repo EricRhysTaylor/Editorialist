@@ -4491,6 +4491,61 @@
 	background: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary));
 }
 
+.editorialist-panel__history-stats {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+}
+
+.editorialist-panel__history-stat {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.2rem;
+	padding: 0.15rem 0.4rem;
+	border-radius: 6px;
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	background: color-mix(in srgb, var(--background-modifier-border) 32%, transparent);
+	color: var(--text-muted);
+}
+
+.editorialist-panel__history-stat.is-zero {
+	opacity: 0.4;
+}
+
+.editorialist-panel__history-stat-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.editorialist-panel__history-stat-icon svg {
+	width: 0.8rem;
+	height: 0.8rem;
+	stroke-width: 2.2px;
+}
+
+.editorialist-panel__history-stat--accepted {
+	color: color-mix(in srgb, var(--color-green) 70%, var(--text-normal));
+	background: color-mix(in srgb, var(--color-green) 14%, var(--background-primary));
+}
+
+.editorialist-panel__history-stat--rejected {
+	color: color-mix(in srgb, var(--color-red) 65%, var(--text-normal));
+	background: color-mix(in srgb, var(--color-red) 12%, var(--background-primary));
+}
+
+.editorialist-panel__history-stat--rewritten {
+	color: color-mix(in srgb, var(--color-purple) 65%, var(--text-normal));
+	background: color-mix(in srgb, var(--color-purple) 12%, var(--background-primary));
+}
+
+.editorialist-panel__history-stat--deferred {
+	color: color-mix(in srgb, var(--color-yellow) 70%, var(--text-normal));
+	background: color-mix(in srgb, var(--color-yellow) 14%, var(--background-primary));
+}
+
 /* === Contributors ======================================================== */
 .editorialist-panel__contributors {
 	margin: 0.85rem 0 0.5rem;

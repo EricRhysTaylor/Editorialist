@@ -2,7 +2,6 @@ import { ButtonComponent, DropdownComponent, ItemView, setIcon, type WorkspaceLe
 import { renderContributorBrandMark, resolveContributorBrand } from "../core/ContributorBrandMarks";
 import { formatContributorIdentityLabel, formatReviewerTypeLabel } from "../core/ContributorIdentity";
 import { getEffectiveSuggestionStatus, getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isImplicitlyAcceptedCutSuggestion, isMoveSuggestion } from "../core/OperationSupport";
-import type { ReviewSweepStatus } from "../models/ReviewImport";
 import type { ReviewSuggestion, SceneMemo } from "../models/ReviewSuggestion";
 import type { default as EditorialistPlugin, ReviewStateIndexEntry, ReviewStateOverview } from "../main";
 
@@ -508,20 +507,13 @@ export class ReviewPanel extends ItemView {
 			const row = list.createDiv({ cls: "editorialist-panel__history-row" });
 			const main = row.createDiv({ cls: "editorialist-panel__history-main" });
 
-			const titleText = entry.activeBookLabel?.trim()
-				|| entry.currentNotePath?.split("/").pop()?.replace(/\.md$/, "")
-				|| entry.importedNotePaths[0]?.split("/").pop()?.replace(/\.md$/, "")
-				|| "Review pass";
+			const sceneTitle = this.formatRecentReviewSceneTitle(entry);
 			main.createDiv({
 				cls: "editorialist-panel__history-title",
-				text: titleText,
+				text: sceneTitle,
 			});
 
 			const metaParts: string[] = [];
-			const noteCount = entry.importedNotePaths.length;
-			if (noteCount > 0) {
-				metaParts.push(`${noteCount} ${noteCount === 1 ? "scene" : "scenes"}`);
-			}
 			if (entry.totalSuggestions > 0) {
 				metaParts.push(`${entry.totalSuggestions} ${entry.totalSuggestions === 1 ? "suggestion" : "suggestions"}`);
 			}
@@ -532,17 +524,66 @@ export class ReviewPanel extends ItemView {
 				text: metaParts.join(" · "),
 			});
 
+			const stats = this.plugin.getBatchDecisionStats(entry.batchId);
 			const statusModifier = entry.status.replace(/_/g, "-");
-			const status = row.createDiv({
-				cls: `editorialist-panel__history-status editorialist-panel__history-status--${statusModifier}`,
+			const chip = row.createDiv({
+				cls: `editorialist-panel__history-stats editorialist-panel__history-stats--${statusModifier}`,
+				attr: {
+					title: this.formatStatsTooltip(stats),
+				},
 			});
-			const statusIcon = status.createSpan({ cls: "editorialist-panel__history-status-icon" });
-			setIcon(statusIcon, this.getSweepStatusIcon(entry.status));
-			status.createSpan({
-				cls: "editorialist-panel__history-status-text",
-				text: this.getSweepStatusLabel(entry.status),
-			});
+			this.renderStatChip(chip, "check", stats.accepted, "accepted");
+			this.renderStatChip(chip, "x", stats.rejected, "rejected");
+			this.renderStatChip(chip, "pencil-line", stats.rewritten, "rewritten");
+			if (stats.deferred > 0) {
+				this.renderStatChip(chip, "circle-pause", stats.deferred, "deferred");
+			}
 		}
+	}
+
+	// Builds the row title from the scenes a batch touched. One scene shows its
+	// basename. Two or three list them comma-separated. Four or more truncate
+	// to the first two plus a "+N more" suffix.
+	private formatRecentReviewSceneTitle(entry: ReturnType<typeof this.plugin.getSweepRegistryEntries>[number]): string {
+		const paths = entry.sceneOrder.length > 0 ? entry.sceneOrder : entry.importedNotePaths;
+		const titles = paths
+			.map((path) => path.split("/").pop()?.replace(/\.md$/i, "")?.trim())
+			.filter((title): title is string => Boolean(title));
+		if (titles.length === 0) {
+			return entry.activeBookLabel?.trim() || "Review pass";
+		}
+		if (titles.length === 1) {
+			return titles[0] ?? "Review pass";
+		}
+		if (titles.length <= 3) {
+			return titles.join(", ");
+		}
+		const head = titles.slice(0, 2).join(", ");
+		return `${head}, +${titles.length - 2} more`;
+	}
+
+	private renderStatChip(parent: HTMLElement, icon: string, value: number, kind: string): void {
+		const chip = parent.createSpan({
+			cls: `editorialist-panel__history-stat editorialist-panel__history-stat--${kind}${value === 0 ? " is-zero" : ""}`,
+		});
+		const iconEl = chip.createSpan({ cls: "editorialist-panel__history-stat-icon" });
+		setIcon(iconEl, icon);
+		chip.createSpan({
+			cls: "editorialist-panel__history-stat-value",
+			text: `${value}`,
+		});
+	}
+
+	private formatStatsTooltip(stats: { accepted: number; rejected: number; rewritten: number; deferred: number }): string {
+		const parts = [
+			`${stats.accepted} accepted`,
+			`${stats.rejected} rejected`,
+			`${stats.rewritten} rewritten`,
+		];
+		if (stats.deferred > 0) {
+			parts.push(`${stats.deferred} deferred`);
+		}
+		return parts.join(" · ");
 	}
 
 	private renderContributorsBlock(parent: HTMLElement): void {
@@ -632,28 +673,6 @@ export class ReviewPanel extends ItemView {
 		if (months < 12) return `${months}mo ago`;
 		const years = Math.floor(days / 365);
 		return `${years}y ago`;
-	}
-
-	private getSweepStatusIcon(status: ReviewSweepStatus): string {
-		switch (status) {
-			case "in_progress":
-				return "circle-dot";
-			case "completed":
-				return "check-circle-2";
-			case "cleaned":
-				return "sparkles";
-		}
-	}
-
-	private getSweepStatusLabel(status: ReviewSweepStatus): string {
-		switch (status) {
-			case "in_progress":
-				return "In progress";
-			case "completed":
-				return "Done";
-			case "cleaned":
-				return "Cleaned";
-		}
 	}
 
 	private renderReviewStateCard(overview: ReviewStateOverview): void {
