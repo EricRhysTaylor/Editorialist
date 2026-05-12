@@ -16,6 +16,28 @@ interface TextResolution {
 	target: ReviewTargetRef;
 }
 
+// Tries byte-exact first, then falls back to fuzzy. Returns the first occurrence's
+// offset range, or null if neither matches. Used by the already-applied detection
+// for multi-line paraphrase content where punctuation/whitespace drift between
+// the AI's output and the manuscript would defeat a pure byte-exact .includes.
+function findFirstFuzzyRange(noteText: string, target: string): { startOffset: number; endOffset: number } | null {
+	const exact = findExactMatches(noteText, target);
+	if (exact.length >= 1) {
+		const start = exact[0];
+		if (start !== undefined) {
+			return { startOffset: start, endOffset: start + target.length };
+		}
+	}
+	const fuzzy = findFuzzyMatches(noteText, target);
+	if (fuzzy.length >= 1) {
+		const range = fuzzy[0];
+		if (range) {
+			return { startOffset: range.startOffset, endOffset: range.endOffset };
+		}
+	}
+	return null;
+}
+
 type OperationMatcher = (noteText: string, suggestion: ReviewSuggestion) => ReviewSuggestion;
 
 export class MatchEngine {
@@ -271,6 +293,34 @@ export class MatchEngine {
 	}
 
 	private resolveTextTarget(noteText: string, text: string, alternateText?: string): TextResolution {
+		// Add-only-edit short-circuit. When the revised text is a strict superset
+		// of the original (revised contains original as substring + extra content)
+		// AND the revised text already appears in the manuscript, the edit has
+		// already been applied. Without this check the original would still match
+		// as a substring of the revised text — exact would win and re-applying
+		// would duplicate the added content. Detection uses fuzzy matching so
+		// punctuation/whitespace drift between AI output and manuscript doesn't
+		// hide a legitimate "already applied" state.
+		if (
+			alternateText
+			&& alternateText.length > text.length
+			&& alternateText.includes(text)
+		) {
+			const range = findFirstFuzzyRange(noteText, alternateText);
+			if (range) {
+				return {
+					matchCount: 0,
+					target: {
+						text,
+						startOffset: range.startOffset,
+						endOffset: range.endOffset,
+						matchType: "already_applied",
+						reason: "Suggestion appears to already be applied.",
+					},
+				};
+			}
+		}
+
 		const matches = findExactMatches(noteText, text);
 
 		if (matches.length === 1) {
@@ -331,52 +381,23 @@ export class MatchEngine {
 			};
 		}
 
-		if (alternateText && noteText.includes(alternateText)) {
-			const alternateMatches = findExactMatches(noteText, alternateText);
-			if (alternateMatches.length === 1) {
-				const startOffset = alternateMatches[0];
-				if (startOffset !== undefined) {
-					return {
-						matchCount: 0,
-						target: {
-							text,
-							startOffset,
-							endOffset: startOffset + alternateText.length,
-							matchType: "already_applied",
-							reason: "Suggestion may already be applied.",
-						},
-					};
-				}
-			}
-
-			return {
-				matchCount: 0,
-				target: {
-					text,
-					matchType: "already_applied",
-					reason: "Suggestion may already be applied.",
-				},
-			};
-		}
-
-		// One more pass for the alternate text (revised), in case the user has
-		// already partially applied a suggestion under fuzzy-equivalent punctuation.
+		// Already-applied detection: when the AI's revised text appears in the
+		// manuscript (byte-exact or under fuzzy normalization), the edit/condense
+		// is in place. Particularly important for condense, where AFTER text is
+		// a multi-line paraphrase — byte-exact matching is fragile to any drift.
 		if (alternateText) {
-			const alternateFuzzy = findFuzzyMatches(noteText, alternateText);
-			if (alternateFuzzy.length >= 1) {
-				const range = alternateFuzzy[0];
-				if (range) {
-					return {
-						matchCount: 0,
-						target: {
-							text,
-							startOffset: range.startOffset,
-							endOffset: range.endOffset,
-							matchType: "already_applied",
-							reason: "Suggestion may already be applied (matched after normalizing punctuation).",
-						},
-					};
-				}
+			const range = findFirstFuzzyRange(noteText, alternateText);
+			if (range) {
+				return {
+					matchCount: 0,
+					target: {
+						text,
+						startOffset: range.startOffset,
+						endOffset: range.endOffset,
+						matchType: "already_applied",
+						reason: "Suggestion may already be applied.",
+					},
+				};
 			}
 		}
 

@@ -17,6 +17,7 @@ export class ReviewPanel extends ItemView {
 	private reviewerPickerValue: string | null = null;
 	private starredOnly = false;
 	private reviewStateProcessedExpanded = false;
+	private commentsCollapsed = false;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -699,13 +700,18 @@ export class ReviewPanel extends ItemView {
 			});
 		}
 
+		// Drop the per-group label row when only one group is present — the
+		// header summary already carries that count. Keep group labels when
+		// both groups exist so they discriminate.
+		const hasBothGroups = overview.pending.length > 0 && overview.processed.length > 0;
+
 		if (overview.pending.length > 0) {
-			this.renderReviewStateGroup(card, "Pending", overview.pending, false);
+			this.renderReviewStateGroup(card, "Pending", overview.pending, false, true, hasBothGroups);
 		}
 
 		if (overview.processed.length > 0) {
 			const expanded = this.reviewStateProcessedExpanded;
-			this.renderReviewStateGroup(card, "Ready to clean", overview.processed, true, expanded);
+			this.renderReviewStateGroup(card, "Ready to clean", overview.processed, true, expanded, hasBothGroups);
 		}
 	}
 
@@ -715,32 +721,37 @@ export class ReviewPanel extends ItemView {
 		entries: ReviewStateIndexEntry[],
 		showCleanAction: boolean,
 		expanded: boolean = true,
+		renderGroupHeader: boolean = true,
 	): void {
 		const group = parent.createDiv({ cls: "editorialist-panel__review-state-group" });
 		const isCollapsible = showCleanAction;
-		const isOpen = !isCollapsible || expanded;
+		// Force the group open when its header isn't drawn — there'd be no way
+		// to expand it back.
+		const isOpen = !isCollapsible || expanded || !renderGroupHeader;
 
-		const groupHeader = group.createDiv({
-			cls: `editorialist-panel__review-state-group-header${isCollapsible ? " editorialist-panel__review-state-group-header--collapsible" : ""}`,
-		});
+		if (renderGroupHeader) {
+			const groupHeader = group.createDiv({
+				cls: `editorialist-panel__review-state-group-header${isCollapsible ? " editorialist-panel__review-state-group-header--collapsible" : ""}`,
+			});
 
-		if (isCollapsible) {
-			const caret = groupHeader.createSpan({ cls: "editorialist-panel__review-state-group-caret" });
-			setIcon(caret, isOpen ? "chevron-down" : "chevron-right");
-			this.bindImmediateAction(groupHeader, () => {
-				this.reviewStateProcessedExpanded = !this.reviewStateProcessedExpanded;
-				this.render();
+			if (isCollapsible) {
+				const caret = groupHeader.createSpan({ cls: "editorialist-panel__review-state-group-caret" });
+				setIcon(caret, isOpen ? "chevron-down" : "chevron-right");
+				this.bindImmediateAction(groupHeader, () => {
+					this.reviewStateProcessedExpanded = !this.reviewStateProcessedExpanded;
+					this.render();
+				});
+			}
+
+			groupHeader.createSpan({
+				cls: "editorialist-panel__review-state-group-label",
+				text: label,
+			});
+			groupHeader.createSpan({
+				cls: "editorialist-panel__review-state-group-count",
+				text: `${entries.length}`,
 			});
 		}
-
-		groupHeader.createSpan({
-			cls: "editorialist-panel__review-state-group-label",
-			text: label,
-		});
-		groupHeader.createSpan({
-			cls: "editorialist-panel__review-state-group-count",
-			text: `${entries.length}`,
-		});
 
 		if (!isOpen) {
 			return;
@@ -818,7 +829,9 @@ export class ReviewPanel extends ItemView {
 			return;
 		}
 
-		const card = this.contentEl.createDiv({ cls: "editorialist-panel__comments" });
+		const card = this.contentEl.createDiv({
+			cls: `editorialist-panel__comments${this.commentsCollapsed ? " is-collapsed" : ""}`,
+		});
 
 		const header = card.createDiv({ cls: "editorialist-panel__comments-header" });
 		const titleIcon = header.createSpan({ cls: "editorialist-panel__comments-title-icon" });
@@ -839,6 +852,26 @@ export class ReviewPanel extends ItemView {
 				cls: "editorialist-panel__comments-summary",
 				text: summaryParts.join(" · "),
 			});
+		}
+
+		const toggle = header.createEl("button", {
+			cls: "editorialist-panel__comments-toggle",
+			attr: {
+				type: "button",
+				"aria-label": this.commentsCollapsed ? "Show comments" : "Hide comments",
+				"aria-expanded": this.commentsCollapsed ? "false" : "true",
+				title: this.commentsCollapsed ? "Show comments" : "Hide comments",
+			},
+		});
+		const toggleIcon = toggle.createSpan({ cls: "editorialist-panel__comments-toggle-icon" });
+		setIcon(toggleIcon, this.commentsCollapsed ? "chevron-down" : "chevron-up");
+		this.bindImmediateAction(toggle, () => {
+			this.commentsCollapsed = !this.commentsCollapsed;
+			this.render();
+		});
+
+		if (this.commentsCollapsed) {
+			return;
 		}
 
 		const body = card.createDiv({ cls: "editorialist-panel__comments-body" });
