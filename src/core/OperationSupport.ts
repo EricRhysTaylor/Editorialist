@@ -325,24 +325,37 @@ export function getSuggestionCopyBlocks(suggestion: ReviewSuggestion): ReviewCop
 }
 
 export function getEffectiveSuggestionStatus(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
-	if (isImplicitlyAcceptedCutSuggestion(suggestion)) {
+	if (isImplicitlyAcceptedSuggestion(suggestion)) {
 		return "accepted";
 	}
 
 	return suggestion.status;
 }
 
-export function isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
-	if (
-		suggestion.operation !== "cut" ||
-		(suggestion.status !== "pending" && suggestion.status !== "unresolved")
-	) {
+// A suggestion is "implicitly accepted" when its open status (pending /
+// unresolved) coincides with the original target being absent from the
+// manuscript: the user has either applied the suggestion verbatim, manually
+// revised that passage past recognition, or the AI's original text was never
+// there to begin with. In any case the work for this suggestion is done — the
+// sweep should treat it as resolved so completion can fire.
+//
+// Originally cut-only. Extended to all operations because users hit the same
+// "everything is done but the sweep won't wrap" problem with edits/condenses/
+// moves whose originals were already revised away.
+export function isImplicitlyAcceptedSuggestion(suggestion: ReviewSuggestion): boolean {
+	if (suggestion.status !== "pending" && suggestion.status !== "unresolved") {
 		return false;
 	}
 
 	const target = getSuggestionPrimaryTarget(suggestion);
 	const reason = target?.reason?.toLowerCase() ?? "";
 	return target?.matchType === "already_applied" || target?.matchType === "none" || reason.includes("not found");
+}
+
+// Backward-compatible alias retained for call sites that still reference the
+// older cut-only name. Both names now share the same generalized predicate.
+export function isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
+	return isImplicitlyAcceptedSuggestion(suggestion);
 }
 
 export function isSuggestionOpen(suggestion: ReviewSuggestion): boolean {

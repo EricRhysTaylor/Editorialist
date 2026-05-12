@@ -1886,6 +1886,22 @@ export class ReviewPanel extends ItemView {
 	private getStatusLabel(suggestion: ReviewSuggestion): string {
 		const status = this.getEffectiveStatus(suggestion);
 		if (status === "accepted") {
+			// Distinguish acceptance the user clicked through from acceptance the
+			// engine inferred ("the original isn't here anymore — must already
+			// have been handled"). The implicit case gets the "Already X" framing
+			// the author asked for; the explicit case keeps the active verb.
+			if (this.isImplicitlyAcceptedCutSuggestion(suggestion)) {
+				switch (suggestion.operation) {
+					case "edit":
+						return "Already revised";
+					case "cut":
+						return "Already removed";
+					case "condense":
+						return "Already revised";
+					case "move":
+						return "Already moved";
+				}
+			}
 			switch (suggestion.operation) {
 				case "edit":
 					return "Edited";

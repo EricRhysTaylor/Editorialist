@@ -1484,7 +1484,8 @@
 }
 
 .editorialist-suggestion--accepted,
-.editorialist-suggestion--rejected {
+.editorialist-suggestion--rejected,
+.editorialist-suggestion--rewritten {
 	opacity: 0.8;
 }
 
@@ -1608,22 +1609,16 @@
 	--editorialist-pill-bg: color-mix(in srgb, var(--color-yellow) 8%, var(--background-secondary));
 }
 
-.editorialist-suggestion__label--accepted {
+/* All "done" states (accepted, rewritten, rejected) share the green palette
+   so the eye can find what's still open at a glance. Differentiation between
+   the done states lives in the label text itself ("Edited", "Rewritten",
+   "Rejected"), not the color. */
+.editorialist-suggestion__label--accepted,
+.editorialist-suggestion__label--rewritten,
+.editorialist-suggestion__label--rejected {
 	--editorialist-pill-ink: color-mix(in srgb, var(--color-green) 62%, var(--text-normal));
 	--editorialist-pill-border: color-mix(in srgb, var(--color-green) 26%, var(--background-modifier-border));
 	--editorialist-pill-bg: color-mix(in srgb, var(--color-green) 10%, var(--background-secondary));
-}
-
-.editorialist-suggestion__label--rewritten {
-	--editorialist-pill-ink: color-mix(in srgb, var(--interactive-accent) 44%, var(--text-normal));
-	--editorialist-pill-border: color-mix(in srgb, var(--interactive-accent) 22%, var(--background-modifier-border));
-	--editorialist-pill-bg: color-mix(in srgb, var(--interactive-accent) 9%, var(--background-secondary));
-}
-
-.editorialist-suggestion__label--rejected {
-	--editorialist-pill-ink: color-mix(in srgb, var(--color-red) 52%, var(--text-normal));
-	--editorialist-pill-border: color-mix(in srgb, var(--color-red) 24%, var(--background-modifier-border));
-	--editorialist-pill-bg: color-mix(in srgb, var(--color-red) 10%, var(--background-secondary));
 }
 
 .editorialist-suggestion__label--unresolved {
