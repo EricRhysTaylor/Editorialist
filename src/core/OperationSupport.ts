@@ -11,6 +11,7 @@ import {
 	type ReviewStatus,
 	type ReviewTargetRef,
 } from "../models/ReviewSuggestion";
+import { normalizeMatchText } from "./TextMatching";
 
 export interface ReviewCopyBlock {
 	body: string;
@@ -60,8 +61,16 @@ const operationSupport: {
 				return null;
 			}
 
+			// The span pointed at must be the original — either byte-identical OR
+			// fuzzy-equivalent (quotes/dashes/whitespace normalized). The match
+			// engine may have located this via fuzzy matching when the AI emitted
+			// curly punctuation that differs from the manuscript's; we trust that
+			// resolution rather than rejecting the apply over a punctuation drift.
 			const existingText = noteText.slice(match.startOffset, match.endOffset);
-			if (existingText !== suggestion.payload.original) {
+			if (
+				existingText !== suggestion.payload.original
+				&& normalizeMatchText(existingText) !== normalizeMatchText(suggestion.payload.original)
+			) {
 				return null;
 			}
 
@@ -190,7 +199,10 @@ const operationSupport: {
 			}
 
 			const existingText = noteText.slice(target.startOffset, target.endOffset);
-			if (existingText !== suggestion.payload.target) {
+			if (
+				existingText !== suggestion.payload.target
+				&& normalizeMatchText(existingText) !== normalizeMatchText(suggestion.payload.target)
+			) {
 				return null;
 			}
 
@@ -231,7 +243,10 @@ const operationSupport: {
 			}
 
 			const existingText = noteText.slice(target.startOffset, target.endOffset);
-			if (existingText !== suggestion.payload.target) {
+			if (
+				existingText !== suggestion.payload.target
+				&& normalizeMatchText(existingText) !== normalizeMatchText(suggestion.payload.target)
+			) {
 				return null;
 			}
 

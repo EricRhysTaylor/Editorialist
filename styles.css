@@ -1957,11 +1957,20 @@
 	color: color-mix(in srgb, var(--color-orange) 76%, var(--text-normal));
 }
 
-.editorialist-suggestion__resolution-actions {
+.editorialist-suggestion__footer {
 	display: flex;
 	align-items: center;
-	gap: 0.4rem;
-	margin-top: 0.55rem;
+	gap: 0.5rem;
+	margin-top: 0.65rem;
+	padding-top: 0.55rem;
+	border-top: 1px solid color-mix(in srgb, var(--background-modifier-border) 45%, transparent);
+}
+
+.editorialist-suggestion__footer-actions {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
 }
 
 .editorialist-suggestion__actions {
@@ -1981,7 +1990,7 @@
 .editorialist-suggestion.is-collapsed .editorialist-suggestion__meta,
 .editorialist-suggestion.is-collapsed .editorialist-suggestion__copy,
 .editorialist-suggestion.is-collapsed .editorialist-suggestion__reason,
-.editorialist-suggestion.is-collapsed .editorialist-suggestion__resolution-actions,
+.editorialist-suggestion.is-collapsed .editorialist-suggestion__footer,
 .editorialist-suggestion.is-collapsed .editorialist-reviewer-picker {
 	display: none;
 }
@@ -1994,11 +2003,11 @@
 
 .editorialist-suggestion.is-collapsed:hover .editorialist-suggestion__copy,
 .editorialist-suggestion.is-collapsed:hover .editorialist-suggestion__reason,
-.editorialist-suggestion.is-collapsed:hover .editorialist-suggestion__resolution-actions,
+.editorialist-suggestion.is-collapsed:hover .editorialist-suggestion__footer,
 .editorialist-suggestion.is-collapsed:hover .editorialist-reviewer-picker,
 .editorialist-suggestion.is-collapsed:focus-within .editorialist-suggestion__copy,
 .editorialist-suggestion.is-collapsed:focus-within .editorialist-suggestion__reason,
-.editorialist-suggestion.is-collapsed:focus-within .editorialist-suggestion__resolution-actions,
+.editorialist-suggestion.is-collapsed:focus-within .editorialist-suggestion__footer,
 .editorialist-suggestion.is-collapsed:focus-within .editorialist-reviewer-picker {
 	display: flex;
 }

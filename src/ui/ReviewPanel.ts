@@ -1094,45 +1094,6 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-suggestion__position",
 			text: `${index + 1} of ${total}`,
 		});
-		if (panelPrimary && this.hasAnyJumpTarget(suggestion.id)) {
-			const panelFocus = metaPrimary.createDiv({ cls: "editorialist-suggestion__panel-focus" });
-			const panelFocusIcon = panelFocus.createSpan({ cls: "editorialist-suggestion__panel-focus-icon" });
-			setIcon(panelFocusIcon, "pen-tool");
-			panelFocus.createSpan({
-				cls: "editorialist-suggestion__panel-focus-text",
-				text: "Continue here",
-			});
-		}
-
-		const hasReviewerMenu = this.needsReviewerMenu(suggestion);
-		const actions = meta.createDiv({ cls: "editorialist-suggestion__actions" });
-		const sourceButton = this.renderControlButton(
-			actions,
-			this.getSourceLabel(suggestion),
-			() => {
-				this.toggleReviewerMenu(suggestion);
-			},
-			{
-				disabled: !hasReviewerMenu,
-				icon: "user",
-				trailingIcon: hasReviewerMenu ? (this.reviewerMenuSuggestionId === suggestion.id ? "chevron-up" : "chevron-down") : undefined,
-			},
-		);
-		sourceButton.addClass("editorialist-suggestion__control--source");
-		this.renderControlButton(
-			actions,
-			"",
-			() => {
-				this.toggleJumpMenu(suggestion.id);
-			},
-			{
-				disabled: !this.hasAnyJumpTarget(suggestion.id),
-				icon: "navigation",
-				iconOnly: true,
-				active: this.jumpMenuSuggestionId === suggestion.id,
-				tooltip: this.jumpMenuSuggestionId === suggestion.id ? "Hide jump options" : "Show jump options",
-			},
-		);
 
 		this.renderSuggestionCopy(card, suggestion, selected);
 
@@ -1146,19 +1107,7 @@ export class ReviewPanel extends ItemView {
 			text: this.getSuggestionReason(suggestion),
 		});
 
-		if (this.plugin.canMarkSuggestionRewritten(suggestion.id)) {
-			const resolutionActions = card.createDiv({ cls: "editorialist-suggestion__resolution-actions" });
-			this.renderControlButton(
-				resolutionActions,
-				"Mark as rewritten",
-				() => {
-					void this.plugin.markSuggestionRewritten(suggestion.id);
-				},
-				{
-					icon: "pen-line",
-				},
-			);
-		}
+		this.renderSuggestionFooter(card, suggestion);
 
 		if (this.reviewerMenuSuggestionId === suggestion.id) {
 			this.renderReviewerMenu(card, suggestion);
@@ -1169,6 +1118,57 @@ export class ReviewPanel extends ItemView {
 		}
 
 		return card;
+	}
+
+	// Renders the unified footer row: contributor (left), then jump-options
+	// pointer and "Mark as rewritten" (right). Replaces the older header-cluster
+	// of control pills; keeps the header purely informational (status + position).
+	private renderSuggestionFooter(parent: HTMLElement, suggestion: ReviewSuggestion): void {
+		const footer = parent.createDiv({ cls: "editorialist-suggestion__footer" });
+		const hasReviewerMenu = this.needsReviewerMenu(suggestion);
+		const sourceButton = this.renderControlButton(
+			footer,
+			this.getSourceLabel(suggestion),
+			() => {
+				this.toggleReviewerMenu(suggestion);
+			},
+			{
+				disabled: !hasReviewerMenu,
+				icon: "user",
+				trailingIcon: hasReviewerMenu ? (this.reviewerMenuSuggestionId === suggestion.id ? "chevron-up" : "chevron-down") : undefined,
+			},
+		);
+		sourceButton.addClass("editorialist-suggestion__control--source");
+
+		const trailingActions = footer.createDiv({ cls: "editorialist-suggestion__footer-actions" });
+
+		if (this.plugin.canMarkSuggestionRewritten(suggestion.id)) {
+			this.renderControlButton(
+				trailingActions,
+				"Mark as rewritten",
+				() => {
+					void this.plugin.markSuggestionRewritten(suggestion.id);
+				},
+				{
+					icon: "pen-line",
+				},
+			);
+		}
+
+		this.renderControlButton(
+			trailingActions,
+			"",
+			() => {
+				this.toggleJumpMenu(suggestion.id);
+			},
+			{
+				disabled: !this.hasAnyJumpTarget(suggestion.id),
+				icon: "navigation",
+				iconOnly: true,
+				active: this.jumpMenuSuggestionId === suggestion.id,
+				tooltip: this.jumpMenuSuggestionId === suggestion.id ? "Hide jump options" : "Show jump options",
+			},
+		);
 	}
 
 	private getPanelPrimarySuggestionId(
@@ -1874,10 +1874,20 @@ export class ReviewPanel extends ItemView {
 		}
 
 		if (this.isOtherTextSuggestion(suggestion)) {
-			if (suggestion.operation === "cut") {
-				return "Text removed";
+			// The original/target text the AI named doesn't appear in the
+			// manuscript. Most often the author has already revised that
+			// passage; surface that framing per operation rather than the
+			// old catch-all "Other text" pill.
+			switch (suggestion.operation) {
+				case "edit":
+					return "Already revised";
+				case "cut":
+					return "Already removed";
+				case "condense":
+					return "Already revised";
+				case "move":
+					return "Source missing";
 			}
-			return "Other text";
 		}
 
 		return this.toSentenceCase(status);
