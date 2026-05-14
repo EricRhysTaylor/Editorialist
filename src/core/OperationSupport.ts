@@ -348,8 +348,22 @@ export function isImplicitlyAcceptedSuggestion(suggestion: ReviewSuggestion): bo
 	}
 
 	const target = getSuggestionPrimaryTarget(suggestion);
-	const reason = target?.reason?.toLowerCase() ?? "";
-	return target?.matchType === "already_applied" || target?.matchType === "none" || reason.includes("not found");
+	if (target?.matchType === "already_applied") {
+		return true;
+	}
+
+	// For cut operations, "text not found" legitimately means the cut already
+	// happened — the target is gone from the manuscript, so the work is done.
+	// For edit/condense/move, "not found" instead means the AI's Original/Target
+	// snippet didn't match (punctuation drift, paraphrase, quote wrapping, etc.).
+	// Treating those as accepted silently completes the sweep and hides edits
+	// the user never acted on.
+	if (suggestion.operation === "cut") {
+		const reason = target?.reason?.toLowerCase() ?? "";
+		return target?.matchType === "none" || reason.includes("not found");
+	}
+
+	return false;
 }
 
 // Backward-compatible alias retained for call sites that still reference the
