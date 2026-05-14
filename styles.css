@@ -1089,6 +1089,22 @@
 	color: var(--text-muted);
 }
 
+.editorialist-panel__completion-description-pill {
+	display: inline-flex;
+	align-items: center;
+	margin: 0 0.15rem;
+	padding: 0.05rem 0.4rem;
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 78%, transparent);
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--background-primary) 82%, var(--background-modifier-hover) 18%);
+	color: color-mix(in srgb, var(--text-normal) 88%, var(--text-muted));
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	white-space: nowrap;
+}
+
 .editorialist-panel__completion-steps {
 	display: flex;
 	flex-direction: column;

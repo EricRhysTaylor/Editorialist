@@ -367,10 +367,10 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-panel__completion-summary",
 			text: "No active review",
 		});
-		card.createDiv({
+		const descriptionEl = card.createDiv({
 			cls: "editorialist-panel__completion-description",
-			text: postCompletionIdle.description,
 		});
+		this.renderIdleStateDescription(descriptionEl, postCompletionIdle.description);
 
 		const steps = card.createDiv({ cls: "editorialist-panel__completion-steps" });
 
@@ -426,6 +426,27 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-panel__completion-step-text",
 			text: "Review revision and contributor details in settings.",
 		});
+	}
+
+	private renderIdleStateDescription(parent: HTMLElement, description: string): void {
+		const token = "PENDING EDITS";
+		const tokenIndex = description.indexOf(token);
+		if (tokenIndex === -1) {
+			parent.setText(description);
+			return;
+		}
+		const before = description.slice(0, tokenIndex);
+		const after = description.slice(tokenIndex + token.length);
+		if (before.length > 0) {
+			parent.createSpan({ text: before });
+		}
+		parent.createSpan({
+			cls: "editorialist-panel__completion-description-pill",
+			text: token,
+		});
+		if (after.length > 0) {
+			parent.createSpan({ text: after });
+		}
 	}
 
 	private renderHeaderLauncherChip(parent: HTMLElement): void {

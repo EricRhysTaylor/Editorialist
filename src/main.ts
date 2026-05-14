@@ -1902,7 +1902,7 @@ export default class EditorialistPlugin extends Plugin {
 			return {
 				title: "Editorialist review",
 				description:
-					"Editorialist reviews two kinds of revision work: imported review passes (contributor notes with accept/reject) and pending edits — free-form revision notes across the active book.",
+					"Editorialist reviews two kinds of revision work: imported review notes and PENDING EDITS notes across the active book.",
 			};
 		}
 
@@ -1920,7 +1920,7 @@ export default class EditorialistPlugin extends Plugin {
 		return {
 			title: "Editorialist review",
 			description:
-				"Editorialist reviews two kinds of revision work: imported review passes (contributor notes with accept/reject) and pending edits — free-form revision notes across the active book.",
+				"Editorialist reviews two kinds of revision work: imported review notes and PENDING EDITS notes across the active book.",
 		};
 	}
 
