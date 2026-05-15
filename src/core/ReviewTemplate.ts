@@ -105,9 +105,17 @@ const REVIEW_TEMPLATE_GUIDANCE = [
 	"use the appropriate SceneId for each.",
 	"",
 	"SceneIds: every entry's SceneId MUST be a real value drawn from the manuscript or the",
-	"\"Scene IDs in this context\" list provided below. Do NOT invent IDs. Do NOT use the",
-	"literal placeholder `scn_xxxxxxxx` — entries with that placeholder will fail to route",
-	"and the import will produce nothing visible.",
+	"\"Scene IDs in this context\" list provided below. Do NOT invent IDs.",
+	"",
+	"When the scene id is NOT visible: if the prose you are reviewing was pasted without a",
+	"scene id, and no id in the \"Scene IDs in this context\" list demonstrably belongs to",
+	"that exact text, do NOT guess and do NOT reuse a scene id that appeared earlier in this",
+	"conversation for different prose — a stale or guessed id routes the entire batch to the",
+	"wrong scene silently. Instead, OMIT the SceneId field entirely on those entries.",
+	"Editorialist will route them to the scene the author is currently viewing and flag them",
+	"for manual verification, which is recoverable; a confidently wrong id is not. Add a",
+	"=== MEMO === (no SceneId) stating that the target scene could not be identified from",
+	"the provided text so the author can confirm placement before applying the edits.",
 ];
 
 export const EDITORIALISM_FILE_TEMPLATE = [

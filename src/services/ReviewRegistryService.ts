@@ -634,13 +634,14 @@ export class ReviewRegistryService {
 			};
 		}
 
-		const currentSceneIds = new Set(
-			Object.values(nextIndex)
-				.map((record) => record.sceneId?.trim())
-				.filter((sceneId): sceneId is string => Boolean(sceneId)),
-		);
 		for (const existing of Object.values(this.sceneReviewIndex)) {
-			if (nextIndex[existing.notePath] || (existing.sceneId && currentSceneIds.has(existing.sceneId))) {
+			// Retire any prior record whose note no longer carries the batch. A note that
+			// still holds blocks already has a fresh record in nextIndex. Do NOT keep a
+			// stale record alive just because its sceneId now appears in another note —
+			// that happens when a batch is moved between scenes (e.g. routed to the wrong
+			// scene, then yanked into the right one) and would leave the review panel
+			// permanently stuck on the abandoned scene.
+			if (nextIndex[existing.notePath]) {
 				continue;
 			}
 
