@@ -408,7 +408,42 @@ export class SuggestionParser {
 		}
 
 		const joined = lines.join("\n").trim();
-		return joined.length > 0 ? joined : undefined;
+		if (joined.length === 0) {
+			return undefined;
+		}
+
+		return this.unwrapWrappedQuotes(joined);
+	}
+
+	// Some AIs emit field values wrapped in literal quote characters
+	// (e.g. `Original: "She walked away."`) and escape inner quotes (`\"`) when
+	// the wrapped value contains dialog. The matcher searches for the manuscript
+	// text byte-for-byte, so those outer quotes prevent any match and the whole
+	// batch shows as "not found." Strip the outer pair only when we're confident
+	// it's a wrapper: same quote at both ends, with no UNESCAPED occurrences of
+	// that same quote inside. If the inner text has bare quote chars, treat the
+	// outer pair as literal content and leave the value alone.
+	private unwrapWrappedQuotes(value: string): string {
+		if (value.length < 2) {
+			return value;
+		}
+
+		const first = value[0];
+		const last = value[value.length - 1];
+		const isStraightDouble = first === '"' && last === '"';
+		const isStraightSingle = first === "'" && last === "'";
+		if (!isStraightDouble && !isStraightSingle) {
+			return value;
+		}
+
+		const inner = value.slice(1, -1);
+		const escapeSequence = isStraightDouble ? /\\"/g : /\\'/g;
+		const innerWithoutEscapes = inner.replace(escapeSequence, "");
+		if (innerWithoutEscapes.includes(first)) {
+			return value;
+		}
+
+		return inner.replace(escapeSequence, first);
 	}
 
 	private normalizeFieldName(value: string): string {

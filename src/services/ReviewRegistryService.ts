@@ -1307,6 +1307,33 @@ export class ReviewRegistryService {
 					.filter((path): path is string => Boolean(path)),
 			)];
 
+			// Recompute decision counts from the scenes currently carrying this
+			// batch's review block. Once the batch has no scenes left (cleaned /
+			// replaced), preserve the previously recorded counts so Recent Reviews
+			// keeps the historical stats instead of showing zeros.
+			let acceptedCount = entry.acceptedCount;
+			let rejectedCount = entry.rejectedCount;
+			let rewrittenCount = entry.rewrittenCount;
+			let deferredCount = entry.deferredCount;
+			if (currentPaths.length > 0) {
+				let accepted = 0;
+				let rejected = 0;
+				let rewritten = 0;
+				let deferred = 0;
+				for (const path of currentPaths) {
+					const record = sceneIndex[path];
+					if (!record) continue;
+					accepted += record.acceptedCount;
+					rejected += record.rejectedCount;
+					rewritten += record.rewrittenCount;
+					deferred += record.deferredCount;
+				}
+				acceptedCount = accepted;
+				rejectedCount = rejected;
+				rewrittenCount = rewritten;
+				deferredCount = deferred;
+			}
+
 			nextRegistry[entry.batchId] = {
 				...entry,
 				activeBookLabel: entry.activeBookLabel ?? this.activeBookScope.label ?? undefined,
@@ -1318,6 +1345,10 @@ export class ReviewRegistryService {
 				sceneOrder: nextSceneOrder,
 				status: currentPaths.length === 0 ? "cleaned" : entry.status,
 				updatedAt: now,
+				acceptedCount,
+				rejectedCount,
+				rewrittenCount,
+				deferredCount,
 			};
 		}
 

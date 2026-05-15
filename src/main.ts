@@ -1618,6 +1618,19 @@ export default class EditorialistPlugin extends Plugin {
 		rewritten: number;
 		deferred: number;
 	} {
+		// Prefer the frozen snapshot on the registry entry. It tracks counts live
+		// while the batch is in_progress / completed and preserves them after the
+		// batch is cleaned, so historical Recent Reviews entries keep their stats.
+		const entry = this.registry.getSweepRegistryEntry(batchId);
+		if (entry) {
+			return {
+				accepted: entry.acceptedCount ?? 0,
+				rejected: entry.rejectedCount ?? 0,
+				rewritten: entry.rewrittenCount ?? 0,
+				deferred: entry.deferredCount ?? 0,
+			};
+		}
+
 		const records = this.registry.getSceneReviewRecords();
 		let accepted = 0;
 		let rejected = 0;
@@ -3529,13 +3542,10 @@ export default class EditorialistPlugin extends Plugin {
 			return null;
 		}
 
-		const remainingCount = this.getSceneReviewRecords()
-			.filter((record) => record.batchCount > 0)
-			.reduce((total, record) => total + record.pendingCount + record.unresolvedCount + record.deferredCount, 0);
-		if (remainingCount > 0) {
-			return null;
-		}
-
+		// Per-session completion is independent of other scenes' state: when the
+		// user closes out every suggestion in the active session, advance to the
+		// completion card immediately even if unrelated batches in other scenes
+		// still have pending work. Without this, single-scene reviews never wrap.
 		const currentSession = this.getReviewSession();
 		if (currentSession && !this.hasLiveActionableSuggestions(currentSession.suggestions)) {
 			return {
@@ -3546,6 +3556,13 @@ export default class EditorialistPlugin extends Plugin {
 				startedAt: currentSession.parsedAt,
 				totalSuggestions: currentSession.suggestions.length,
 			};
+		}
+
+		const remainingCount = this.getSceneReviewRecords()
+			.filter((record) => record.batchCount > 0)
+			.reduce((total, record) => total + record.pendingCount + record.unresolvedCount + record.deferredCount, 0);
+		if (remainingCount > 0) {
+			return null;
 		}
 
 		const latestCompletedSweep = this.registry

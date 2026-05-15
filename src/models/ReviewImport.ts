@@ -120,4 +120,12 @@ export interface ReviewSweepRegistryEntry {
 	status: ReviewSweepStatus;
 	totalSuggestions: number;
 	updatedAt: number;
+	// Frozen decision counts. Live-updated while the batch's review blocks are
+	// still present in the manuscript; preserved at their last known value once
+	// the batch is cleaned (block removed or replaced) so Recent Reviews keeps
+	// historical stats instead of resetting to zero.
+	acceptedCount?: number;
+	rejectedCount?: number;
+	rewrittenCount?: number;
+	deferredCount?: number;
 }
