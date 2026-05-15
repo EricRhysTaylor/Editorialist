@@ -1290,9 +1290,13 @@ export class ReviewRegistryService {
 				return currentPaths.find((path) => sceneIndex[path]?.sceneId?.trim() === previousSceneId);
 			};
 
+			// Resolve renames where possible (scene moved to a new path) but keep
+			// historical paths whose blocks have been removed — `sceneOrder` is
+			// the display-side "scenes this batch touched" list and must survive
+			// cleanup so Recent Reviews can still show scene titles. Live
+			// presence is tracked separately via `importedNotePaths`.
 			const nextSceneOrder = entry.sceneOrder
-				.map((path) => resolveCurrentPath(path))
-				.filter((path): path is string => Boolean(path))
+				.map((path) => resolveCurrentPath(path) ?? path)
 				.filter((path, index, paths) => paths.indexOf(path) === index);
 			for (const path of currentPaths) {
 				if (!nextSceneOrder.includes(path)) {
