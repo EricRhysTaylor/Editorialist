@@ -11,6 +11,9 @@ const OPERATION_ICONS: Record<SupportedReviewOperationType, string> = {
 
 let shiftKeyPressed = false;
 let modKeyPressed = false;
+// Persisted across toolbar re-renders so the legend stays open while the
+// author navigates suggestions.
+let legendOpen = false;
 let shiftTrackingAbort: AbortController | null = null;
 const modifierSubscribers = new Set<(state: { modPressed: boolean; shiftPressed: boolean }) => void>();
 
@@ -368,11 +371,24 @@ export function createReviewToolbarElement(
 		return overlay;
 	}
 
+	if (legendOpen) {
+		overlay.classList.add("editorialist-toolbar--legend-open");
+	}
+
 	{
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
 		buildFlatIconButton(leading, "Hide toolbar", "x", () => {
 			plugin.dismissReviewToolbar();
 		});
+		buildFlatIconButton(
+			leading,
+			legendOpen ? "Hide shortcut legend" : "Show shortcut legend",
+			"asterisk",
+			() => {
+				legendOpen = !legendOpen;
+				overlay.classList.toggle("editorialist-toolbar--legend-open", legendOpen);
+			},
+		);
 		if (state.mode === "review" && state.anchorDirection) {
 			const indicator = leading.createSpan({
 				cls: "editorialist-toolbar__anchor-indicator",
@@ -485,12 +501,44 @@ export function createReviewToolbarElement(
 			void plugin.undoLastAppliedSuggestion();
 		}, false);
 	} else {
-		buildButton(actions, "Reject", "x", () => {
+		buildButton(actions, "Reject", "circle-off", () => {
 			void plugin.rejectSelectedSuggestion();
 		}, !state.canReject);
 	}
 
+	renderToolbarLegend(toolbar, applyOperationLabel);
+
 	return overlay;
+}
+
+// Compact reference for the action icons and the Apply button's modifier
+// variants (the only button with shift/cmd alternates). Hidden by default;
+// toggled by the "*" trigger in the leading cluster.
+function renderToolbarLegend(parent: HTMLElement, applyOperationLabel: string): void {
+	const legend = parent.createDiv({ cls: "editorialist-toolbar__legend" });
+	markAsNonEditorSurface(legend);
+
+	const rows: Array<{ icon: string; keys: string; label: string }> = [
+		{ icon: "check", keys: "Click", label: `Apply ${applyOperationLabel}` },
+		{ icon: "list-end", keys: "Shift", label: `Apply ${applyOperationLabel} and advance` },
+		{ icon: "list-checks", keys: "Shift + Cmd", label: "Apply to all" },
+		{ icon: "clock", keys: "Click", label: "Defer" },
+		{ icon: "pen-line", keys: "Click", label: "Rewrite myself" },
+		{ icon: "circle-off", keys: "Click", label: "Reject" },
+		{ icon: "x", keys: "Click", label: "Hide toolbar" },
+	];
+
+	for (const row of rows) {
+		const item = legend.createDiv({ cls: "editorialist-toolbar__legend-row" });
+		markAsNonEditorSurface(item);
+		const iconEl = item.createSpan({ cls: "editorialist-toolbar__legend-icon" });
+		markAsNonEditorSurface(iconEl);
+		setIcon(iconEl, row.icon);
+		const keysEl = item.createSpan({ cls: "editorialist-toolbar__legend-keys", text: row.keys });
+		markAsNonEditorSurface(keysEl);
+		const labelEl = item.createSpan({ cls: "editorialist-toolbar__legend-label", text: row.label });
+		markAsNonEditorSurface(labelEl);
+	}
 }
 
 function buildFlatIconButton(

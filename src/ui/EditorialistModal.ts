@@ -5,7 +5,7 @@ import {
 	REVIEW_TEMPLATE_BLOCK,
 	SUPPORTED_REVIEW_OPERATION_SUMMARY,
 } from "../core/ReviewTemplate";
-import type { ReviewImportBatch } from "../models/ReviewImport";
+import type { ReviewImportBatch, ReviewImportSuggestionResult } from "../models/ReviewImport";
 
 export interface ClipboardReviewBatch {
 	batch: ReviewImportBatch;
@@ -23,7 +23,10 @@ export interface EditorialistModalOptions {
 	onCopyTemplate: () => Promise<void>;
 	onImportBatch: (batch: ReviewImportBatch, startReview: boolean) => Promise<void>;
 	onImportRawToActiveNote: (rawText: string, startReview: boolean) => Promise<void>;
-	onInspectBatch: (rawText: string) => Promise<ReviewImportBatch>;
+	onInspectBatch: (
+		rawText: string,
+		correctedTargets?: ReadonlyMap<string, string>,
+	) => Promise<ReviewImportBatch>;
 	onLoadClipboardBatch: () => Promise<ClipboardReviewBatch | null>;
 	onOpenReviewPanel: () => Promise<void>;
 	onStartReviewInCurrentNote: () => Promise<void>;
@@ -238,8 +241,16 @@ export class EditorialistModal extends Modal {
 			this.scheduleManualValidation();
 		});
 
+		const corrections =
+			this.manualValidationState === "ok" && this.manualBatch
+				? this.collectProposedCorrections(this.manualBatch)
+				: [];
+
 		if (this.manualImportError) {
 			this.renderManualImportError(section, this.manualImportError);
+		} else if (corrections.length > 0) {
+			this.renderProposedCorrections(section, corrections);
+			return;
 		} else if (this.manualValidationState === "ok" && this.manualBatch) {
 			this.renderManualValidationOk(section, this.manualBatch);
 		}
@@ -301,6 +312,93 @@ export class EditorialistModal extends Modal {
 			cls: "editorialist-control-modal__validation-ok-text",
 			text: `${batch.summary.totalSuggestions} suggestion${batch.summary.totalSuggestions === 1 ? "" : "s"} ready · ${matched} matched ${sceneNoun}`,
 		});
+	}
+
+	private collectProposedCorrections(batch: ReviewImportBatch): ReviewImportSuggestionResult[] {
+		return batch.results.filter((result) => Boolean(result.proposedCorrection));
+	}
+
+	// When the AI stamped entries with a stale/wrong SceneId, block the normal
+	// import path and force an explicit decision: re-target every flagged entry
+	// to the scene its text actually lives in, or abort the whole import so the
+	// author can fix the source. Never silently apply.
+	private renderProposedCorrections(
+		parent: HTMLElement,
+		corrections: ReviewImportSuggestionResult[],
+	): void {
+		const panel = parent.createDiv({ cls: "editorialist-control-modal__correction" });
+		const header = panel.createDiv({ cls: "editorialist-control-modal__correction-header" });
+		const icon = header.createSpan({ cls: "editorialist-control-modal__correction-icon" });
+		setIcon(icon, "alert-triangle");
+		header.createSpan({
+			cls: "editorialist-control-modal__correction-title",
+			text: `${corrections.length} entr${corrections.length === 1 ? "y looks" : "ies look"} mis-targeted`,
+		});
+		panel.createDiv({
+			cls: "editorialist-control-modal__correction-copy",
+			text: "The declared SceneId points at a scene that does not contain the quoted text, but the text matches exactly one other scene. This usually means the AI reused a stale scene id from the chat thread.",
+		});
+
+		for (const result of corrections) {
+			const correction = result.proposedCorrection;
+			if (!correction) {
+				continue;
+			}
+			const row = panel.createDiv({ cls: "editorialist-control-modal__correction-row" });
+			row.createDiv({
+				cls: "editorialist-control-modal__correction-op",
+				text: this.toSentenceCase(result.suggestion.operation),
+			});
+			row.createDiv({
+				cls: "editorialist-control-modal__correction-move",
+				text: `${correction.declaredSceneId ?? correction.declaredNoteTitle} (${correction.declaredNoteTitle}) → ${correction.targetNoteTitle}${correction.targetSceneId ? ` (${correction.targetSceneId})` : ""}`,
+			});
+		}
+
+		const actions = panel.createDiv({ cls: "editorialist-control-modal__actions" });
+		this.buildButton(
+			actions,
+			`Re-target ${corrections.length} and import`,
+			async () => {
+				const overrides = new Map<string, string>();
+				for (const result of corrections) {
+					if (result.proposedCorrection) {
+						overrides.set(result.suggestion.id, result.proposedCorrection.targetPath);
+					}
+				}
+				const rawText = this.manualText.trim();
+				if (!rawText) {
+					return;
+				}
+				let corrected: ReviewImportBatch;
+				try {
+					corrected = await this.options.onInspectBatch(rawText, overrides);
+				} catch {
+					this.setManualImportError({
+						headline: "Could not re-target the entries",
+						details: ["Editorialist failed to re-inspect the batch with the corrected scene targets."],
+						hint: "Cancel and fix the SceneId values in the pasted text, then paste again.",
+					});
+					return;
+				}
+				const diagnostic = this.diagnoseManualBatch(corrected);
+				if (diagnostic) {
+					this.setManualImportError(diagnostic);
+					return;
+				}
+				await this.options.onImportBatch(corrected, true);
+				this.close();
+			},
+			{ cta: true, icon: "wand-2" },
+		);
+		this.buildButton(
+			actions,
+			"Cancel import",
+			async () => {
+				this.close();
+			},
+			{ icon: "x", subtle: true },
+		);
 	}
 
 	private renderAssignments(parent: HTMLElement, batch: ReviewImportBatch): void {
@@ -969,6 +1067,18 @@ export class EditorialistModal extends Modal {
 				return;
 			}
 
+			// Mis-targeted entries must never auto-import. Drop into the manual
+			// paste view so the author sees the correction panel and decides.
+			if (this.collectProposedCorrections(this.clipboardBatch.batch).length > 0) {
+				this.manualText = this.clipboardBatch.rawText;
+				this.manualBatch = this.clipboardBatch.batch;
+				this.manualValidationState = "ok";
+				this.manualImportError = null;
+				this.showManualPaste = true;
+				this.render();
+				return;
+			}
+
 			await this.options.onImportBatch(this.clipboardBatch.batch, true);
 			this.close();
 		}
@@ -1054,6 +1164,8 @@ export class EditorialistModal extends Modal {
 				return "Normalized text";
 			case "fallback_active_note":
 				return "Active note (fallback)";
+			case "corrected_target":
+				return "Re-targeted by author";
 			case "unresolved":
 				return "Needs attention";
 		}

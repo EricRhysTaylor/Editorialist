@@ -9,7 +9,23 @@ export type ReviewRouteStrategy =
 	| "inferred_exact"
 	| "inferred_normalized"
 	| "fallback_active_note"
+	| "corrected_target"
 	| "unresolved";
+
+// Set when an entry declared a real SceneId that resolved to one scene, but the
+// quoted Original/Target text was not found there AND was found verbatim in
+// exactly one other scene — the classic "AI reused a stale scene id from the
+// chat thread" failure. Surfaced for explicit author confirmation; never
+// auto-applied.
+export interface ReviewProposedCorrection {
+	declaredSceneId?: string;
+	declaredPath: string;
+	declaredNoteTitle: string;
+	targetPath: string;
+	targetNoteTitle: string;
+	targetSceneId?: string;
+	reason: string;
+}
 
 export type ReviewVerificationStatus =
 	| "exact"
@@ -65,6 +81,7 @@ export interface ReviewImportSuggestionResult {
 	routeReason: string;
 	verificationStatus: ReviewVerificationStatus;
 	verificationReason: string;
+	proposedCorrection?: ReviewProposedCorrection;
 }
 
 export interface ReviewImportNoteGroup {

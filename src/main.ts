@@ -399,8 +399,11 @@ export default class EditorialistPlugin extends Plugin {
 			onImportRawToActiveNote: async (rawText, startReview) => {
 				await this.importReviewBatchToActiveNote(rawText, startReview);
 			},
-			onInspectBatch: async (rawText) =>
-				this.inspectReviewBatch(rawText, { activeNotePath: context?.filePath }),
+			onInspectBatch: async (rawText, correctedTargets) =>
+				this.inspectReviewBatch(rawText, {
+					activeNotePath: context?.filePath,
+					correctedTargets,
+				}),
 			onLoadClipboardBatch: async () => this.loadClipboardReviewBatch(),
 			onOpenReviewPanel: async () => {
 				await this.openReviewPanel();

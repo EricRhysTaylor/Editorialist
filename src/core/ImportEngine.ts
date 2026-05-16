@@ -6,6 +6,7 @@ import {
 import { normalizeImportedReviewText, REVIEW_BLOCK_FENCE, stripAllReviewBlocks } from "./ReviewBlockFormat";
 import {
 	getActiveNoteScopeRoot,
+	getSceneIdForFile,
 	isPathInFolderScope,
 	isSceneClassFile,
 	matchesSceneId,
@@ -19,6 +20,7 @@ import type {
 	ReviewImportNoteGroup,
 	ReviewImportSuggestionResult,
 	ReviewImportSummary,
+	ReviewProposedCorrection,
 	ReviewRouteStrategy,
 } from "../models/ReviewImport";
 import type { ParsedReviewDocument, ReviewSuggestion, SceneMemo, SupportedReviewOperationType } from "../models/ReviewSuggestion";
@@ -39,6 +41,10 @@ interface ReviewMetadata {
 
 interface InspectBatchOptions {
 	activeNotePath?: string;
+	// suggestion.id → target note path. Author-confirmed re-targets for entries
+	// whose declared SceneId pointed at the wrong scene. Suggestion ids are
+	// deterministic for identical raw text, so the map survives a re-parse.
+	correctedTargets?: ReadonlyMap<string, string>;
 }
 
 interface TextMatchCounts {
@@ -69,9 +75,17 @@ export class ImportEngine {
 		const noteTextCache = new Map<string, string>();
 
 		const activeNotePath = options?.activeNotePath;
+		const correctedTargets = options?.correctedTargets;
 		for (const suggestion of parsedDocument.suggestions) {
 			results.push(
-				await this.inspectSuggestion(suggestion, markdownFiles, scopeFiles, noteTextCache, activeNotePath),
+				await this.inspectSuggestion(
+					suggestion,
+					markdownFiles,
+					scopeFiles,
+					noteTextCache,
+					activeNotePath,
+					correctedTargets,
+				),
 			);
 		}
 
@@ -117,6 +131,7 @@ export class ImportEngine {
 		scopeFiles: TFile[],
 		noteTextCache: Map<string, string>,
 		activeNotePath?: string,
+		correctedTargets?: ReadonlyMap<string, string>,
 	): Promise<ReviewImportSuggestionResult> {
 		const resolvedFileMatch = await this.resolveFileForSuggestion(
 			suggestion,
@@ -124,6 +139,7 @@ export class ImportEngine {
 			scopeFiles,
 			noteTextCache,
 			activeNotePath,
+			correctedTargets,
 		);
 
 		if (!resolvedFileMatch.file) {
@@ -137,19 +153,60 @@ export class ImportEngine {
 			};
 		}
 
-		const noteText = await this.readNoteText(resolvedFileMatch.file, noteTextCache);
+		const resolvedFile = resolvedFileMatch.file;
+		const noteText = await this.readNoteText(resolvedFile, noteTextCache);
 		const matchedSuggestion = this.matchEngine.matchSuggestion(noteText, suggestion);
 		const verification = this.classifyVerification(matchedSuggestion);
 
+		const proposedCorrection =
+			resolvedFileMatch.strategy === "declared_scene_id" && verification.status === "none"
+				? await this.detectProposedCorrection(suggestion, resolvedFile, scopeFiles, noteTextCache)
+				: undefined;
+
 		return {
 			suggestion: matchedSuggestion,
-			resolvedPath: resolvedFileMatch.file.path,
-			resolvedNoteTitle: resolvedFileMatch.file.basename,
+			resolvedPath: resolvedFile.path,
+			resolvedNoteTitle: resolvedFile.basename,
 			routeStatus: resolvedFileMatch.status,
 			routeStrategy: resolvedFileMatch.strategy,
 			routeReason: resolvedFileMatch.reason,
 			verificationStatus: verification.status,
 			verificationReason: verification.reason,
+			proposedCorrection,
+		};
+	}
+
+	// The declared SceneId resolved to exactly one scene, but the quoted text
+	// is not there. If that same verbatim text lives in exactly one OTHER scene
+	// in the active book, the AI almost certainly stamped a stale/wrong id.
+	// Reuse the existing exact+unique inference gate so a near-duplicate passage
+	// across scenes never produces a false correction.
+	private async detectProposedCorrection(
+		suggestion: ReviewSuggestion,
+		declaredFile: TFile,
+		scopeFiles: TFile[],
+		noteTextCache: Map<string, string>,
+	): Promise<ReviewProposedCorrection | undefined> {
+		const inferred = await this.inferFileForSuggestion(suggestion, scopeFiles, noteTextCache);
+		if (
+			!inferred?.file ||
+			inferred.strategy !== "inferred_exact" ||
+			inferred.file.path === declaredFile.path
+		) {
+			return undefined;
+		}
+
+		const declaredSceneId = suggestion.routing?.sceneId?.trim() || undefined;
+		return {
+			declaredSceneId,
+			declaredPath: declaredFile.path,
+			declaredNoteTitle: declaredFile.basename,
+			targetPath: inferred.file.path,
+			targetNoteTitle: inferred.file.basename,
+			targetSceneId: getSceneIdForFile(this.app, inferred.file),
+			reason: `Declared ${
+				declaredSceneId ? `SceneId ${declaredSceneId}` : "scene"
+			} resolves to ${declaredFile.basename}, but the quoted text was not found there. It matches exactly and uniquely in ${inferred.file.basename}.`,
 		};
 	}
 
@@ -159,7 +216,21 @@ export class ImportEngine {
 		scopeFiles: TFile[],
 		noteTextCache: Map<string, string>,
 		activeNotePath?: string,
+		correctedTargets?: ReadonlyMap<string, string>,
 	): Promise<ResolvedFileMatch> {
+		const correctedPath = correctedTargets?.get(suggestion.id);
+		if (correctedPath) {
+			const correctedFile = this.app.vault.getAbstractFileByPath(correctedPath);
+			if (correctedFile instanceof TFile) {
+				return {
+					file: correctedFile,
+					status: "resolved",
+					strategy: "corrected_target",
+					reason: `Re-targeted by author to ${correctedFile.basename}.`,
+				};
+			}
+		}
+
 		const routing = suggestion.routing;
 		const sceneId = routing?.sceneId?.trim();
 		let sceneIdFailureReason: string | null = null;
