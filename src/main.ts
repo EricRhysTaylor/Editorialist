@@ -76,6 +76,8 @@ import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
 import { EditorialistSettingTab } from "./ui/EditorialistSettingTab";
 import { createReviewDecorationsExtension, syncReviewDecorations } from "./ui/Decorations";
 import { createReviewToolbarElement, forceTeardownToolbarSubscriptions, type ToolbarState } from "./ui/Toolbar";
+import { buildToolbarState } from "./ui/viewmodels/ToolbarViewModel";
+import type { ReviewBranchInputs, ToolbarStateInputs } from "./ui/viewmodels/ToolbarStateInputs";
 
 interface ActiveNoteContext {
 	filePath: string;
@@ -2497,145 +2499,65 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private getToolbarState(hasReviewBlock: boolean): ToolbarState | null {
-		const pendingEditsState = this.getPendingEditsToolbarState();
-		if (pendingEditsState) {
-			return pendingEditsState;
-		}
-
-		if (!hasReviewBlock) {
-			return null;
-		}
-
 		const session = this.getReviewSession();
-		if (!session) {
-			return null;
+		const selected = this.store.getSelectedSuggestion();
+
+		let review: ReviewBranchInputs | null = null;
+		if (session && selected) {
+			const suggestions = session.suggestions;
+			const guidedSweep = this.getGuidedSweep();
+			const unitLabel = this.getSweepUnitLabel(guidedSweep?.notePaths.length ?? 0, session.notePath);
+			const sceneProgressLabel =
+				guidedSweep && guidedSweep.notePaths.length > 1
+					? `${this.toTitleCase(unitLabel.slice(0, -1))} ${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`
+					: undefined;
+			review = {
+				hasReviewBlock,
+				selectedIndex: suggestions.findIndex((suggestion) => suggestion.id === selected.id),
+				suggestionsLength: suggestions.length,
+				effectiveStatuses: suggestions.map((suggestion) => this.getEffectiveSuggestionStatus(suggestion)),
+				anchorDirection: this.getActiveMoveAnchorDirection(selected),
+				sweepComplete: this.isSweepComplete(suggestions),
+				sceneProgressLabel,
+				canApply: this.canAcceptSelectedSuggestion(),
+				canDefer: this.canDeferSelectedSuggestion(),
+				canRewrite: this.canRewriteSelectedSuggestion(),
+				canReject: this.canRejectSelectedSuggestion(),
+				canNext: this.getAdjacentRevealableSuggestionId("next") !== null,
+				canPrevious: this.getAdjacentRevealableSuggestionId("previous") !== null,
+				canUndoLastAccept: this.shouldShowUndoForSelectedSuggestion(selected.id),
+				operation: selected.operation,
+				operationLabel: selected.operation.toUpperCase(),
+			};
 		}
 
 		const appliedReview = this.store.getAppliedReview();
-		if (appliedReview && appliedReview.entries.length > 0) {
-			return {
-				mode: "applied_review",
-				canUndo: this.canUndoLastAppliedSuggestion(),
-				currentIndexLabel: `${appliedReview.currentIndex + 1} of ${appliedReview.entries.length}`,
-				title: "Review applied changes",
-			};
-		}
-
-		const completedReview = this.getCompletedReviewPreviewState(session);
-		if (completedReview) {
-			return {
-				mode: "completed_review",
-				currentIndexLabel: completedReview.currentIndexLabel,
-				title: completedReview.title,
-				canNext: this.getAdjacentCompletedReviewSuggestionId("next") !== null,
-				canPrevious: this.getAdjacentCompletedReviewSuggestionId("previous") !== null,
-				canUndo: Boolean(this.lastAppliedChange),
-			};
-		}
-
-		const acceptedReview = this.getAcceptedReviewPreviewState(session);
-		if (acceptedReview) {
-			return {
-				mode: "accepted_review",
-				canUndo: this.canUndoLastAppliedSuggestion(),
-				currentIndexLabel: acceptedReview.currentIndexLabel,
-				title: acceptedReview.title,
-			};
-		}
-
-		const handoff = this.getGuidedSweepHandoffState();
-		if (handoff) {
-			return {
-				mode: "handoff",
-				currentLabel: handoff.currentLabel,
-				isFinal: handoff.isFinal,
-				primaryActionLabel: handoff.primaryActionLabel,
-				progressLabel: handoff.progressLabel,
-				secondaryActionLabel: handoff.secondaryActionLabel,
-				title: handoff.title,
-			};
-		}
-
-		const panelOnlyState = this.getPanelOnlyReviewStateForSession(session);
-		if (panelOnlyState && !this.store.getSelectedSuggestion()) {
-			return {
-				mode: "panel",
-				progressLabel: panelOnlyState.progressLabel,
-				remainingLabel: `${panelOnlyState.remainingCount} remaining`,
-				title: `Continue in ${panelOnlyState.unitLabel === "scene" ? "this scene" : "this note"}`,
-			};
-		}
-
-		if (this.bulkApplyConfirmState?.notePath === session.notePath && this.canApplyAndReviewSceneSuggestions()) {
-			const count = session.suggestions.filter((suggestion) => this.canApplySuggestionInReviewAllMode(suggestion)).length;
-			return {
-				mode: "bulk_confirm",
-				countLabel: `${count} ${count === 1 ? "change" : "changes"}`,
-				title: "Apply to all?",
-			};
-		}
-
-		const selected = this.store.getSelectedSuggestion();
-		if (!selected) {
-			if (panelOnlyState) {
-				return {
-					mode: "panel",
-					progressLabel: panelOnlyState.progressLabel,
-					remainingLabel: `${panelOnlyState.remainingCount} remaining`,
-					title: `Continue in ${panelOnlyState.unitLabel === "scene" ? "this scene" : "this note"}`,
-				};
-			}
-			return null;
-		}
-
-		const suggestions = session.suggestions;
-		const selectedIndex = suggestions.findIndex((suggestion) => suggestion.id === selected.id);
-		const pendingCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "pending").length;
-		const unresolvedSuggestions = suggestions
-			.map((suggestion, index) => ({ suggestion, index }))
-			.filter(({ suggestion }) => this.getEffectiveSuggestionStatus(suggestion) === "unresolved");
-		const unresolvedCount = unresolvedSuggestions.length;
-		const acceptedCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "accepted").length;
-		const rejectedCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "rejected").length;
-		const deferredCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "deferred").length;
-		const rewrittenCount = suggestions.filter((suggestion) => this.getEffectiveSuggestionStatus(suggestion) === "rewritten").length;
-		const canUndoLastAccept = this.shouldShowUndoForSelectedSuggestion(selected.id);
-		const guidedSweep = this.getGuidedSweep();
-		const unitLabel = this.getSweepUnitLabel(guidedSweep?.notePaths.length ?? 0, session.notePath);
-		const sceneProgressLabel =
-			guidedSweep && guidedSweep.notePaths.length > 1
-				? `${this.toTitleCase(unitLabel.slice(0, -1))} ${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`
-				: undefined;
-
-		return {
-			mode: "review",
-			anchorDirection: this.getActiveMoveAnchorDirection(selected),
+		const inputs: ToolbarStateInputs = {
+			pendingEditsToolbarState: this.getPendingEditsToolbarState(),
 			hasReviewBlock,
-			completionLabel: this.isSweepComplete(suggestions) ? "sweep complete" : undefined,
-			pendingCount,
-			acceptedCount,
-			rejectedCount,
-			deferredCount,
-			rewrittenCount,
-			sceneProgressLabel,
-			selectedIndexLabel:
-				selectedIndex === -1 ? `${suggestions.length} total` : `${selectedIndex + 1} of ${suggestions.length}`,
-			unresolvedCount,
-			unresolvedDetails:
-				unresolvedSuggestions.length > 0
-					? `Unresolved items: ${unresolvedSuggestions.map(({ index }) => index + 1).join(", ")}`
-					: undefined,
-			canApply: this.canAcceptSelectedSuggestion(),
-			canDefer: this.canDeferSelectedSuggestion(),
-			canRewrite: this.canRewriteSelectedSuggestion(),
-			canNext: this.getAdjacentRevealableSuggestionId("next") !== null,
-			canPrevious: this.getAdjacentRevealableSuggestionId("previous") !== null,
-			canReject: this.canRejectSelectedSuggestion(),
-			canUndoLastAccept,
-			operation: selected.operation,
-			operationLabel: selected.operation.toUpperCase(),
-			selectedLabel: selectedIndex === -1 ? "Current suggestion" : `Suggestion ${selectedIndex + 1} of ${suggestions.length}`,
+			hasSession: session !== null,
+			sessionNotePath: session?.notePath ?? null,
+			appliedReview: appliedReview
+				? { currentIndex: appliedReview.currentIndex, entryCount: appliedReview.entries.length }
+				: null,
+			completedReviewPreview: this.getCompletedReviewPreviewState(session),
+			completedReviewCanNext: this.getAdjacentCompletedReviewSuggestionId("next") !== null,
+			completedReviewCanPrevious: this.getAdjacentCompletedReviewSuggestionId("previous") !== null,
+			hasLastAppliedChange: Boolean(this.lastAppliedChange),
+			canUndoLastAppliedSuggestion: this.canUndoLastAppliedSuggestion(),
+			acceptedReviewPreview: this.getAcceptedReviewPreviewState(session),
+			guidedSweepHandoff: this.getGuidedSweepHandoffState(),
+			panelOnly: this.getPanelOnlyReviewStateForSession(session),
+			hasSelectedSuggestion: selected !== null,
+			bulkApplyConfirmNotePath: this.bulkApplyConfirmState?.notePath ?? null,
+			canApplyAndReviewSceneSuggestions: this.canApplyAndReviewSceneSuggestions(),
+			bulkApplicableCount: session
+				? session.suggestions.filter((suggestion) => this.canApplySuggestionInReviewAllMode(suggestion)).length
+				: 0,
+			review,
 		};
+
+		return buildToolbarState(inputs);
 	}
 
 	private async openNextSweepNoteFromLaunch(): Promise<void> {

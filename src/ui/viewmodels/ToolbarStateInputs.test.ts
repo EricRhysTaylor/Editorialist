@@ -6,6 +6,7 @@ import {
 	type ToolbarStateInputs,
 } from "./ToolbarStateInputs";
 import { TOOLBAR_FIXTURES } from "./ToolbarStateInputs.fixtures";
+import { buildToolbarState } from "./ToolbarViewModel";
 
 // Guard-only oracle. Mirrors ONLY the if-ladder ordering of
 // EditorialistPlugin.getToolbarState — it does not build any ToolbarState.
@@ -128,17 +129,12 @@ describe("ToolbarState parity scaffold — fixture integrity", () => {
 	}
 });
 
-// ── FUTURE PARITY HOOK ───────────────────────────────────────────────────
-// After ToolbarViewModel is extracted, add ONE block (no fixture changes):
-//
-//   import { buildToolbarState } from "./ToolbarViewModel";
-//   describe("buildToolbarState parity", () => {
-//     for (const fixture of TOOLBAR_FIXTURES) {
-//       it(fixture.name, () => {
-//         expect(buildToolbarState(fixture.inputs)).toEqual(fixture.expected);
-//       });
-//     }
-//   });
-//
-// That converts these golden fixtures into a behavior-equivalence gate for
-// the extraction with zero new authoring.
+// ── PARITY GATE (active) ─────────────────────────────────────────────────
+// buildToolbarState is now extracted; every golden fixture must round-trip.
+describe("buildToolbarState parity", () => {
+	for (const fixture of TOOLBAR_FIXTURES) {
+		it(`"${fixture.name}" produces the captured ToolbarState`, () => {
+			expect(buildToolbarState(fixture.inputs)).toEqual(fixture.expected);
+		});
+	}
+});
