@@ -91,6 +91,8 @@ export function buildToolbarState(inputs: ToolbarStateInputs): ToolbarState | nu
 	if (acceptedReview) {
 		return {
 			mode: "accepted_review",
+			canNext: inputs.acceptedReviewCanNext,
+			canPrevious: inputs.acceptedReviewCanPrevious,
 			canUndo: inputs.canUndoLastAppliedSuggestion,
 			currentIndexLabel: acceptedReview.currentIndexLabel,
 			title: acceptedReview.title,

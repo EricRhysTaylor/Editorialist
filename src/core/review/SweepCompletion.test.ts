@@ -193,6 +193,47 @@ describe("SweepCompletion — canonical rule across all operations (mixed pass)"
 	});
 });
 
+describe("SweepCompletion — manual author rewrite resolution", () => {
+	it("a manually-rewritten suggestion counts DONE and does not block completion", () => {
+		// Author edited the manuscript by hand then pressed "Mark as rewritten":
+		// status becomes rewritten regardless of whether the AI snippet still
+		// matches. It must leave OPEN and join DONE.
+		const rewritten = buildEditSuggestion("rewritten");
+		const tally = tallySuggestionStatuses([rewritten]);
+		expect(tally.rewritten).toBe(1);
+		expect(tally.pending + tally.deferred + tally.unresolved).toBe(0);
+		expect(isSweepComplete([rewritten])).toBe(true);
+	});
+
+	it("a still-pending suggestion alongside a rewritten one keeps the pass open", () => {
+		const suggestions = [buildEditSuggestion("rewritten"), buildEditSuggestion("pending")];
+		expect(isSweepComplete(suggestions)).toBe(false);
+		expect(tallySuggestionStatuses(suggestions).rewritten).toBe(1);
+	});
+});
+
+describe("SweepCompletion — undo reopens completed work", () => {
+	it("reopening one suggestion flips a complete pass back to in_progress", () => {
+		// Simulates undo from completed/audit mode: a fully-decided pass has one
+		// decision cleared, reverting that suggestion to pending.
+		const decided = [
+			buildEditSuggestion("accepted"),
+			buildEditSuggestion("rewritten"),
+			buildEditSuggestion("rejected"),
+		];
+		expect(isSweepComplete(decided)).toBe(true);
+		expect(deriveSweepSummary(decided).status).toBe("completed");
+
+		const reopened = [
+			buildEditSuggestion("accepted"),
+			buildEditSuggestion("pending"), // undo cleared this decision
+			buildEditSuggestion("rejected"),
+		];
+		expect(isSweepComplete(reopened)).toBe(false);
+		expect(deriveSweepSummary(reopened).status).toBe("in_progress");
+	});
+});
+
 describe("SweepCompletion — derived status", () => {
 	it("getSweepStatus reflects counts and the cleaned override", () => {
 		expect(getSweepStatus({ pendingCount: 0, unresolvedCount: 0, deferredCount: 0 })).toBe("completed");

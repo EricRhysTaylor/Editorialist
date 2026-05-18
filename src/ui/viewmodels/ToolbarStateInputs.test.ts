@@ -5,7 +5,7 @@ import {
 	type ToolbarBranch,
 	type ToolbarStateInputs,
 } from "./ToolbarStateInputs";
-import { TOOLBAR_FIXTURES } from "./ToolbarStateInputs.fixtures";
+import { TOOLBAR_FIXTURES, makeInputs } from "./ToolbarStateInputs.fixtures";
 import { buildToolbarState } from "./ToolbarViewModel";
 
 // Guard-only oracle. Mirrors ONLY the if-ladder ordering of
@@ -53,7 +53,7 @@ const REQUIRED_KEYS: Record<ToolbarState["mode"], string[]> = {
 	],
 	applied_review: ["mode", "canUndo", "currentIndexLabel", "title"],
 	completed_review: ["mode", "canNext", "canPrevious", "canUndo", "title"],
-	accepted_review: ["mode", "canUndo", "currentIndexLabel", "title"],
+	accepted_review: ["mode", "canNext", "canPrevious", "canUndo", "currentIndexLabel", "title"],
 	handoff: ["mode", "currentLabel", "isFinal", "primaryActionLabel", "progressLabel", "title"],
 	panel: ["mode", "remainingLabel", "title"],
 	bulk_confirm: ["mode", "countLabel", "title"],
@@ -127,6 +127,29 @@ describe("ToolbarState parity scaffold — fixture integrity", () => {
 			}
 		});
 	}
+});
+
+describe("accepted_review toolbar navigation (consistency with completed_review)", () => {
+	const base = {
+		hasReviewBlock: true,
+		hasSession: true,
+		acceptedReviewPreview: { currentIndexLabel: "1 of 3", title: "Review accepted edits" },
+	} as const;
+
+	it("exposes canNext/canPrevious driven by adjacency inputs", () => {
+		const state = buildToolbarState(
+			makeInputs({ ...base, acceptedReviewCanNext: true, acceptedReviewCanPrevious: true }),
+		);
+		expect(state?.mode).toBe("accepted_review");
+		expect(state).toMatchObject({ canNext: true, canPrevious: true });
+	});
+
+	it("reflects disabled navigation when no adjacent accepted suggestion exists", () => {
+		const state = buildToolbarState(
+			makeInputs({ ...base, acceptedReviewCanNext: false, acceptedReviewCanPrevious: false }),
+		);
+		expect(state).toMatchObject({ mode: "accepted_review", canNext: false, canPrevious: false });
+	});
 });
 
 // ── PARITY GATE (active) ─────────────────────────────────────────────────

@@ -80,6 +80,8 @@ export interface ToolbarStateInputs {
 	hasLastAppliedChange: boolean; // Boolean(this.lastAppliedChange)
 	canUndoLastAppliedSuggestion: boolean;
 	acceptedReviewPreview: AcceptedReviewPreviewInput | null;
+	acceptedReviewCanNext: boolean;
+	acceptedReviewCanPrevious: boolean;
 	guidedSweepHandoff: GuidedSweepHandoffInput | null;
 	panelOnly: PanelOnlyInput | null;
 	hasSelectedSuggestion: boolean;
@@ -127,6 +129,8 @@ export const INPUT_GATHERERS: Record<keyof ToolbarStateInputs, string> = {
 	hasLastAppliedChange: "Boolean(this.lastAppliedChange)",
 	canUndoLastAppliedSuggestion: "canUndoLastAppliedSuggestion()",
 	acceptedReviewPreview: "getAcceptedReviewPreviewState(session)",
+	acceptedReviewCanNext: 'getAdjacentAcceptedSuggestionId("next") !== null',
+	acceptedReviewCanPrevious: 'getAdjacentAcceptedSuggestionId("previous") !== null',
 	guidedSweepHandoff: "getGuidedSweepHandoffState()",
 	panelOnly: "getPanelOnlyReviewStateForSession(session)",
 	hasSelectedSuggestion: "store.getSelectedSuggestion() != null",

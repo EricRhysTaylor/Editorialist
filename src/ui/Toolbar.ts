@@ -70,6 +70,8 @@ export interface AppliedReviewToolbarState {
 
 export interface AcceptedReviewToolbarState {
 	mode: "accepted_review";
+	canNext: boolean;
+	canPrevious: boolean;
 	canUndo: boolean;
 	currentIndexLabel: string;
 	title: string;
@@ -243,10 +245,10 @@ export function createReviewToolbarElement(
 		const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
 		buildButton(actions, "Previous", "arrow-left", () => {
 			void plugin.selectPreviousAcceptedSuggestion();
-		}, false);
+		}, !state.canPrevious);
 		buildButton(actions, "Next", "arrow-right", () => {
 			void plugin.selectNextAcceptedSuggestion();
-		}, false);
+		}, !state.canNext);
 		if (state.canUndo) {
 			buildButton(actions, "Undo", "rotate-ccw", () => {
 				void plugin.undoLastAppliedSuggestion();

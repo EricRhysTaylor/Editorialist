@@ -2370,6 +2370,8 @@ export default class EditorialistPlugin extends Plugin {
 			hasLastAppliedChange: Boolean(this.lastAppliedChange),
 			canUndoLastAppliedSuggestion: this.canUndoLastAppliedSuggestion(),
 			acceptedReviewPreview: this.getAcceptedReviewPreviewState(session),
+			acceptedReviewCanNext: this.getAdjacentAcceptedSuggestionId("next") !== null,
+			acceptedReviewCanPrevious: this.getAdjacentAcceptedSuggestionId("previous") !== null,
 			guidedSweepHandoff: this.getGuidedSweepHandoffState(),
 			panelOnly: this.getPanelOnlyReviewStateForSession(session),
 			hasSelectedSuggestion: selected !== null,
