@@ -320,10 +320,15 @@ export class ReviewRegistryService {
 		};
 	}
 
+	// Resume detection for the import/Begin flow. Only an `in_progress` sweep is
+	// genuinely resumable; a `completed` sweep is finished work (offering to
+	// "open" it made completed work look resumable) and a `cleaned` sweep no
+	// longer has blocks. Re-importing identical content whose sweep is already
+	// completed therefore starts a fresh pass instead of reopening the old one.
 	findDuplicateSweep(batch: ReviewImportBatch): ReviewSweepRegistryEntry | null {
 		return (
 			Object.values(this.sweepRegistry).find(
-				(entry) => entry.contentHash === batch.contentHash && entry.status !== "cleaned",
+				(entry) => entry.contentHash === batch.contentHash && entry.status === "in_progress",
 			) ?? null
 		);
 	}

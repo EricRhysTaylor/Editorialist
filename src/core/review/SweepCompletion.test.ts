@@ -122,6 +122,77 @@ describe("SweepCompletion — completion rule", () => {
 	});
 });
 
+function buildOpSuggestion(
+	kind: "move" | "condense",
+	status: ReviewStatus,
+): ReviewSuggestion {
+	const parser = new SuggestionParser(new ContributorDirectory());
+	const section =
+		kind === "move"
+			? `=== MOVE ===
+SceneId: scn_test
+Target: the target line
+After: the anchor line
+Why: testing`
+			: `=== CONDENSE ===
+SceneId: scn_test
+Target: the long passage to tighten
+Suggestion: tight
+Why: testing`;
+	const note = `\`\`\`editorialist-review
+Reviewer: GPT-5.4
+ReviewerType: ai-editor
+
+${section}
+\`\`\``;
+	const parsed = parser.parse(note);
+	const suggestion = parsed.suggestions[0];
+	if (!suggestion) throw new Error(`expected one ${kind} suggestion`);
+	if (suggestion.operation !== kind) {
+		throw new Error(`expected ${kind}, got ${suggestion.operation}`);
+	}
+	suggestion.status = status;
+	return suggestion;
+}
+
+describe("SweepCompletion — canonical rule across all operations (mixed pass)", () => {
+	it("MOVE and CONDENSE tally by status identically to EDIT", () => {
+		for (const kind of ["move", "condense"] as const) {
+			expect(tallySuggestionStatuses([buildOpSuggestion(kind, "accepted")]).accepted).toBe(1);
+			expect(tallySuggestionStatuses([buildOpSuggestion(kind, "rejected")]).rejected).toBe(1);
+			expect(tallySuggestionStatuses([buildOpSuggestion(kind, "rewritten")]).rewritten).toBe(1);
+			expect(tallySuggestionStatuses([buildOpSuggestion(kind, "pending")]).pending).toBe(1);
+		}
+	});
+
+	it("a fully-decided mixed pass (accept/reject/rewrite + MOVE + CONDENSE) is complete", () => {
+		const suggestions = [
+			buildEditSuggestion("accepted"),
+			buildEditSuggestion("rejected"),
+			buildEditSuggestion("rewritten"),
+			buildOpSuggestion("move", "accepted"),
+			buildOpSuggestion("condense", "rewritten"),
+		];
+		const tally = tallySuggestionStatuses(suggestions);
+		// DONE = accepted + rejected + rewritten ; OPEN = pending + deferred + unresolved
+		expect(tally.accepted + tally.rejected + tally.rewritten).toBe(5);
+		expect(tally.pending + tally.deferred + tally.unresolved).toBe(0);
+		expect(isSweepComplete(suggestions)).toBe(true);
+		expect(deriveSweepSummary(suggestions).status).toBe("completed");
+	});
+
+	it("one still-open MOVE keeps the same mixed pass incomplete", () => {
+		const suggestions = [
+			buildEditSuggestion("accepted"),
+			buildEditSuggestion("rejected"),
+			buildOpSuggestion("condense", "rewritten"),
+			buildOpSuggestion("move", "deferred"), // OPEN
+		];
+		expect(isSweepComplete(suggestions)).toBe(false);
+		expect(deriveSweepSummary(suggestions).status).toBe("in_progress");
+	});
+});
+
 describe("SweepCompletion — derived status", () => {
 	it("getSweepStatus reflects counts and the cleaned override", () => {
 		expect(getSweepStatus({ pendingCount: 0, unresolvedCount: 0, deferredCount: 0 })).toBe("completed");
