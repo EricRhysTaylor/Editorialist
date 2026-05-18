@@ -48,12 +48,9 @@ export class EditorialismService {
 		if (!(file instanceof TFile)) {
 			return;
 		}
-		const contents = await this.app.vault.read(file);
-		const next = rewriteTaskMarker(contents, lineIndex, nextStatus);
-		if (next === contents) {
-			return;
-		}
-		await this.app.vault.modify(file, next);
+		await this.app.vault.process(file, (currentText) =>
+			rewriteTaskMarker(currentText, lineIndex, nextStatus),
+		);
 	}
 
 	getRootFolderName(): string {
