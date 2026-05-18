@@ -34,7 +34,6 @@ import {
 	canRevealSuggestionInManuscript as canRevealSuggestionInManuscriptShared,
 	findPreferredSuggestionId as findPreferredSuggestionIdShared,
 	getAdjacentRevealableSuggestionId as getAdjacentRevealableSuggestionIdShared,
-	getSuggestionTraversalTier as getSuggestionTraversalTierShared,
 	hasLiveActionableSuggestions as hasLiveActionableSuggestionsShared,
 } from "./core/review/SuggestionTraversal";
 import {
@@ -3025,10 +3024,6 @@ export default class EditorialistPlugin extends Plugin {
 			direction,
 			{ fromId, treatCurrentAsDeferred },
 		);
-	}
-
-	private getSuggestionTraversalTier(suggestion: ReviewSuggestion, forceDeferred = false): number | null {
-		return getSuggestionTraversalTierShared(suggestion, forceDeferred);
 	}
 
 	private selectPreferredSuggestionForSession(preferredSelectionId?: string | null): void {
