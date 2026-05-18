@@ -5,6 +5,8 @@ import {
 	RecordingReviewStateMachineHost,
 	expectedHostEffects,
 } from "./ReviewStateMachineRecordingHost";
+import { ReviewStateMachine } from "./ReviewStateMachine";
+import type { ReviewSuggestion } from "../../models/ReviewSuggestion";
 
 const HOST_EFFECT_VOCAB = new Set<HostOp>(HOST_OPS.filter((op) => !PURE_OR_MARKER_OPS.has(op)));
 
@@ -120,27 +122,250 @@ describe("RecordingReviewStateMachineHost — trace-vocabulary closure", () => {
 	});
 });
 
-// ── PRODUCTION-DRIVEN REPLAYS — DOCUMENTED PENDING ───────────────────────
-//
-// These cannot execute yet WITHOUT faking success. The state-machine logic
-// lives as private, `this`-bound async methods on EditorialistPlugin
-// (src/main.ts ~1282–1567): acceptSuggestion / rejectSuggestion /
-// markSuggestionRewritten / deferSuggestion / applySuggestionById /
-// undoLastAppliedSuggestion / jumpToSuggestionTarget. They take NO host
-// parameter and reach into `this.store`, `this.registry`, `this.app`, the
-// editor, and mutable fields directly.
-//
-// MISSING SEAM: there is no entry point that accepts a ReviewStateMachineHost.
-// Replay becomes executable only after the extraction commit introduces
-//   class ReviewStateMachine { constructor(host: ReviewStateMachineHost) ... }
-// at which point each it.todo below becomes:
-//   const host = new RecordingReviewStateMachineHost(config);
-//   await new ReviewStateMachine(host).<method>(...);
-//   expect(host.ops).toEqual(expectedHostEffects(trace.steps));
-// Writing a parallel reimplementation here to make them pass now would test
-// the reimplementation, not production — explicitly out of scope.
-describe("ReviewStateMachine production-driven replay (pending extraction)", () => {
-	for (const trace of STATE_MACHINE_TRACES) {
-		it.todo(`replay: ${trace.method} — ${trace.scenario}`);
-	}
+// ── PRODUCTION-DRIVEN REPLAYS (active) ───────────────────────────────────
+// Each scenario configures the recording host, drives the EXTRACTED
+// ReviewStateMachine, and asserts the recorded host-effect order equals the
+// frozen golden trace.
+
+function trace(method: string, scenarioIncludes: string) {
+	const t = STATE_MACHINE_TRACES.find(
+		(x) => x.method === method && x.scenario.includes(scenarioIncludes),
+	);
+	if (!t) throw new Error(`no trace ${method}/${scenarioIncludes}`);
+	return t;
+}
+
+const contributor = {
+	id: "c1",
+	displayName: "R",
+	kind: "ai" as const,
+	reviewerType: "ai-editor" as const,
+	resolutionStatus: "exact" as const,
+	suggestedReviewerIds: [],
+	raw: {},
+};
+const src = { blockIndex: 0, entryIndex: 0 };
+
+function editOpen(id: string): ReviewSuggestion {
+	return {
+		id,
+		operation: "edit",
+		status: "pending",
+		contributor,
+		source: src,
+		location: { primary: { text: "hello", startOffset: 0, endOffset: 5, matchType: "exact" } },
+		executionMode: "direct",
+		payload: { original: "hello", revised: "HELLO" },
+	} as ReviewSuggestion;
+}
+function closed(id: string): ReviewSuggestion {
+	const s = editOpen(id);
+	s.status = "accepted";
+	return s;
+}
+function editNoPlan(id: string): ReviewSuggestion {
+	return {
+		id,
+		operation: "edit",
+		status: "pending",
+		contributor,
+		source: src,
+		location: {},
+		executionMode: "direct",
+		payload: { original: "x", revised: "y" },
+	} as ReviewSuggestion;
+}
+function moveValid(id: string): ReviewSuggestion {
+	return {
+		id,
+		operation: "move",
+		status: "pending",
+		contributor,
+		source: src,
+		location: {
+			relocation: {
+				canApply: true,
+				targetResolved: true,
+				anchorResolved: true,
+				targetStart: 0,
+				targetEnd: 2,
+				anchorStart: 10,
+				anchorEnd: 12,
+			},
+		},
+		executionMode: "direct",
+		payload: { target: "T.", anchor: "A.", placement: "after" },
+	} as ReviewSuggestion;
+}
+
+function run(
+	config: ConstructorParameters<typeof RecordingReviewStateMachineHost>[0],
+): { host: RecordingReviewStateMachineHost; sm: ReviewStateMachine } {
+	const host = new RecordingReviewStateMachineHost(config);
+	return { host, sm: new ReviewStateMachine(host) };
+}
+
+describe("ReviewStateMachine production-driven replay", () => {
+	it("rejectSuggestion — guard fails", async () => {
+		const { host, sm } = run({ guards: { canRejectSuggestion: false } });
+		await sm.rejectSuggestion("x");
+		expect(host.ops).toEqual(expectedHostEffects(trace("rejectSuggestion", "guard fails").steps));
+	});
+
+	it("rejectSuggestion — happy path, next exists", async () => {
+		const { host, sm } = run({
+			guards: { canRejectSuggestion: true },
+			session: { notePath: "n.md", suggestions: [editOpen("s1")] },
+			suggestionsById: { s0: editOpen("s0") },
+			selectedSuggestionId: null,
+		});
+		await sm.rejectSuggestion("s0");
+		expect(host.ops).toEqual(expectedHostEffects(trace("rejectSuggestion", "happy path, next").steps));
+	});
+
+	it("rejectSuggestion — no next -> handoff", async () => {
+		const { host, sm } = run({
+			guards: { canRejectSuggestion: true },
+			session: { notePath: "n.md", suggestions: [closed("c1")] },
+			suggestionsById: { s0: editOpen("s0") },
+			guidedSweep: { batchId: "b", currentNoteIndex: 0, notePaths: ["n.md"], startedAt: 1 },
+		});
+		await sm.rejectSuggestion("s0");
+		expect(host.ops).toEqual(expectedHostEffects(trace("rejectSuggestion", "no next").steps));
+	});
+
+	it("deferSuggestion — happy path, next exists", async () => {
+		const { host, sm } = run({
+			guards: { hasActiveReviewSession: true },
+			session: { notePath: "n.md", suggestions: [editOpen("s1")] },
+			suggestionsById: { s0: editOpen("s0") },
+		});
+		await sm.deferSuggestion("s0");
+		expect(host.ops).toEqual(expectedHostEffects(trace("deferSuggestion", "happy path").steps));
+	});
+
+	it("markSuggestionRewritten — preferred fallback", async () => {
+		const { host, sm } = run({
+			guards: { canMarkSuggestionRewritten: true },
+			session: { notePath: "n.md", suggestions: [closed("c1")] },
+			suggestionsById: { s0: editOpen("s0") },
+		});
+		await sm.markSuggestionRewritten("s0");
+		expect(host.ops).toEqual(
+			expectedHostEffects(trace("markSuggestionRewritten", "preferred fallback").steps),
+		);
+	});
+
+	it("applySuggestionById — context/session/suggestion guard fails", async () => {
+		const { host, sm } = run({ noteContext: null, suggestionsById: { x: editOpen("x") } });
+		const result = await sm.applySuggestionById("x");
+		expect(result).toBeNull();
+		expect(host.ops).toEqual(
+			expectedHostEffects(trace("applySuggestionById", "context/session/suggestion guard fails").steps),
+		);
+	});
+
+	it("applySuggestionById — canAccept guard fails", async () => {
+		const { host, sm } = run({
+			session: { notePath: "n.md", suggestions: [] },
+			suggestionsById: { x: editOpen("x") },
+			guards: { canAcceptSuggestion: false },
+		});
+		await sm.applySuggestionById("x");
+		expect(host.ops).toEqual(
+			expectedHostEffects(trace("applySuggestionById", "canAccept guard fails").steps),
+		);
+	});
+
+	it("applySuggestionById — no apply plan", async () => {
+		const { host, sm } = run({
+			session: { notePath: "n.md", suggestions: [] },
+			suggestionsById: { x: editNoPlan("x") },
+			guards: { canAcceptSuggestion: true },
+			editorValue: "",
+		});
+		await sm.applySuggestionById("x");
+		expect(host.ops).toEqual(expectedHostEffects(trace("applySuggestionById", "no apply plan").steps));
+	});
+
+	it("applySuggestionById — success (muted)", async () => {
+		const { host, sm } = run({
+			session: { notePath: "n.md", suggestions: [] },
+			suggestionsById: { s: editOpen("s") },
+			guards: { canAcceptSuggestion: true },
+			editorValue: "hello world",
+		});
+		const result = await sm.applySuggestionById("s", { highlightMode: "muted" });
+		expect(result).toEqual({ start: 0, end: 5, suggestionId: "s" });
+		expect(host.ops).toEqual(expectedHostEffects(trace("applySuggestionById", "success").steps));
+	});
+
+	it("acceptSuggestion — apply fails -> false", async () => {
+		const { host, sm } = run({ noteContext: null, suggestionsById: { x: editOpen("x") } });
+		const ok = await sm.acceptSuggestion("x");
+		expect(ok).toBe(false);
+		expect(host.ops).toEqual(expectedHostEffects(trace("acceptSuggestion", "apply fails").steps));
+	});
+
+	it("acceptSuggestion — handoff wins", async () => {
+		const { host, sm } = run({
+			session: { notePath: "n.md", suggestions: [closed("c1")] },
+			suggestionsById: { s: editOpen("s") },
+			guards: { canAcceptSuggestion: true },
+			editorValue: "hello world",
+			guidedSweep: { batchId: "b", currentNoteIndex: 0, notePaths: ["n.md"], startedAt: 1 },
+		});
+		const ok = await sm.acceptSuggestion("s");
+		expect(ok).toBe(true);
+		expect(host.ops).toEqual(expectedHostEffects(trace("acceptSuggestion", "handoff wins").steps));
+	});
+
+	it("acceptSuggestion — move re-selects same id", async () => {
+		const { host, sm } = run({
+			session: { notePath: "n.md", suggestions: [closed("c1")] },
+			suggestionsById: { m: moveValid("m") },
+			guards: { canAcceptSuggestion: true },
+			editorValue: "T.\n\nMID.\n\nA.",
+		});
+		const ok = await sm.acceptSuggestion("m");
+		expect(ok).toBe(true);
+		expect(host.ops).toEqual(expectedHostEffects(trace("acceptSuggestion", "move").steps));
+	});
+
+	it("undoLastAppliedSuggestion — no change", async () => {
+		const { host, sm } = run({});
+		await sm.undoLastAppliedSuggestion();
+		expect(host.ops).toEqual(
+			expectedHostEffects(trace("undoLastAppliedSuggestion", "no change").steps),
+		);
+	});
+
+	it("undoLastAppliedSuggestion — success with completed-sweep restore", async () => {
+		const { host, sm } = run({
+			session: { notePath: "n.md", suggestions: [] },
+			lastAppliedChange: {
+				start: 0,
+				end: 1,
+				notePath: "n.md",
+				suggestionId: "s",
+				textFingerprint: "fp",
+			},
+			completedSweep: { batchId: "b", currentNoteIndex: 0, notePaths: ["n.md"], startedAt: 1 },
+			suggestionsById: { s: editOpen("s") },
+			editorUndoResult: true,
+		});
+		await sm.undoLastAppliedSuggestion();
+		expect(host.ops).toEqual(
+			expectedHostEffects(trace("undoLastAppliedSuggestion", "success").steps),
+		);
+	});
+
+	it("jumpToSuggestionTarget — happy path", async () => {
+		const { host, sm } = run({
+			guards: { hasReviewSessionContext: true },
+			suggestionsById: { s: editOpen("s") },
+		});
+		await sm.jumpToSuggestionTarget("s");
+		expect(host.ops).toEqual(expectedHostEffects(trace("jumpToSuggestionTarget", "happy path").steps));
+	});
 });

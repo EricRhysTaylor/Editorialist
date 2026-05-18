@@ -22,7 +22,6 @@ import { ImportEngine } from "./core/ImportEngine";
 import { MatchEngine } from "./core/MatchEngine";
 import {
 	canApplySuggestionDirectly,
-	createSuggestionApplyPlan,
 	getEffectiveSuggestionStatus as getEffectiveSuggestionStatusShared,
 	getSuggestionAnchorTarget,
 	getSuggestionPresentationTone,
@@ -36,6 +35,8 @@ import {
 	getAdjacentRevealableSuggestionId as getAdjacentRevealableSuggestionIdShared,
 	hasLiveActionableSuggestions as hasLiveActionableSuggestionsShared,
 } from "./core/review/SuggestionTraversal";
+import { ReviewStateMachine } from "./core/review/ReviewStateMachine";
+import type { ReviewStateMachineHost } from "./core/review/ReviewStateMachineScaffold";
 import {
 	REVIEW_BLOCK_FENCE,
 	getReviewBlockFenceLabel,
@@ -1279,123 +1280,92 @@ export default class EditorialistPlugin extends Plugin {
 		await this.jumpToSuggestionSource(selectedSuggestion.id);
 	}
 
+	private reviewStateMachineInstance: ReviewStateMachine | null = null;
+
+	private getReviewStateMachine(): ReviewStateMachine {
+		if (!this.reviewStateMachineInstance) {
+			this.reviewStateMachineInstance = new ReviewStateMachine(this.createReviewStateMachineHost());
+		}
+		return this.reviewStateMachineInstance;
+	}
+
+	private createReviewStateMachineHost(): ReviewStateMachineHost {
+		const plugin = this;
+		return {
+			store: {
+				getSession: () => plugin.store.getSession(),
+				getCompletedSweep: () => plugin.store.getCompletedSweep(),
+				selectSuggestion: (suggestionId) => plugin.store.selectSuggestion(suggestionId),
+				updateSuggestionStatus: (suggestionId, status) =>
+					plugin.store.updateSuggestionStatus(suggestionId, status),
+				setCompletedSweep: (value) => plugin.store.setCompletedSweep(value),
+				setGuidedSweep: (value) => plugin.store.setGuidedSweep(value),
+			},
+			getSelectedSuggestionId: () => plugin.store.getState().selectedSuggestionId,
+			getGuidedSweep: () => plugin.getGuidedSweep(),
+			registry: {
+				persistReviewDecision: (notePath, suggestion, status, options) =>
+					plugin.registry.persistReviewDecision(notePath, suggestion, status, options),
+				clearPersistedReviewDecision: (notePath, suggestion, options) =>
+					plugin.registry.clearPersistedReviewDecision(notePath, suggestion, options),
+				syncReviewerSignalsForSession: (session, options) =>
+					plugin.registry.syncReviewerSignalsForSession(session as ReviewSession | null, options),
+				syncSceneInventoryForSession: (session) =>
+					plugin.registry.syncSceneInventoryForSession(session as ReviewSession | null),
+			},
+			getReviewNoteContext: () => plugin.getReviewNoteContext(),
+			getActiveEditorView: () => plugin.getActiveEditorView(),
+			focusReviewLeaf: (view) => plugin.focusReviewLeaf(view as MarkdownView),
+			executeEditorUndo: () =>
+				(this.app as typeof this.app & {
+					commands?: { executeCommandById: (commandId: string) => boolean };
+				}).commands?.executeCommandById("editor:undo") ?? false,
+			notify: (message) => {
+				new Notice(message);
+			},
+			canAcceptSuggestion: (suggestionId) => plugin.canAcceptSuggestion(suggestionId),
+			canRejectSuggestion: (suggestionId) => plugin.canRejectSuggestion(suggestionId),
+			canMarkSuggestionRewritten: (suggestionId) => plugin.canMarkSuggestionRewritten(suggestionId),
+			hasActiveReviewSession: () => plugin.hasActiveReviewSession(),
+			hasReviewSessionContext: () => plugin.hasReviewSessionContext(),
+			getReviewSession: () => plugin.getReviewSession(),
+			getSuggestionById: (suggestionId) => plugin.getSuggestionById(suggestionId),
+			getCurrentSessionTrackingContext: () => plugin.getCurrentSessionTrackingContext(),
+			getPanelOnlyReviewStateForSession: (session) =>
+				plugin.getPanelOnlyReviewStateForSession(session as ReviewSession | null),
+			revealSelectedSuggestion: () => plugin.revealSelectedSuggestion(),
+			revealSuggestionContext: (suggestionId) => plugin.revealSuggestionContext(suggestionId),
+			enterGuidedSweepHandoff: () => plugin.enterGuidedSweepHandoff(),
+			refreshSessionAfterAcceptedEdit: (session, suggestionId) =>
+				plugin.refreshSessionAfterAcceptedEdit(session as ReviewSession, suggestionId),
+			syncActiveEditorDecorations: () => plugin.syncActiveEditorDecorations(),
+			resyncSessionForActiveNote: () => plugin.resyncSessionForActiveNote(),
+			focusResolvedTarget: async (target) => {
+				await plugin.focusResolvedTarget(target as ReviewTargetRef | undefined);
+			},
+			get lastAppliedChange() {
+				return plugin.lastAppliedChange;
+			},
+			set lastAppliedChange(value) {
+				plugin.lastAppliedChange = value;
+			},
+			setActiveHighlight: (range, tone) => {
+				plugin.activeHighlightRange = range;
+				plugin.activeHighlightTone = tone ?? "active";
+			},
+		};
+	}
+
 	async acceptSuggestion(id: string): Promise<boolean> {
-		const acceptedSuggestion = this.getSuggestionById(id);
-		const appliedChange = await this.applySuggestionById(id, {
-			highlightMode: "muted",
-		});
-		if (!appliedChange) {
-			return false;
-		}
-
-		const refreshedSession = this.store.getSession();
-		if (this.shouldShowGuidedSweepHandoff(refreshedSession)) {
-			await this.enterGuidedSweepHandoff();
-			return true;
-		}
-
-		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next", id);
-		if (this.getPanelOnlyReviewStateForSession(refreshedSession) && nextSuggestionId) {
-			this.store.selectSuggestion(nextSuggestionId);
-			await this.revealSelectedSuggestion();
-			return true;
-		}
-
-		if (acceptedSuggestion?.operation === "cut" && nextSuggestionId) {
-			this.store.selectSuggestion(nextSuggestionId);
-			await this.revealSelectedSuggestion();
-			return true;
-		}
-
-		if (acceptedSuggestion?.operation === "move") {
-			this.store.selectSuggestion(id);
-			await this.revealSelectedSuggestion();
-			return true;
-		}
-
-		const hasHighlightableRange = appliedChange.end > appliedChange.start;
-		if (!hasHighlightableRange && nextSuggestionId) {
-			this.store.selectSuggestion(nextSuggestionId);
-			await this.revealSelectedSuggestion();
-			return true;
-		}
-
-		this.store.selectSuggestion(id);
-		return true;
+		return this.getReviewStateMachine().acceptSuggestion(id);
 	}
 
 	async rejectSuggestion(id: string): Promise<void> {
-		if (!this.canRejectSuggestion(id)) {
-			return;
-		}
-
-		const session = this.getReviewSession();
-		const suggestion = this.getSuggestionById(id);
-		const { sessionId, sessionStartedAt } = this.getCurrentSessionTrackingContext();
-		if (session && suggestion) {
-			await this.registry.persistReviewDecision(session.notePath, suggestion, "rejected", {
-				persist: false,
-				sessionId,
-				sessionStartedAt,
-			});
-		}
-
-		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next", id);
-		this.store.updateSuggestionStatus(id, "rejected");
-		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), {
-			persist: false,
-			sessionId,
-			sessionStartedAt,
-		});
-		await this.registry.syncSceneInventoryForSession(this.store.getSession());
-		if (nextSuggestionId) {
-			this.store.selectSuggestion(nextSuggestionId);
-			await this.revealSelectedSuggestion();
-			return;
-		}
-
-		if (this.shouldShowGuidedSweepHandoff(this.store.getSession())) {
-			await this.enterGuidedSweepHandoff();
-		}
+		await this.getReviewStateMachine().rejectSuggestion(id);
 	}
 
 	async markSuggestionRewritten(id: string): Promise<void> {
-		if (!this.canMarkSuggestionRewritten(id)) {
-			return;
-		}
-
-		const session = this.getReviewSession();
-		const suggestion = this.getSuggestionById(id);
-		const { sessionId, sessionStartedAt } = this.getCurrentSessionTrackingContext();
-		if (session && suggestion) {
-			await this.registry.persistReviewDecision(session.notePath, suggestion, "rewritten", {
-				persist: false,
-				sessionId,
-				sessionStartedAt,
-			});
-		}
-
-		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next", id);
-		this.store.updateSuggestionStatus(id, "rewritten");
-		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), {
-			persist: false,
-			sessionId,
-			sessionStartedAt,
-		});
-		await this.registry.syncSceneInventoryForSession(this.store.getSession());
-		if (nextSuggestionId) {
-			this.store.selectSuggestion(nextSuggestionId);
-			await this.revealSelectedSuggestion();
-			return;
-		}
-
-		if (this.shouldShowGuidedSweepHandoff(this.store.getSession())) {
-			await this.enterGuidedSweepHandoff();
-			return;
-		}
-
-		this.store.selectSuggestion(this.findPreferredSuggestionId(this.store.getSession()?.suggestions ?? []));
-		await this.revealSelectedSuggestion();
+		await this.getReviewStateMachine().markSuggestionRewritten(id);
 	}
 
 	private async applySuggestionById(
@@ -1406,164 +1376,19 @@ export default class EditorialistPlugin extends Plugin {
 			syncSceneInventory?: boolean;
 		},
 	): Promise<AppliedReviewChange | null> {
-		const context = this.getReviewNoteContext();
-		const session = this.store.getSession();
-		const suggestion = this.getSuggestionById(id);
-
-		if (!context || !session || session.notePath !== context.filePath || !suggestion) {
-			new Notice("The active note does not match the current review session.");
-			return null;
-		}
-
-		if (!this.canAcceptSuggestion(id)) {
-			new Notice("This suggestion cannot be safely accepted yet.");
-			return null;
-		}
-
-		const applyPlan = createSuggestionApplyPlan(context.text, suggestion);
-		if (!applyPlan) {
-			new Notice(`The ${suggestion.operation} suggestion could not be applied safely.`);
-			return null;
-		}
-
-		const from = context.view.editor.offsetToPos(applyPlan.from);
-		const to = context.view.editor.offsetToPos(applyPlan.to);
-		context.view.editor.replaceRange(applyPlan.text, from, to);
-		const appliedStartOffset = applyPlan.focusStart ?? applyPlan.from;
-		const appliedEndOffset = applyPlan.focusEnd ?? applyPlan.from + applyPlan.text.length;
-		const appliedFrom = context.view.editor.offsetToPos(appliedStartOffset);
-		const appliedTo = context.view.editor.offsetToPos(appliedEndOffset);
-		context.view.editor.setSelection(appliedFrom, appliedTo);
-		context.view.editor.scrollIntoView({ from: appliedFrom, to: appliedTo }, true);
-		context.view.editor.focus();
-
-		await this.registry.clearPersistedReviewDecision(context.filePath, suggestion, { persist: false });
-		this.refreshSessionAfterAcceptedEdit(session, suggestion.id);
-		const { sessionId, sessionStartedAt } = this.getCurrentSessionTrackingContext();
-		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), {
-			persist: false,
-			sessionId,
-			sessionStartedAt,
-		});
-		this.lastAppliedChange = {
-			start: appliedStartOffset,
-			end: appliedEndOffset,
-			notePath: context.filePath,
-			suggestionId: suggestion.id,
-			textFingerprint: this.getNoteTextFingerprint(context.view.editor.getValue()),
-		};
-		if (options?.syncSceneInventory !== false) {
-			await this.registry.syncSceneInventoryForSession(this.store.getSession());
-		}
-		if (!options?.preserveSelection) {
-			this.store.selectSuggestion(id);
-		}
-		if (options?.highlightMode === "muted") {
-			this.activeHighlightRange = {
-				start: appliedStartOffset,
-				end: appliedEndOffset,
-			};
-			this.activeHighlightTone = "muted";
-			this.syncActiveEditorDecorations();
-		}
-
-		return {
-			start: appliedStartOffset,
-			end: appliedEndOffset,
-			suggestionId: suggestion.id,
-		};
+		return this.getReviewStateMachine().applySuggestionById(id, options);
 	}
 
 	async deferSuggestion(id: string): Promise<void> {
-		if (!this.hasActiveReviewSession()) {
-			return;
-		}
-
-		const session = this.getReviewSession();
-		const suggestion = this.getSuggestionById(id);
-		const { sessionId, sessionStartedAt } = this.getCurrentSessionTrackingContext();
-		if (session && suggestion) {
-			await this.registry.persistReviewDecision(session.notePath, suggestion, "deferred", {
-				persist: false,
-				sessionId,
-				sessionStartedAt,
-			});
-		}
-
-		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next", id, true);
-		this.store.updateSuggestionStatus(id, "deferred");
-		await this.registry.syncReviewerSignalsForSession(this.store.getSession(), {
-			persist: false,
-			sessionId,
-			sessionStartedAt,
-		});
-		await this.registry.syncSceneInventoryForSession(this.store.getSession());
-		if (nextSuggestionId) {
-			this.store.selectSuggestion(nextSuggestionId);
-			await this.revealSelectedSuggestion();
-			return;
-		}
-
-		if (this.shouldShowGuidedSweepHandoff(this.store.getSession())) {
-			await this.enterGuidedSweepHandoff();
-		}
+		await this.getReviewStateMachine().deferSuggestion(id);
 	}
 
 	async undoLastAppliedSuggestion(): Promise<void> {
-		const change = this.lastAppliedChange;
-		const context = this.getReviewNoteContext();
-		const appliedSuggestion = change ? this.getSuggestionById(change.suggestionId) : null;
-		const completedSweep = this.store.getCompletedSweep();
-		if (!change || !context || context.filePath !== change.notePath) {
-			new Notice("No applied change is ready to undo.");
-			return;
-		}
-
-		await this.focusReviewLeaf(context.view);
-		if (!this.getActiveEditorView()) {
-			new Notice("The editor is not available for undo.");
-			return;
-		}
-
-		const commands = (this.app as typeof this.app & {
-			commands?: { executeCommandById: (id: string) => boolean };
-		}).commands;
-		if (!commands?.executeCommandById("editor:undo")) {
-			new Notice("Nothing to undo.");
-			return;
-		}
-
-		if (appliedSuggestion) {
-			await this.registry.clearPersistedReviewDecision(change.notePath, appliedSuggestion, { persist: false });
-		}
-		this.lastAppliedChange = null;
-		if (completedSweep) {
-			this.store.setCompletedSweep(null);
-			this.store.setGuidedSweep({
-				batchId: completedSweep.batchId,
-				currentNoteIndex: completedSweep.currentNoteIndex,
-				notePaths: [...completedSweep.notePaths],
-				startedAt: completedSweep.startedAt,
-			});
-		}
-		this.resyncSessionForActiveNote();
-		this.store.selectSuggestion(change.suggestionId);
-		await this.revealSuggestionContext(change.suggestionId);
-		new Notice("Applied change undone.");
+		await this.getReviewStateMachine().undoLastAppliedSuggestion();
 	}
 
 	async jumpToSuggestionTarget(id: string): Promise<void> {
-		if (!this.hasReviewSessionContext()) {
-			return;
-		}
-
-		const suggestion = this.getSuggestionById(id);
-		if (!suggestion) {
-			return;
-		}
-
-		this.store.selectSuggestion(id);
-		await this.focusResolvedTarget(getSuggestionPrimaryTarget(suggestion));
+		await this.getReviewStateMachine().jumpToSuggestionTarget(id);
 	}
 
 	async jumpToSuggestionAnchor(id: string): Promise<void> {

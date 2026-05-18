@@ -69,13 +69,18 @@ export interface RecordingHostConfig {
 	editorUndoResult?: boolean;
 	trackingContext?: { sessionId?: string; sessionStartedAt?: number };
 	editorValue?: string;
+	// Seeds lastAppliedChange WITHOUT recording set.lastAppliedChange (the
+	// machine's own writes still record).
+	lastAppliedChange?: AppliedReviewChangeLike | null;
 }
 
 export class RecordingReviewStateMachineHost implements ReviewStateMachineHost {
 	readonly ops: HostOp[] = [];
 	private _lastAppliedChange: AppliedReviewChangeLike | null = null;
 
-	constructor(private readonly config: RecordingHostConfig = {}) {}
+	constructor(private readonly config: RecordingHostConfig = {}) {
+		this._lastAppliedChange = config.lastAppliedChange ?? null;
+	}
 
 	private rec(op: HostOp): void {
 		this.ops.push(op);

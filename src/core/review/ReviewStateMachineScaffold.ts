@@ -41,7 +41,10 @@ export interface ReviewStateMachineHost {
 		getCompletedSweep(): CompletedSweepState | null;
 		selectSuggestion(id: string | null): void;
 		updateSuggestionStatus(id: string, status: ReviewSuggestion["status"]): void;
-		setCompletedSweep(value: CompletedSweepState | null): void;
+		// Within the extracted state machine this is only ever called with null
+		// (undo clears the completed sweep); narrowed to keep the main.ts
+		// adapter type-safe without exposing the full CompletedSweepState shape.
+		setCompletedSweep(value: null): void;
 		setGuidedSweep(value: GuidedSweepState | null): void;
 	};
 
