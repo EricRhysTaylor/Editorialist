@@ -31,6 +31,13 @@ import {
 } from "./core/OperationSupport";
 import { isSweepComplete as isSweepCompleteShared } from "./core/review/SweepCompletion";
 import {
+	canRevealSuggestionInManuscript as canRevealSuggestionInManuscriptShared,
+	findPreferredSuggestionId as findPreferredSuggestionIdShared,
+	getAdjacentRevealableSuggestionId as getAdjacentRevealableSuggestionIdShared,
+	getSuggestionTraversalTier as getSuggestionTraversalTierShared,
+	hasLiveActionableSuggestions as hasLiveActionableSuggestionsShared,
+} from "./core/review/SuggestionTraversal";
+import {
 	REVIEW_BLOCK_FENCE,
 	getReviewBlockFenceLabel,
 	normalizeImportedReviewText,
@@ -3077,15 +3084,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private canRevealSuggestionInManuscript(suggestion: ReviewSuggestion): boolean {
-		if (!this.isSuggestionOpen(suggestion)) {
-			return false;
-		}
-
-		if (this.hasResolvedRange(getSuggestionPrimaryTarget(suggestion))) {
-			return true;
-		}
-
-		return this.hasResolvedRange(getSuggestionAnchorTarget(suggestion));
+		return canRevealSuggestionInManuscriptShared(suggestion);
 	}
 
 	private getAdjacentRevealableSuggestionId(
@@ -3098,58 +3097,16 @@ export default class EditorialistPlugin extends Plugin {
 			return null;
 		}
 
-		const suggestions = session.suggestions;
-		const currentId = fromId ?? this.store.getState().selectedSuggestionId;
-		const currentIndex = currentId
-			? suggestions.findIndex((suggestion) => suggestion.id === currentId)
-			: -1;
-		const normalizedStartIndex =
-			currentIndex === -1
-				? direction === "next"
-					? suggestions.length - 1
-					: 0
-				: currentIndex;
-
-		for (const tier of [0, 1, 2]) {
-			for (let offset = 1; offset <= suggestions.length; offset += 1) {
-				const index =
-					direction === "next"
-						? (normalizedStartIndex + offset) % suggestions.length
-						: (normalizedStartIndex - offset + suggestions.length) % suggestions.length;
-				const suggestion = suggestions[index];
-				if (
-					suggestion &&
-					this.getSuggestionTraversalTier(
-						suggestion,
-						treatCurrentAsDeferred && suggestion.id === fromId,
-					) === tier
-				) {
-					return suggestion.id;
-				}
-			}
-		}
-
-		return null;
+		return getAdjacentRevealableSuggestionIdShared(
+			session.suggestions,
+			this.store.getState().selectedSuggestionId,
+			direction,
+			{ fromId, treatCurrentAsDeferred },
+		);
 	}
 
 	private getSuggestionTraversalTier(suggestion: ReviewSuggestion, forceDeferred = false): number | null {
-		if (!this.isSuggestionOpen(suggestion)) {
-			return null;
-		}
-
-		if (this.canRevealSuggestionInManuscript(suggestion)) {
-			if (forceDeferred || suggestion.status === "deferred") {
-				return 1;
-			}
-
-			return 0;
-		}
-
-		if (forceDeferred || suggestion.status === "deferred") {
-			return 1;
-		}
-
-		return 2;
+		return getSuggestionTraversalTierShared(suggestion, forceDeferred);
 	}
 
 	private selectPreferredSuggestionForSession(preferredSelectionId?: string | null): void {
@@ -3170,14 +3127,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private findPreferredSuggestionId(suggestions: ReviewSuggestion[]): string | null {
-		for (const tier of [0, 1, 2]) {
-			const match = suggestions.find((suggestion) => this.getSuggestionTraversalTier(suggestion) === tier);
-			if (match) {
-				return match.id;
-			}
-		}
-
-		return suggestions[0]?.id ?? null;
+		return findPreferredSuggestionIdShared(suggestions);
 	}
 
 	private shouldShowGuidedSweepHandoff(session?: ReviewSession | null): boolean {
@@ -3186,7 +3136,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private hasLiveActionableSuggestions(suggestions: ReviewSuggestion[]): boolean {
-		return suggestions.some((suggestion) => this.isSuggestionOpen(suggestion));
+		return hasLiveActionableSuggestionsShared(suggestions);
 	}
 
 	private canApplySuggestionInReviewAllMode(suggestion: ReviewSuggestion): boolean {
