@@ -56,16 +56,12 @@ export interface ContributorProfile {
 	updatedAt: number;
 }
 
-export type ReviewerProfile = ContributorProfile;
-
 export interface ParsedContributorReference {
 	rawName?: string;
 	rawType?: string;
 	rawProvider?: string;
 	rawModel?: string;
 }
-
-export type ParsedReviewerReference = ParsedContributorReference;
 
 export interface ContributorResolution {
 	reviewerId?: string;

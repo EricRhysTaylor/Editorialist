@@ -20,11 +20,11 @@ import type { ReviewSession, ReviewSuggestion } from "../models/ReviewSuggestion
 import type {
 	EditorialistPluginData,
 	PersistedReviewDecisionRecord,
-	ReviewerProfile,
+	ContributorProfile,
 	ReviewerStats,
 	ReviewerSignalRecord,
 	SceneReviewRecord,
-} from "../models/ReviewerProfile";
+} from "../models/ContributorProfile";
 import type { ReviewerDirectory } from "../state/ReviewerDirectory";
 import { getLegacyContributorSignatureKind } from "../core/ContributorIdentity";
 import { getEffectiveSuggestionStatus, getSuggestionSignatureParts } from "../core/OperationSupport";
@@ -152,7 +152,7 @@ export class ReviewRegistryService {
 		}
 	}
 
-	buildPluginData(reviewerProfiles: ReviewerProfile[]): EditorialistPluginData {
+	buildPluginData(reviewerProfiles: ContributorProfile[]): EditorialistPluginData {
 		return {
 			reviewerProfiles,
 			reviewerSignalIndex: this.reviewerSignalIndex,
@@ -304,7 +304,7 @@ export class ReviewRegistryService {
 		};
 	}
 
-	getReviewActivitySummary(_reviewerProfiles: ReviewerProfile[]): ReviewActivitySummary {
+	getReviewActivitySummary(_reviewerProfiles: ContributorProfile[]): ReviewActivitySummary {
 		const signalTotals = tallyReviewStatuses(
 			Object.values(this.reviewerSignalIndex).map((profile) => profile.status),
 		);
@@ -1015,7 +1015,7 @@ export class ReviewRegistryService {
 		return removedCount;
 	}
 
-	buildMetadataExport(reviewerProfiles: ReviewerProfile[]): EditorialistMetadataExport {
+	buildMetadataExport(reviewerProfiles: ContributorProfile[]): EditorialistMetadataExport {
 		return {
 			schemaVersion: "2.0.0",
 			exportedAt: Date.now(),

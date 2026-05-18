@@ -1,5 +1,5 @@
 import { normalizeContributorValue } from "./ContributorIdentity";
-import type { ContributorStrength, ReviewerType } from "../models/ReviewerProfile";
+import type { ContributorStrength, ReviewerType } from "../models/ContributorProfile";
 
 export interface ContributorRoleDefinition {
 	label: string;

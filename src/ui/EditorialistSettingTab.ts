@@ -11,7 +11,7 @@ import {
 } from "../core/ContributorStrengths";
 import { getFrontmatterStringValues } from "../core/VaultScope";
 import type { ReviewSweepRegistryEntry } from "../models/ReviewImport";
-import type { SceneReviewRecord } from "../models/ReviewerProfile";
+import type { SceneReviewRecord } from "../models/ContributorProfile";
 import type EditorialistPlugin from "../main";
 import { openEditorialistChoiceModal } from "./EditorialistChoiceModal";
 

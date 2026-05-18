@@ -49,12 +49,12 @@ import type {
 import type { ReviewSession, ReviewSuggestion, ReviewTargetRef } from "./models/ReviewSuggestion";
 import type {
 	EditorialistPluginData,
-	ParsedReviewerReference,
-	ReviewerProfile,
+	ParsedContributorReference,
+	ContributorProfile,
 	ReviewerResolutionStatus,
 	SceneReviewRecord,
 	ReviewerStats,
-} from "./models/ReviewerProfile";
+} from "./models/ContributorProfile";
 import { ReviewStore, type AppliedReviewChange, type AppliedReviewState, type CompletedSweepState, type GuidedSweepState } from "./state/ReviewStore";
 import { ReviewerDirectory } from "./state/ReviewerDirectory";
 import { EditorialismService } from "./services/EditorialismService";
@@ -1589,15 +1589,15 @@ export default class EditorialistPlugin extends Plugin {
 		await this.focusEditorRange(start, end);
 	}
 
-	getReviewerProfiles(): ReviewerProfile[] {
+	getReviewerProfiles(): ContributorProfile[] {
 		return this.reviewerDirectory.getProfiles();
 	}
 
-	getSortedReviewerProfiles(): ReviewerProfile[] {
+	getSortedReviewerProfiles(): ContributorProfile[] {
 		return this.reviewerDirectory.getSortedProfiles();
 	}
 
-	getReviewerProfile(reviewerId?: string): ReviewerProfile | null {
+	getReviewerProfile(reviewerId?: string): ContributorProfile | null {
 		return reviewerId ? this.reviewerDirectory.getProfileById(reviewerId) : null;
 	}
 
@@ -2767,7 +2767,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private applyReviewerResolutionToMatchingSuggestions(
-		raw: ParsedReviewerReference,
+		raw: ParsedContributorReference,
 		reviewerId: string,
 		resolutionStatus: ReviewerResolutionStatus,
 	): Promise<void> {
@@ -2781,15 +2781,15 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private applyReviewerProfileToMatchingSuggestions(
-		raw: ParsedReviewerReference,
-		profile: ReviewerProfile,
+		raw: ParsedContributorReference,
+		profile: ContributorProfile,
 		resolutionStatus: ReviewerResolutionStatus,
 	): Promise<void> {
 		const contributor = this.createResolvedContributor(raw, profile, resolutionStatus);
 		return this.applyContributorToMatchingSuggestions(raw, contributor);
 	}
 
-	private async applyContributorToMatchingSuggestions(raw: ParsedReviewerReference, contributor: ReviewSuggestion["contributor"]): Promise<void> {
+	private async applyContributorToMatchingSuggestions(raw: ParsedContributorReference, contributor: ReviewSuggestion["contributor"]): Promise<void> {
 		const session = this.store.getSession();
 		if (!session) {
 			return;
@@ -2811,8 +2811,8 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private createResolvedContributor(
-		raw: ParsedReviewerReference,
-		profile: ReviewerProfile,
+		raw: ParsedContributorReference,
+		profile: ContributorProfile,
 		resolutionStatus: ReviewerResolutionStatus,
 	): ReviewSuggestion["contributor"] {
 		return {
@@ -2829,7 +2829,7 @@ export default class EditorialistPlugin extends Plugin {
 		};
 	}
 
-	private reassignContributorInActiveSession(sourceReviewerId: string, targetProfile: ReviewerProfile): void {
+	private reassignContributorInActiveSession(sourceReviewerId: string, targetProfile: ContributorProfile): void {
 		const session = this.store.getSession();
 		if (!session) {
 			return;
@@ -2866,7 +2866,7 @@ export default class EditorialistPlugin extends Plugin {
 		this.store.replaceSuggestions(nextSuggestions);
 	}
 
-	private syncContributorProfileInActiveSession(profile: ReviewerProfile): void {
+	private syncContributorProfileInActiveSession(profile: ContributorProfile): void {
 		const session = this.store.getSession();
 		if (!session) {
 			return;
@@ -2937,7 +2937,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private createUnresolvedContributor(
-		raw: ParsedReviewerReference,
+		raw: ParsedContributorReference,
 		suggestedReviewerIds: string[],
 	): ReviewSuggestion["contributor"] {
 		const seed = deriveContributorIdentitySeed(raw);
@@ -2955,7 +2955,7 @@ export default class EditorialistPlugin extends Plugin {
 		};
 	}
 
-	private sameRawReviewer(left: ParsedReviewerReference, right: ParsedReviewerReference): boolean {
+	private sameRawReviewer(left: ParsedContributorReference, right: ParsedContributorReference): boolean {
 		return (
 			(left.rawName ?? "").trim() === (right.rawName ?? "").trim() &&
 			(left.rawType ?? "").trim() === (right.rawType ?? "").trim() &&

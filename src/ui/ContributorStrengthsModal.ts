@@ -6,10 +6,10 @@ import {
 	type ContributorRoleDefinition,
 	type ContributorStrengthDefinition,
 } from "../core/ContributorStrengths";
-import type { ContributorStrength, ReviewerProfile, ReviewerType } from "../models/ReviewerProfile";
+import type { ContributorStrength, ContributorProfile, ReviewerType } from "../models/ContributorProfile";
 
 interface ContributorStrengthsModalOptions {
-	profile: ReviewerProfile;
+	profile: ContributorProfile;
 }
 
 export interface ContributorStrengthsModalResult {

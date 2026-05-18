@@ -12,7 +12,7 @@ import type {
 	ReviewSuggestionRouting,
 	SceneMemo,
 } from "../models/ReviewSuggestion";
-import type { ParsedReviewerReference } from "../models/ReviewerProfile";
+import type { ParsedContributorReference } from "../models/ContributorProfile";
 import type { ReviewerDirectory } from "../state/ReviewerDirectory";
 import { extractReviewBlocks } from "./ReviewBlockFormat";
 import { getLinesWithOffsets, type LineWithOffsets } from "./TextOffsets";
@@ -31,7 +31,7 @@ interface SectionBuffer {
 }
 
 interface BlockMetadata {
-	rawReviewer: ParsedReviewerReference;
+	rawReviewer: ParsedContributorReference;
 }
 
 type SectionParser = (

@@ -1,9 +1,9 @@
 import type {
 	ContributorKind,
 	ContributorProfile,
-	ParsedReviewerReference,
+	ParsedContributorReference,
 	ReviewerType,
-} from "../models/ReviewerProfile";
+} from "../models/ContributorProfile";
 import type { ReviewContributor } from "../models/ReviewSuggestion";
 
 export const HUMAN_REVIEWER_TYPES = [
@@ -148,7 +148,7 @@ export function reviewerTypeToKind(reviewerType: ReviewerType): ContributorKind 
 	return reviewerType.startsWith("ai-") ? "ai" : "human";
 }
 
-export function inferContributorKind(raw: ParsedReviewerReference): ContributorKind {
+export function inferContributorKind(raw: ParsedContributorReference): ContributorKind {
 	const provider = normalizeProviderName(raw.rawProvider);
 	const model = canonicalizeModelName(raw.rawModel);
 	const reviewerType = raw.rawType ? normalizeContributorValue(raw.rawType) : "";
@@ -170,7 +170,7 @@ export function inferContributorKind(raw: ParsedReviewerReference): ContributorK
 	return "human";
 }
 
-export function deriveContributorIdentitySeed(raw: ParsedReviewerReference): ContributorIdentitySeed {
+export function deriveContributorIdentitySeed(raw: ParsedContributorReference): ContributorIdentitySeed {
 	const kindHint = inferContributorKind(raw);
 	const reviewerType = normalizeReviewerType(raw.rawType, kindHint);
 	const kind = reviewerTypeToKind(reviewerType);

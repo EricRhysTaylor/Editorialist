@@ -8,23 +8,23 @@ import { normalizeContributorStrengths } from "../core/ContributorStrengths";
 import type { ReviewContributor } from "../models/ReviewSuggestion";
 import type {
 	ContributorStrength,
-	ParsedReviewerReference,
-	ReviewerProfile,
+	ParsedContributorReference,
+	ContributorProfile,
 	ReviewerResolutionStatus,
 	ReviewerStats,
 	ReviewerType,
-} from "../models/ReviewerProfile";
+} from "../models/ContributorProfile";
 
 export class ReviewerDirectory {
-	private profiles: ReviewerProfile[] = [];
+	private profiles: ContributorProfile[] = [];
 	private didChange = false;
 
-	setProfiles(profiles: ReviewerProfile[]): void {
+	setProfiles(profiles: ContributorProfile[]): void {
 		this.didChange = false;
 		this.profiles = profiles.map((profile) => this.normalizeProfile(profile));
 	}
 
-	getProfiles(): ReviewerProfile[] {
+	getProfiles(): ContributorProfile[] {
 		return this.profiles.map((profile) => ({
 			...profile,
 			aliases: [...profile.aliases],
@@ -38,11 +38,11 @@ export class ReviewerDirectory {
 		return didChange;
 	}
 
-	getProfileById(id: string): ReviewerProfile | null {
+	getProfileById(id: string): ContributorProfile | null {
 		return this.profiles.find((profile) => profile.id === id) ?? null;
 	}
 
-	getSortedProfiles(): ReviewerProfile[] {
+	getSortedProfiles(): ContributorProfile[] {
 		return this.getProfiles().sort((left, right) => {
 			if (Boolean(left.isStarred) !== Boolean(right.isStarred)) {
 				return left.isStarred ? -1 : 1;
@@ -52,7 +52,7 @@ export class ReviewerDirectory {
 		});
 	}
 
-	resolveContributor(raw: ParsedReviewerReference): ReviewContributor {
+	resolveContributor(raw: ParsedContributorReference): ReviewContributor {
 		const seed = deriveContributorIdentitySeed(raw);
 		const rawName = raw.rawName?.trim();
 		const exactIdMatch = rawName
@@ -120,11 +120,11 @@ export class ReviewerDirectory {
 		return this.toContributor(profile, raw, "new");
 	}
 
-	createProfileFromParsedReviewer(raw: ParsedReviewerReference): ReviewerProfile {
+	createProfileFromParsedReviewer(raw: ParsedContributorReference): ContributorProfile {
 		return this.createProfileFromSeed(deriveContributorIdentitySeed(raw));
 	}
 
-	mergeProfiles(sourceReviewerId: string, targetReviewerId: string): ReviewerProfile | null {
+	mergeProfiles(sourceReviewerId: string, targetReviewerId: string): ContributorProfile | null {
 		if (sourceReviewerId === targetReviewerId) {
 			return this.getProfileById(targetReviewerId);
 		}
@@ -163,7 +163,7 @@ export class ReviewerDirectory {
 		return target;
 	}
 
-	addAlias(reviewerId: string, alias: string): ReviewerProfile | null {
+	addAlias(reviewerId: string, alias: string): ContributorProfile | null {
 		const normalizedAlias = alias.trim();
 		if (!normalizedAlias) {
 			return null;
@@ -190,7 +190,7 @@ export class ReviewerDirectory {
 			reviewerType: ReviewerType;
 			strengths: ContributorStrength[];
 		},
-	): ReviewerProfile | null {
+	): ContributorProfile | null {
 		const profile = this.getProfileById(reviewerId);
 		if (!profile) {
 			return null;
@@ -259,7 +259,7 @@ export class ReviewerDirectory {
 		return profile;
 	}
 
-	setStrengths(reviewerId: string, strengths: ContributorStrength[]): ReviewerProfile | null {
+	setStrengths(reviewerId: string, strengths: ContributorStrength[]): ContributorProfile | null {
 		const profile = this.getProfileById(reviewerId);
 		if (!profile) {
 			return null;
@@ -277,7 +277,7 @@ export class ReviewerDirectory {
 		return profile;
 	}
 
-	setReviewerType(reviewerId: string, reviewerType: ReviewerType): ReviewerProfile | null {
+	setReviewerType(reviewerId: string, reviewerType: ReviewerType): ContributorProfile | null {
 		const profile = this.getProfileById(reviewerId);
 		if (!profile) {
 			return null;
@@ -294,7 +294,7 @@ export class ReviewerDirectory {
 		return profile;
 	}
 
-	toggleStar(reviewerId: string): ReviewerProfile | null {
+	toggleStar(reviewerId: string): ContributorProfile | null {
 		const profile = this.getProfileById(reviewerId);
 		if (!profile) {
 			return null;
@@ -306,7 +306,7 @@ export class ReviewerDirectory {
 		return profile;
 	}
 
-	deleteProfile(reviewerId: string): ReviewerProfile | null {
+	deleteProfile(reviewerId: string): ContributorProfile | null {
 		const profile = this.getProfileById(reviewerId);
 		if (!profile) {
 			return null;
@@ -328,7 +328,7 @@ export class ReviewerDirectory {
 		return removedCount;
 	}
 
-	setStats(reviewerId: string, stats: ReviewerStats): ReviewerProfile | null {
+	setStats(reviewerId: string, stats: ReviewerStats): ContributorProfile | null {
 		const profile = this.getProfileById(reviewerId);
 		if (!profile) {
 			return null;
@@ -349,8 +349,8 @@ export class ReviewerDirectory {
 
 	ensureProfileFromReassignment(
 		displayName: string,
-		sourceProfile: ReviewerProfile,
-	): ReviewerProfile {
+		sourceProfile: ContributorProfile,
+	): ContributorProfile {
 		const normalizedName = displayName.trim();
 		if (!normalizedName) {
 			return sourceProfile;
@@ -376,8 +376,8 @@ export class ReviewerDirectory {
 	}
 
 	private toContributor(
-		profile: ReviewerProfile,
-		raw: ParsedReviewerReference,
+		profile: ContributorProfile,
+		raw: ParsedContributorReference,
 		resolutionStatus: ReviewerResolutionStatus,
 	): ReviewContributor {
 		return {
@@ -395,14 +395,14 @@ export class ReviewerDirectory {
 	}
 
 	private findUniqueProfile(
-		predicate: (profile: ReviewerProfile) => boolean,
-		raw: ParsedReviewerReference,
-	): ReviewerProfile | null {
+		predicate: (profile: ContributorProfile) => boolean,
+		raw: ParsedContributorReference,
+	): ContributorProfile | null {
 		const matches = this.profiles.filter((profile) => predicate(profile) && this.isCompatibleProfile(profile, raw));
 		return matches.length === 1 ? matches[0] ?? null : null;
 	}
 
-	private isCompatibleProfile(profile: ReviewerProfile, raw: ParsedReviewerReference): boolean {
+	private isCompatibleProfile(profile: ContributorProfile, raw: ParsedContributorReference): boolean {
 		const seed = deriveContributorIdentitySeed(raw);
 		if (profile.kind !== seed.kind) {
 			return false;
@@ -427,9 +427,9 @@ export class ReviewerDirectory {
 		return true;
 	}
 
-	private createProfileFromSeed(seed: ReturnType<typeof deriveContributorIdentitySeed>): ReviewerProfile {
+	private createProfileFromSeed(seed: ReturnType<typeof deriveContributorIdentitySeed>): ContributorProfile {
 		const now = Date.now();
-		const profile: ReviewerProfile = {
+		const profile: ContributorProfile = {
 			id: this.createStableId(seed.displayName, seed.kind, seed.provider, seed.model),
 			displayName: seed.displayName,
 			kind: seed.kind,
@@ -450,9 +450,9 @@ export class ReviewerDirectory {
 	}
 
 	private mergeProfileIdentity(
-		profile: ReviewerProfile,
+		profile: ContributorProfile,
 		seed: ReturnType<typeof deriveContributorIdentitySeed>,
-	): ReviewerProfile {
+	): ContributorProfile {
 		let didUpdate = false;
 		const nextAliases = [...profile.aliases];
 		for (const alias of seed.aliasCandidates) {
@@ -492,17 +492,17 @@ export class ReviewerDirectory {
 		return profile;
 	}
 
-	private normalizeProfile(profile: ReviewerProfile): ReviewerProfile {
+	private normalizeProfile(profile: ContributorProfile): ContributorProfile {
 		const seed = deriveContributorIdentitySeed({
 			rawModel: profile.kind === "ai" ? profile.model ?? profile.displayName : undefined,
 			rawName: profile.displayName,
 			rawProvider: profile.provider,
-			rawType: (profile as Partial<ReviewerProfile> & { kind?: string; reviewerType?: string }).reviewerType
-				?? (profile as Partial<ReviewerProfile> & { kind?: string }).kind,
+			rawType: (profile as Partial<ContributorProfile> & { kind?: string; reviewerType?: string }).reviewerType
+				?? (profile as Partial<ContributorProfile> & { kind?: string }).kind,
 		});
 		const aliases = [...new Set([...(profile.aliases ?? []), ...seed.aliasCandidates])]
 			.filter((alias) => this.normalizeValue(alias) !== this.normalizeValue(seed.displayName));
-		const normalized: ReviewerProfile = {
+		const normalized: ContributorProfile = {
 			id: profile.id,
 			displayName: seed.displayName,
 			kind: seed.kind,
@@ -584,7 +584,7 @@ export class ReviewerDirectory {
 		return normalizeContributorStrengths(strengths);
 	}
 
-	private createStableId(displayName: string, kind: ReviewerProfile["kind"], provider?: string, model?: string): string {
+	private createStableId(displayName: string, kind: ContributorProfile["kind"], provider?: string, model?: string): string {
 		const baseSource = kind === "ai" ? `${provider ?? "ai"}-${model ?? displayName}` : displayName;
 		const baseId = `contributor-${kind}-${this.slugify(baseSource)}`;
 		if (!this.profiles.some((profile) => profile.id === baseId)) {

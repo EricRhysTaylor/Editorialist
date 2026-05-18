@@ -1,6 +1,6 @@
 import { ButtonComponent, DropdownComponent, Modal, TextComponent, type App } from "obsidian";
 import { formatContributorIdentityLabel } from "../core/ContributorIdentity";
-import type { ReviewerProfile } from "../models/ReviewerProfile";
+import type { ContributorProfile } from "../models/ContributorProfile";
 
 export type ContributorReassignmentMode = "merge" | "reassign";
 
@@ -11,8 +11,8 @@ export interface ContributorReassignmentResult {
 
 interface ContributorReassignmentModalOptions {
 	mode: ContributorReassignmentMode;
-	sourceProfile: ReviewerProfile;
-	targetProfiles: ReviewerProfile[];
+	sourceProfile: ContributorProfile;
+	targetProfiles: ContributorProfile[];
 }
 
 class ContributorReassignmentModal extends Modal {

@@ -1,9 +1,9 @@
 import type {
 	ContributorKind,
-	ParsedReviewerReference,
+	ParsedContributorReference,
 	ReviewerResolutionStatus,
 	ReviewerType,
-} from "./ReviewerProfile";
+} from "./ContributorProfile";
 
 export const SUPPORTED_REVIEW_OPERATIONS = ["edit", "move", "cut", "condense"] as const;
 
@@ -34,7 +34,7 @@ export interface ReviewContributor {
 	reviewerId?: string;
 	resolutionStatus: ReviewerResolutionStatus;
 	suggestedReviewerIds: string[];
-	raw: ParsedReviewerReference;
+	raw: ParsedContributorReference;
 }
 
 export interface ReviewSourceRef {

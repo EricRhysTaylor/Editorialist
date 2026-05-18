@@ -8,7 +8,7 @@
 import type {
 	PersistedReviewDecisionRecord,
 	SceneReviewRecord,
-} from "../../models/ReviewerProfile";
+} from "../../models/ContributorProfile";
 import type { ReviewStatus } from "../../models/ReviewSuggestion";
 import type { ReviewSweepStatus } from "../../models/ReviewImport";
 
