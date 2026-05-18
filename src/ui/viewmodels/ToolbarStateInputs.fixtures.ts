@@ -1,0 +1,309 @@
+// Golden fixtures for the future buildToolbarState(inputs) parity gate.
+//
+// Each `expected` is hand-derived by reading the CURRENT
+// EditorialistPlugin.getToolbarState (src/main.ts) decision tree — it is the
+// frozen behavior contract. When ToolbarViewModel is extracted, replace
+// `expected` assertions with `buildToolbarState(fixture.inputs)` and this
+// becomes a true parity test with no new fixtures to author.
+
+import type { ToolbarState } from "../Toolbar";
+import type { ToolbarBranch, ToolbarStateInputs } from "./ToolbarStateInputs";
+
+export function makeInputs(overrides: Partial<ToolbarStateInputs> = {}): ToolbarStateInputs {
+	return {
+		pendingEditsToolbarState: null,
+		hasReviewBlock: false,
+		hasSession: false,
+		sessionNotePath: null,
+		appliedReview: null,
+		completedReviewPreview: null,
+		completedReviewCanNext: false,
+		completedReviewCanPrevious: false,
+		hasLastAppliedChange: false,
+		canUndoLastAppliedSuggestion: false,
+		acceptedReviewPreview: null,
+		guidedSweepHandoff: null,
+		panelOnly: null,
+		hasSelectedSuggestion: false,
+		bulkApplyConfirmNotePath: null,
+		canApplyAndReviewSceneSuggestions: false,
+		bulkApplicableCount: 0,
+		review: null,
+		...overrides,
+	};
+}
+
+export interface ToolbarFixture {
+	name: string;
+	branch: ToolbarBranch;
+	inputs: ToolbarStateInputs;
+	expected: ToolbarState | null;
+}
+
+const pendingEditsSample: ToolbarState = {
+	mode: "pending_edits_review",
+	title: "Pending edits",
+	sceneLabel: "Scene 1",
+	segmentKindLabel: "Inquiry",
+	segmentIndexLabel: "1 of 2",
+	segmentActionText: "Resolve this note",
+	canComplete: true,
+	canNext: true,
+	canPrevious: false,
+};
+
+export const TOOLBAR_FIXTURES: ToolbarFixture[] = [
+	{
+		name: "pending edits sub-state short-circuits everything",
+		branch: "pending_edits_review",
+		inputs: makeInputs({ pendingEditsToolbarState: pendingEditsSample, hasReviewBlock: true, hasSession: true }),
+		expected: pendingEditsSample,
+	},
+	{
+		name: "no review block => null",
+		branch: "null:no-review-block",
+		inputs: makeInputs({ hasReviewBlock: false }),
+		expected: null,
+	},
+	{
+		name: "review block but no session => null",
+		branch: "null:no-session",
+		inputs: makeInputs({ hasReviewBlock: true, hasSession: false }),
+		expected: null,
+	},
+	{
+		name: "applied review preview",
+		branch: "applied_review",
+		inputs: makeInputs({
+			hasReviewBlock: true,
+			hasSession: true,
+			appliedReview: { currentIndex: 1, entryCount: 3 },
+			canUndoLastAppliedSuggestion: true,
+		}),
+		expected: { mode: "applied_review", canUndo: true, currentIndexLabel: "2 of 3", title: "Review applied changes" },
+	},
+	{
+		name: "completed review preview",
+		branch: "completed_review",
+		inputs: makeInputs({
+			hasReviewBlock: true,
+			hasSession: true,
+			completedReviewPreview: { currentIndexLabel: "1 of 2", title: "Review completed changes" },
+			completedReviewCanNext: true,
+			completedReviewCanPrevious: false,
+			hasLastAppliedChange: true,
+		}),
+		expected: {
+			mode: "completed_review",
+			currentIndexLabel: "1 of 2",
+			title: "Review completed changes",
+			canNext: true,
+			canPrevious: false,
+			canUndo: true,
+		},
+	},
+	{
+		name: "accepted review preview",
+		branch: "accepted_review",
+		inputs: makeInputs({
+			hasReviewBlock: true,
+			hasSession: true,
+			acceptedReviewPreview: { currentIndexLabel: "3 of 4", title: "Review accepted edits" },
+			canUndoLastAppliedSuggestion: false,
+		}),
+		expected: { mode: "accepted_review", canUndo: false, currentIndexLabel: "3 of 4", title: "Review accepted edits" },
+	},
+	{
+		name: "guided sweep handoff",
+		branch: "handoff",
+		inputs: makeInputs({
+			hasReviewBlock: true,
+			hasSession: true,
+			guidedSweepHandoff: {
+				currentLabel: "Scene 2",
+				isFinal: false,
+				primaryActionLabel: "Next scene",
+				progressLabel: "2 of 5",
+				secondaryActionLabel: "Finish",
+				title: "Scene reviewed",
+			},
+		}),
+		expected: {
+			mode: "handoff",
+			currentLabel: "Scene 2",
+			isFinal: false,
+			primaryActionLabel: "Next scene",
+			progressLabel: "2 of 5",
+			secondaryActionLabel: "Finish",
+			title: "Scene reviewed",
+		},
+	},
+	{
+		name: "panel-only (scene) before any selection",
+		branch: "panel:pre-selection",
+		inputs: makeInputs({
+			hasReviewBlock: true,
+			hasSession: true,
+			panelOnly: { progressLabel: "2 of 5 resolved", remainingCount: 3, unitLabel: "scene" },
+			hasSelectedSuggestion: false,
+		}),
+		expected: {
+			mode: "panel",
+			progressLabel: "2 of 5 resolved",
+			remainingLabel: "3 remaining",
+			title: "Continue in this scene",
+		},
+	},
+	{
+		name: "panel-only (note) before any selection",
+		branch: "panel:pre-selection",
+		inputs: makeInputs({
+			hasReviewBlock: true,
+			hasSession: true,
+			panelOnly: { remainingCount: 1, unitLabel: "note" },
+			hasSelectedSuggestion: false,
+		}),
+		expected: {
+			mode: "panel",
+			progressLabel: undefined,
+			remainingLabel: "1 remaining",
+			title: "Continue in this note",
+		},
+	},
+	{
+		name: "bulk confirm (singular)",
+		branch: "bulk_confirm",
+		inputs: makeInputs({
+			hasReviewBlock: true,
+			hasSession: true,
+			sessionNotePath: "a.md",
+			bulkApplyConfirmNotePath: "a.md",
+			canApplyAndReviewSceneSuggestions: true,
+			bulkApplicableCount: 1,
+		}),
+		expected: { mode: "bulk_confirm", countLabel: "1 change", title: "Apply to all?" },
+	},
+	{
+		name: "bulk confirm (plural)",
+		branch: "bulk_confirm",
+		inputs: makeInputs({
+			hasReviewBlock: true,
+			hasSession: true,
+			sessionNotePath: "a.md",
+			bulkApplyConfirmNotePath: "a.md",
+			canApplyAndReviewSceneSuggestions: true,
+			bulkApplicableCount: 2,
+		}),
+		expected: { mode: "bulk_confirm", countLabel: "2 changes", title: "Apply to all?" },
+	},
+	{
+		name: "no selection and no panel-only => null",
+		branch: "null:no-selection",
+		inputs: makeInputs({ hasReviewBlock: true, hasSession: true, hasSelectedSuggestion: false, panelOnly: null }),
+		expected: null,
+	},
+	{
+		name: "review: selected suggestion in range",
+		branch: "review",
+		inputs: makeInputs({
+			hasReviewBlock: true,
+			hasSession: true,
+			hasSelectedSuggestion: true,
+			review: {
+				hasReviewBlock: true,
+				selectedIndex: 1,
+				suggestionsLength: 3,
+				effectiveStatuses: ["pending", "accepted", "unresolved"],
+				anchorDirection: undefined,
+				sweepComplete: false,
+				sceneProgressLabel: undefined,
+				canApply: true,
+				canDefer: false,
+				canRewrite: true,
+				canReject: false,
+				canNext: true,
+				canPrevious: false,
+				canUndoLastAccept: false,
+				operation: "edit",
+				operationLabel: "EDIT",
+			},
+		}),
+		expected: {
+			mode: "review",
+			anchorDirection: undefined,
+			hasReviewBlock: true,
+			completionLabel: undefined,
+			pendingCount: 1,
+			acceptedCount: 1,
+			rejectedCount: 0,
+			deferredCount: 0,
+			rewrittenCount: 0,
+			sceneProgressLabel: undefined,
+			selectedIndexLabel: "2 of 3",
+			unresolvedCount: 1,
+			unresolvedDetails: "Unresolved items: 3",
+			canApply: true,
+			canDefer: false,
+			canRewrite: true,
+			canNext: true,
+			canPrevious: false,
+			canReject: false,
+			canUndoLastAccept: false,
+			operation: "edit",
+			operationLabel: "EDIT",
+			selectedLabel: "Suggestion 2 of 3",
+		},
+	},
+	{
+		name: "review: selected suggestion not found in list (index -1)",
+		branch: "review",
+		inputs: makeInputs({
+			hasReviewBlock: true,
+			hasSession: true,
+			hasSelectedSuggestion: true,
+			review: {
+				hasReviewBlock: true,
+				selectedIndex: -1,
+				suggestionsLength: 2,
+				effectiveStatuses: ["accepted", "rejected"],
+				anchorDirection: "below",
+				sweepComplete: true,
+				sceneProgressLabel: "Scene 2 of 5",
+				canApply: false,
+				canDefer: false,
+				canRewrite: false,
+				canReject: false,
+				canNext: false,
+				canPrevious: true,
+				canUndoLastAccept: true,
+				operation: "move",
+				operationLabel: "MOVE",
+			},
+		}),
+		expected: {
+			mode: "review",
+			anchorDirection: "below",
+			hasReviewBlock: true,
+			completionLabel: "sweep complete",
+			pendingCount: 0,
+			acceptedCount: 1,
+			rejectedCount: 1,
+			deferredCount: 0,
+			rewrittenCount: 0,
+			sceneProgressLabel: "Scene 2 of 5",
+			selectedIndexLabel: "2 total",
+			unresolvedCount: 0,
+			unresolvedDetails: undefined,
+			canApply: false,
+			canDefer: false,
+			canRewrite: false,
+			canNext: false,
+			canPrevious: true,
+			canReject: false,
+			canUndoLastAccept: true,
+			operation: "move",
+			operationLabel: "MOVE",
+			selectedLabel: "Current suggestion",
+		},
+	},
+];
