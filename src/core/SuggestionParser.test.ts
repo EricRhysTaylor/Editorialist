@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ReviewerDirectory } from "../state/ReviewerDirectory";
+import { ContributorDirectory } from "../state/ContributorDirectory";
 import { SuggestionParser } from "./SuggestionParser";
 
 function makeParser(): SuggestionParser {
-	return new SuggestionParser(new ReviewerDirectory());
+	return new SuggestionParser(new ContributorDirectory());
 }
 
 function fenced(body: string): string {

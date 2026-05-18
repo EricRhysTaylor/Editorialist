@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { SuggestionParser } from "../SuggestionParser";
-import { ReviewerDirectory } from "../../state/ReviewerDirectory";
+import { ContributorDirectory } from "../../state/ContributorDirectory";
 import type { ReviewStatus, ReviewSuggestion } from "../../models/ReviewSuggestion";
 import {
 	deriveSweepSummary,
@@ -13,7 +13,7 @@ import {
 } from "./SweepCompletion";
 
 function buildEditSuggestion(status: ReviewStatus): ReviewSuggestion {
-	const parser = new SuggestionParser(new ReviewerDirectory());
+	const parser = new SuggestionParser(new ContributorDirectory());
 	const note = `\`\`\`editorialist-review
 Reviewer: GPT-5.4
 ReviewerType: ai-editor

@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { MatchEngine } from "./MatchEngine";
-import { ReviewerDirectory } from "../state/ReviewerDirectory";
+import { ContributorDirectory } from "../state/ContributorDirectory";
 import { SuggestionParser } from "./SuggestionParser";
 
 function buildEditSuggestion(original: string, revised: string) {
-  const parser = new SuggestionParser(new ReviewerDirectory());
+  const parser = new SuggestionParser(new ContributorDirectory());
   const note = `\`\`\`editorialist-review
 Reviewer: GPT-5.4
 ReviewerType: ai-editor
@@ -61,7 +61,7 @@ describe("MatchEngine — already-applied detection", () => {
       "It's not a thing to be trifled with.",
     ].join("\n");
 
-    const parser = new SuggestionParser(new ReviewerDirectory());
+    const parser = new SuggestionParser(new ContributorDirectory());
     const note = `\`\`\`editorialist-review
 Reviewer: GPT-5.4
 ReviewerType: ai-editor
@@ -88,7 +88,7 @@ Why: tightening
     const afterStraight = "She nods. \"I know,\" she says.";
     const before = "She nods deeply. \"I know, of course I do,\" she says.";
 
-    const parser = new SuggestionParser(new ReviewerDirectory());
+    const parser = new SuggestionParser(new ContributorDirectory());
     const note = `\`\`\`editorialist-review
 Reviewer: GPT-5.4
 ReviewerType: ai-editor

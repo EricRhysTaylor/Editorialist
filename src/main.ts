@@ -56,7 +56,7 @@ import type {
 	ReviewerStats,
 } from "./models/ContributorProfile";
 import { ReviewStore, type AppliedReviewChange, type AppliedReviewState, type CompletedSweepState, type GuidedSweepState } from "./state/ReviewStore";
-import { ReviewerDirectory } from "./state/ReviewerDirectory";
+import { ContributorDirectory } from "./state/ContributorDirectory";
 import { EditorialismService } from "./services/EditorialismService";
 import { ReviewRegistryService } from "./services/ReviewRegistryService";
 import { ReviewWorkflowService } from "./services/ReviewWorkflowService";
@@ -190,7 +190,7 @@ const PENDING_EDITS_SUMMARY_MIN_REFRESH_MS = 2000;
 export default class EditorialistPlugin extends Plugin {
 	readonly store = new ReviewStore();
 
-	private readonly reviewerDirectory = new ReviewerDirectory();
+	private readonly reviewerDirectory = new ContributorDirectory();
 	private readonly parser = new SuggestionParser(this.reviewerDirectory);
 	private readonly matchEngine = new MatchEngine();
 	private readonly reviewEngine = new ReviewEngine(this.parser, this.matchEngine);

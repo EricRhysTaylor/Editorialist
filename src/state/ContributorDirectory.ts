@@ -15,7 +15,7 @@ import type {
 	ReviewerType,
 } from "../models/ContributorProfile";
 
-export class ReviewerDirectory {
+export class ContributorDirectory {
 	private profiles: ContributorProfile[] = [];
 	private didChange = false;
 

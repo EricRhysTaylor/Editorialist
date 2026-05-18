@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { normalizeImportedReviewText } from "./ReviewBlockFormat";
 import { SuggestionParser } from "./SuggestionParser";
-import { ReviewerDirectory } from "../state/ReviewerDirectory";
+import { ContributorDirectory } from "../state/ContributorDirectory";
 
 describe("user paste from LLM — full content", () => {
   it("parses every edit", () => {
@@ -84,7 +84,7 @@ Why: Makes the crash land emotionally and structurally: the system that should p
     const normalized = normalizeImportedReviewText(paste);
     expect(normalized).not.toBeNull();
 
-    const parser = new SuggestionParser(new ReviewerDirectory());
+    const parser = new SuggestionParser(new ContributorDirectory());
     const parsed = parser.parse(normalized!);
     expect(parsed.suggestions).toHaveLength(10);
     expect(parsed.memos).toHaveLength(1);

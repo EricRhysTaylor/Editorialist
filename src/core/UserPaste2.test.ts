@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { normalizeImportedReviewText } from "./ReviewBlockFormat";
 import { SuggestionParser } from "./SuggestionParser";
-import { ReviewerDirectory } from "../state/ReviewerDirectory";
+import { ContributorDirectory } from "../state/ContributorDirectory";
 
 describe("user paste #2 — leading bare fence label", () => {
   it("preserves trailing memo with bullet-list prose after blank lines", () => {
@@ -33,7 +33,7 @@ This will make the act feel like a defining character moment, not just a surviva
     expect(normalized).toContain("=== MEMO ===");
     expect(normalized).toContain("moral resistance");
 
-    const parser = new SuggestionParser(new ReviewerDirectory());
+    const parser = new SuggestionParser(new ContributorDirectory());
     const parsed = parser.parse(normalized!);
     expect(parsed.suggestions).toHaveLength(1);
     expect(parsed.memos).toHaveLength(1);
@@ -93,7 +93,7 @@ The hybrid sequence is strong but the choice can be sharper.`;
     const normalized = normalizeImportedReviewText(paste);
     expect(normalized).not.toBeNull();
 
-    const parser = new SuggestionParser(new ReviewerDirectory());
+    const parser = new SuggestionParser(new ContributorDirectory());
     const parsed = parser.parse(normalized!);
     expect(parsed.suggestions).toHaveLength(3);
     expect(parsed.memos).toHaveLength(2);

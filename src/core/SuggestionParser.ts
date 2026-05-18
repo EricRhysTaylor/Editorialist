@@ -13,7 +13,7 @@ import type {
 	SceneMemo,
 } from "../models/ReviewSuggestion";
 import type { ParsedContributorReference } from "../models/ContributorProfile";
-import type { ReviewerDirectory } from "../state/ReviewerDirectory";
+import type { ContributorDirectory } from "../state/ContributorDirectory";
 import { extractReviewBlocks } from "./ReviewBlockFormat";
 import { getLinesWithOffsets, type LineWithOffsets } from "./TextOffsets";
 
@@ -62,7 +62,7 @@ export class SuggestionParser {
 			this.parseCondenseSuggestion(fields, suggestionId, source, metadata),
 	};
 
-	constructor(private readonly reviewerDirectory: ReviewerDirectory) {}
+	constructor(private readonly reviewerDirectory: ContributorDirectory) {}
 
 	parse(noteText: string): ParsedReviewDocument {
 		const suggestions: ReviewSuggestion[] = [];

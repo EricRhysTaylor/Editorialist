@@ -25,7 +25,7 @@ import type {
 	ReviewerSignalRecord,
 	SceneReviewRecord,
 } from "../models/ContributorProfile";
-import type { ReviewerDirectory } from "../state/ReviewerDirectory";
+import type { ContributorDirectory } from "../state/ContributorDirectory";
 import { getLegacyContributorSignatureKind } from "../core/ContributorIdentity";
 import { getEffectiveSuggestionStatus, getSuggestionSignatureParts } from "../core/OperationSupport";
 import {
@@ -81,7 +81,7 @@ export class ReviewRegistryService {
 	constructor(
 		private readonly app: App,
 		private readonly reviewEngine: ReviewEngine,
-		private readonly reviewerDirectory: ReviewerDirectory,
+		private readonly reviewerDirectory: ContributorDirectory,
 		private readonly persistData: () => Promise<void>,
 	) {}
 

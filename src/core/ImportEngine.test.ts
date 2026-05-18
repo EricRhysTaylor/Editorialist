@@ -3,11 +3,11 @@ import type { App } from "obsidian";
 import { ImportEngine } from "./ImportEngine";
 import { MatchEngine } from "./MatchEngine";
 import { SuggestionParser } from "./SuggestionParser";
-import { ReviewerDirectory } from "../state/ReviewerDirectory";
+import { ContributorDirectory } from "../state/ContributorDirectory";
 import { createMockApp, type MockApp } from "../../tests/mocks/vault";
 
 function createImportEngine(app: MockApp): ImportEngine {
-	const reviewers = new ReviewerDirectory();
+	const reviewers = new ContributorDirectory();
 	const parser = new SuggestionParser(reviewers);
 	const matcher = new MatchEngine();
 	// MockApp is a structural superset of the slice ImportEngine actually touches.
