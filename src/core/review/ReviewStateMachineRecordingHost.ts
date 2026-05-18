@@ -50,6 +50,8 @@ export interface RecordingEditor {
 export interface RecordingHostConfig {
 	session?: ReviewSession | null;
 	completedSweep?: CompletedSweepState | null;
+	guidedSweep?: GuidedSweepState | null;
+	selectedSuggestionId?: string | null;
 	noteContext?: ReviewNoteContextLike | null;
 	activeEditorView?: unknown | null;
 	suggestionsById?: Record<string, ReviewSuggestion>;
@@ -59,8 +61,7 @@ export interface RecordingHostConfig {
 			| "canRejectSuggestion"
 			| "canMarkSuggestionRewritten"
 			| "hasActiveReviewSession"
-			| "hasReviewSessionContext"
-			| "shouldShowGuidedSweepHandoff",
+			| "hasReviewSessionContext",
 			boolean
 		>
 	>;
@@ -166,8 +167,7 @@ export class RecordingReviewStateMachineHost implements ReviewStateMachineHost {
 			| "canRejectSuggestion"
 			| "canMarkSuggestionRewritten"
 			| "hasActiveReviewSession"
-			| "hasReviewSessionContext"
-			| "shouldShowGuidedSweepHandoff",
+			| "hasReviewSessionContext",
 		op: HostOp,
 	): boolean {
 		this.rec(op);
@@ -189,8 +189,14 @@ export class RecordingReviewStateMachineHost implements ReviewStateMachineHost {
 	hasReviewSessionContext(): boolean {
 		return this.guard("hasReviewSessionContext", "hasReviewSessionContext");
 	}
-	shouldShowGuidedSweepHandoff(): boolean {
-		return this.guard("shouldShowGuidedSweepHandoff", "shouldShowGuidedSweepHandoff");
+
+	getSelectedSuggestionId(): string | null {
+		this.rec("getSelectedSuggestionId");
+		return this.config.selectedSuggestionId ?? null;
+	}
+	getGuidedSweep(): GuidedSweepState | null {
+		this.rec("getGuidedSweep");
+		return this.config.guidedSweep ?? null;
 	}
 
 	getReviewSession(): ReviewSession | null {

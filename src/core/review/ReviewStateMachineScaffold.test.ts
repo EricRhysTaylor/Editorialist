@@ -97,7 +97,8 @@ describe("ReviewStateMachine scaffold — ordering invariants", () => {
 
 	it("acceptSuggestion handoff: detection precedes the handoff transition", () => {
 		const t = trace("acceptSuggestion", "handoff wins");
-		expect(idx(t, "shouldShowGuidedSweepHandoff")).toBeLessThan(idx(t, "enterGuidedSweepHandoff"));
+		// shouldShowGuidedSweepHandoff decomposes to getGuidedSweep (+ store.getSession arg).
+		expect(idx(t, "getGuidedSweep")).toBeLessThan(idx(t, "enterGuidedSweepHandoff"));
 	});
 
 	it("undo success: undo command runs before decision clear; sweep restored in order", () => {

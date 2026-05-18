@@ -35,7 +35,8 @@ function drainEmittableOps(): Set<HostOp> {
 	host.canMarkSuggestionRewritten();
 	host.hasActiveReviewSession();
 	host.hasReviewSessionContext();
-	host.shouldShowGuidedSweepHandoff();
+	host.getSelectedSuggestionId();
+	host.getGuidedSweep();
 	host.getReviewSession();
 	host.getSuggestionById("x");
 	host.getCurrentSessionTrackingContext();

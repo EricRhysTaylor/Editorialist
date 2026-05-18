@@ -5,25 +5,35 @@
 // deferSuggestion / applySuggestionById / undoLastAppliedSuggestion /
 // jumpToSuggestionTarget) out of main.ts.
 //
-// Unlike ToolbarViewModel, this logic is side-effectful (editor mutation,
-// Notice, app.commands, decorations, store/registry writes), so it cannot be
-// fixture-tested as a pure function. Instead this file captures, from a
-// read-only pass over the CURRENT main.ts code:
+// This logic is side-effectful (editor mutation, Notice, app.commands,
+// decorations, store/registry writes) so it cannot be fixture-tested as a
+// pure function. This file captures, from a LINE-FAITHFUL read of the
+// current main.ts (~1282–1567 + the traversal/handoff wrappers ~3008–3057):
 //   1. ReviewStateMachineHost — every collaborator the machine touches.
-//   2. STATE_MACHINE_TRACES — the exact ordered host-call sequence per
-//      method/branch (the behavior contract).
-//   3. EXTRACTION_CHECKLIST — the gate that must be true before extracting.
+//   2. STATE_MACHINE_TRACES — the exact ordered host-call sequence.
+//   3. EXTRACTION_CHECKLIST — the gate before extracting.
 //
-// Post-extraction, a recording fake implementing ReviewStateMachineHost
-// replays each trace: expect(recorder.ops).toEqual(trace.steps...) — turning
-// these into a true parity gate with zero re-authoring.
+// IMPORTANT — three former "pure/atomic" ops were corrected to their real
+// host effects (they read the store via main.ts private wrappers):
+//   • getAdjacentRevealableSuggestionId  (main.ts:3011) calls
+//       this.getReviewSession()  +  this.store.getState().selectedSuggestionId
+//     before the pure ranking. → emits getReviewSession + getSelectedSuggestionId.
+//   • shouldShowGuidedSweepHandoff (main.ts:3050) calls this.getGuidedSweep()
+//     (and this.getReviewSession() only when no session arg is supplied).
+//     Every caller passes an arg, so → emits getGuidedSweep. The ARG
+//     expression `this.store.getSession()` is itself a recorded store.getSession.
+//   • findPreferredSuggestionId (main.ts:3046) is genuinely pure, BUT its
+//     caller passes `this.store.getSession()?.suggestions` → an extra
+//     store.getSession at that call site.
+// Repeated `this.store.getSession()` passed as arguments to the registry
+// syncs are also recorded (they were previously omitted).
+//
+// Post-extraction, RecordingReviewStateMachineHost replays each trace and
+// asserts host.ops === expectedHostEffects(trace) (pure markers filtered).
 
 import type { ReviewSuggestion } from "../../models/ReviewSuggestion";
 
 // ── Host contract ────────────────────────────────────────────────────────
-// Every member the state machine reads or invokes. Grouped by dependency
-// class (see the original seam audit). The future ReviewStateMachine takes
-// exactly this as its constructor dependency; main.ts implements it.
 export interface ReviewStateMachineHost {
 	// — store (mutable review state) —
 	store: {
@@ -34,6 +44,11 @@ export interface ReviewStateMachineHost {
 		setCompletedSweep(value: CompletedSweepState | null): void;
 		setGuidedSweep(value: GuidedSweepState | null): void;
 	};
+
+	// — focused store reads the traversal/handoff logic depends on —
+	// (kept as focused host methods rather than exposing store.getState()) —
+	getSelectedSuggestionId(): string | null; // = this.store.getState().selectedSuggestionId
+	getGuidedSweep(): GuidedSweepState | null; // = this.store.getGuidedSweep()
 
 	// — registry (persisted indexes; injected, never modified here) —
 	registry: {
@@ -62,7 +77,7 @@ export interface ReviewStateMachineHost {
 	executeEditorUndo(): boolean; // wraps app.commands.executeCommandById("editor:undo")
 	notify(message: string): void; // wraps new Notice(...)
 
-	// — guards / resolvers (pure-ish over store + match state) —
+	// — guards / resolvers (atomic adapter methods) —
 	canAcceptSuggestion(id: string): boolean;
 	canRejectSuggestion(id: string): boolean;
 	canMarkSuggestionRewritten(id: string): boolean;
@@ -71,7 +86,6 @@ export interface ReviewStateMachineHost {
 	getReviewSession(): ReviewSession | null;
 	getSuggestionById(id: string): ReviewSuggestion | null;
 	getCurrentSessionTrackingContext(): { sessionId?: string; sessionStartedAt?: number };
-	shouldShowGuidedSweepHandoff(session: ReviewSession | null): boolean;
 	getPanelOnlyReviewStateForSession(session: ReviewSession | null): unknown | null;
 
 	// — UI / reveal / decorations —
@@ -88,8 +102,7 @@ export interface ReviewStateMachineHost {
 	setActiveHighlight(range: { start: number; end: number } | null, tone: "muted" | null): void;
 }
 
-// Structural placeholders — the real types live in models/state and are not
-// imported here to keep the scaffold dependency-free.
+// Structural placeholders — real types live in models/state.
 export interface ReviewSession {
 	notePath: string;
 	suggestions: ReviewSuggestion[];
@@ -130,8 +143,9 @@ export const STATE_MACHINE_METHODS = [
 ] as const;
 export type StateMachineMethod = (typeof STATE_MACHINE_METHODS)[number];
 
-// Every legal trace `op` value. Used by the contract test so a fixture
-// cannot reference a host member that does not exist.
+// Every legal trace `op`. `shouldShowGuidedSweepHandoff` is GONE — it is not
+// a host op; it decomposes to getGuidedSweep (+ store.getSession arg).
+// getSelectedSuggestionId / getGuidedSweep are NEW host effects.
 export const HOST_OPS = [
 	"store.getSession",
 	"store.getCompletedSweep",
@@ -139,6 +153,8 @@ export const HOST_OPS = [
 	"store.updateSuggestionStatus",
 	"store.setCompletedSweep",
 	"store.setGuidedSweep",
+	"getSelectedSuggestionId",
+	"getGuidedSweep",
 	"registry.persistReviewDecision",
 	"registry.clearPersistedReviewDecision",
 	"registry.syncReviewerSignalsForSession",
@@ -156,7 +172,6 @@ export const HOST_OPS = [
 	"getReviewSession",
 	"getSuggestionById",
 	"getCurrentSessionTrackingContext",
-	"shouldShowGuidedSweepHandoff",
 	"getPanelOnlyReviewStateForSession",
 	"revealSelectedSuggestion",
 	"revealSuggestionContext",
@@ -191,28 +206,39 @@ export interface StateMachineTrace {
 	steps: TraceStep[];
 }
 
+// Decomposition shared by every "compute adjacent" point (main.ts:3011):
+//   const s = this.getReviewSession();            -> getReviewSession
+//   if (!s || s.suggestions.length === 0) return null;
+//   return pure(s.suggestions, this.store.getState().selectedSuggestionId, ...)
+//                                                 -> getSelectedSuggestionId
+const COMPUTE_NEXT: TraceStep[] = [
+	{ op: "getReviewSession", note: "inside getAdjacentRevealableSuggestionId wrapper" },
+	{ op: "getSelectedSuggestionId", note: "store.getState().selectedSuggestionId — DO NOT optimize away" },
+	{ op: "getAdjacentRevealableSuggestionId", note: "pure ranking (filtered from host effects)" },
+];
+
 // ── Ordered behavior contract (golden traces) ────────────────────────────
-// Derived read-only from the current main.ts. Ordering is significant; the
-// callout invariants are asserted explicitly in the test.
 export const STATE_MACHINE_TRACES: StateMachineTrace[] = [
 	{
 		method: "rejectSuggestion",
 		scenario: "guard fails -> no-op",
-		steps: [{ op: "canRejectSuggestion" }, { op: "return", note: "early, nothing persisted" }],
+		steps: [{ op: "canRejectSuggestion" }, { op: "return", note: "early; nothing persisted" }],
 	},
 	{
 		method: "rejectSuggestion",
 		scenario: "happy path, next suggestion exists",
 		steps: [
 			{ op: "canRejectSuggestion" },
-			{ op: "getReviewSession" },
+			{ op: "getReviewSession", note: "const session" },
 			{ op: "getSuggestionById" },
 			{ op: "getCurrentSessionTrackingContext" },
-			{ op: "registry.persistReviewDecision", note: "status 'rejected', persist:false — BEFORE status update" },
-			{ op: "getAdjacentRevealableSuggestionId", note: "'next', id — computed BEFORE updateSuggestionStatus" },
+			{ op: "registry.persistReviewDecision", note: "'rejected', persist:false — BEFORE status update" },
+			...COMPUTE_NEXT,
 			{ op: "store.updateSuggestionStatus" },
+			{ op: "store.getSession", note: "ARG to syncReviewerSignalsForSession — extra read" },
 			{ op: "registry.syncReviewerSignalsForSession", note: "persist:false" },
-			{ op: "registry.syncSceneInventoryForSession", note: "no persist option -> this is the single persist point" },
+			{ op: "store.getSession", note: "ARG to syncSceneInventoryForSession — extra read" },
+			{ op: "registry.syncSceneInventoryForSession", note: "single persisting call" },
 			{ op: "store.selectSuggestion" },
 			{ op: "revealSelectedSuggestion" },
 			{ op: "return" },
@@ -227,26 +253,33 @@ export const STATE_MACHINE_TRACES: StateMachineTrace[] = [
 			{ op: "getSuggestionById" },
 			{ op: "getCurrentSessionTrackingContext" },
 			{ op: "registry.persistReviewDecision" },
-			{ op: "getAdjacentRevealableSuggestionId" },
+			...COMPUTE_NEXT,
 			{ op: "store.updateSuggestionStatus" },
+			{ op: "store.getSession" },
 			{ op: "registry.syncReviewerSignalsForSession" },
+			{ op: "store.getSession" },
 			{ op: "registry.syncSceneInventoryForSession" },
-			{ op: "shouldShowGuidedSweepHandoff" },
+			{ op: "store.getSession", note: "ARG to shouldShowGuidedSweepHandoff(this.store.getSession())" },
+			{ op: "getGuidedSweep", note: "shouldShowGuidedSweepHandoff decomposed; left operand of &&" },
 			{ op: "enterGuidedSweepHandoff" },
 		],
 	},
 	{
 		method: "deferSuggestion",
-		scenario: "happy path",
+		scenario: "happy path, next exists",
 		steps: [
-			{ op: "hasActiveReviewSession", note: "guard differs from reject (not canRejectSuggestion)" },
+			{ op: "hasActiveReviewSession", note: "guard differs from reject" },
 			{ op: "getReviewSession" },
 			{ op: "getSuggestionById" },
 			{ op: "getCurrentSessionTrackingContext" },
-			{ op: "registry.persistReviewDecision", note: "status 'deferred'" },
-			{ op: "getAdjacentRevealableSuggestionId", note: "'next', id, treatCurrentAsDeferred = TRUE" },
+			{ op: "registry.persistReviewDecision", note: "'deferred'" },
+			{ op: "getReviewSession", note: "compute-next wrapper" },
+			{ op: "getSelectedSuggestionId" },
+			{ op: "getAdjacentRevealableSuggestionId", note: "treatCurrentAsDeferred = TRUE (pure, filtered)" },
 			{ op: "store.updateSuggestionStatus" },
+			{ op: "store.getSession" },
 			{ op: "registry.syncReviewerSignalsForSession" },
+			{ op: "store.getSession" },
 			{ op: "registry.syncSceneInventoryForSession" },
 			{ op: "store.selectSuggestion" },
 			{ op: "revealSelectedSuggestion" },
@@ -261,13 +294,17 @@ export const STATE_MACHINE_TRACES: StateMachineTrace[] = [
 			{ op: "getReviewSession" },
 			{ op: "getSuggestionById" },
 			{ op: "getCurrentSessionTrackingContext" },
-			{ op: "registry.persistReviewDecision", note: "status 'rewritten'" },
-			{ op: "getAdjacentRevealableSuggestionId" },
+			{ op: "registry.persistReviewDecision", note: "'rewritten'" },
+			...COMPUTE_NEXT,
 			{ op: "store.updateSuggestionStatus" },
+			{ op: "store.getSession" },
 			{ op: "registry.syncReviewerSignalsForSession" },
+			{ op: "store.getSession" },
 			{ op: "registry.syncSceneInventoryForSession" },
-			{ op: "shouldShowGuidedSweepHandoff" },
-			{ op: "findPreferredSuggestionId", note: "reject/defer do NOT have this fallback" },
+			{ op: "store.getSession", note: "ARG to shouldShowGuidedSweepHandoff" },
+			{ op: "getGuidedSweep", note: "handoff check returns false here" },
+			{ op: "store.getSession", note: "ARG: this.store.getSession()?.suggestions to findPreferredSuggestionId" },
+			{ op: "findPreferredSuggestionId", note: "pure (filtered); reject/defer lack this fallback" },
 			{ op: "store.selectSuggestion" },
 			{ op: "revealSelectedSuggestion" },
 		],
@@ -279,8 +316,8 @@ export const STATE_MACHINE_TRACES: StateMachineTrace[] = [
 			{ op: "getReviewNoteContext" },
 			{ op: "store.getSession" },
 			{ op: "getSuggestionById" },
-			{ op: "notify", note: "active note mismatch message" },
-			{ op: "return", note: "returns null" },
+			{ op: "notify", note: "active note mismatch" },
+			{ op: "return", note: "null" },
 		],
 	},
 	{
@@ -303,35 +340,37 @@ export const STATE_MACHINE_TRACES: StateMachineTrace[] = [
 			{ op: "store.getSession" },
 			{ op: "getSuggestionById" },
 			{ op: "canAcceptSuggestion" },
-			{ op: "createSuggestionApplyPlan" },
+			{ op: "createSuggestionApplyPlan", note: "pure (filtered)" },
 			{ op: "notify" },
 			{ op: "return", note: "null" },
 		],
 	},
 	{
 		method: "applySuggestionById",
-		scenario: "success (highlightMode muted, no preserveSelection)",
+		scenario: "success (highlightMode muted, no preserveSelection, syncSceneInventory default)",
 		steps: [
 			{ op: "getReviewNoteContext" },
 			{ op: "store.getSession" },
 			{ op: "getSuggestionById" },
 			{ op: "canAcceptSuggestion" },
-			{ op: "createSuggestionApplyPlan" },
-			{ op: "editor.replaceRange" },
+			{ op: "createSuggestionApplyPlan", note: "pure (filtered)" },
+			{ op: "editor.replaceRange", note: "after offsetToPos(from/to) — offsetToPos not recorded" },
 			{ op: "editor.setSelection" },
 			{ op: "editor.scrollIntoView" },
 			{ op: "editor.focus" },
 			{ op: "registry.clearPersistedReviewDecision", note: "persist:false" },
 			{ op: "refreshSessionAfterAcceptedEdit" },
 			{ op: "getCurrentSessionTrackingContext" },
+			{ op: "store.getSession", note: "ARG to syncReviewerSignalsForSession" },
 			{ op: "registry.syncReviewerSignalsForSession" },
-			{ op: "editor.getValue" },
-			{ op: "getNoteTextFingerprint" },
-			{ op: "set.lastAppliedChange", note: "written BEFORE scene-inventory sync" },
-			{ op: "registry.syncSceneInventoryForSession", note: "skipped when options.syncSceneInventory === false" },
-			{ op: "store.selectSuggestion", note: "skipped when options.preserveSelection" },
-			{ op: "setActiveHighlight", note: "only when highlightMode === 'muted'" },
-			{ op: "syncActiveEditorDecorations", note: "only when highlightMode === 'muted'" },
+			{ op: "editor.getValue", note: "arg to getNoteTextFingerprint" },
+			{ op: "getNoteTextFingerprint", note: "pure (filtered)" },
+			{ op: "set.lastAppliedChange", note: "BEFORE scene-inventory sync" },
+			{ op: "store.getSession", note: "ARG to syncSceneInventoryForSession (skipped if syncSceneInventory===false)" },
+			{ op: "registry.syncSceneInventoryForSession" },
+			{ op: "store.selectSuggestion", note: "skipped if options.preserveSelection" },
+			{ op: "setActiveHighlight", note: "only highlightMode==='muted'" },
+			{ op: "syncActiveEditorDecorations", note: "only highlightMode==='muted'" },
 			{ op: "return", note: "{ start, end, suggestionId }" },
 		],
 	},
@@ -339,18 +378,45 @@ export const STATE_MACHINE_TRACES: StateMachineTrace[] = [
 		method: "acceptSuggestion",
 		scenario: "apply fails -> false",
 		steps: [
-			{ op: "getSuggestionById", note: "captured BEFORE apply (operation read later)" },
-			{ op: "createSuggestionApplyPlan", note: "via applySuggestionById" },
-			{ op: "return", note: "false when applied change is null" },
+			{ op: "getSuggestionById", note: "acceptedSuggestion, BEFORE apply" },
+			{ op: "getReviewNoteContext", note: "applySuggestionById internal" },
+			{ op: "store.getSession" },
+			{ op: "getSuggestionById" },
+			{ op: "notify", note: "apply guard fails -> applied change null" },
+			{ op: "return", note: "false" },
 		],
 	},
 	{
 		method: "acceptSuggestion",
 		scenario: "handoff wins over selection advance",
 		steps: [
+			{ op: "getSuggestionById", note: "acceptedSuggestion" },
+			// applySuggestionById success (inlined)
+			{ op: "getReviewNoteContext" },
+			{ op: "store.getSession" },
 			{ op: "getSuggestionById" },
-			{ op: "store.getSession", note: "refreshedSession" },
-			{ op: "shouldShowGuidedSweepHandoff" },
+			{ op: "canAcceptSuggestion" },
+			{ op: "createSuggestionApplyPlan", note: "pure (filtered)" },
+			{ op: "editor.replaceRange" },
+			{ op: "editor.setSelection" },
+			{ op: "editor.scrollIntoView" },
+			{ op: "editor.focus" },
+			{ op: "registry.clearPersistedReviewDecision" },
+			{ op: "refreshSessionAfterAcceptedEdit" },
+			{ op: "getCurrentSessionTrackingContext" },
+			{ op: "store.getSession" },
+			{ op: "registry.syncReviewerSignalsForSession" },
+			{ op: "editor.getValue" },
+			{ op: "getNoteTextFingerprint", note: "pure (filtered)" },
+			{ op: "set.lastAppliedChange" },
+			{ op: "store.getSession" },
+			{ op: "registry.syncSceneInventoryForSession" },
+			{ op: "store.selectSuggestion" },
+			{ op: "setActiveHighlight" },
+			{ op: "syncActiveEditorDecorations" },
+			// back in acceptSuggestion
+			{ op: "store.getSession", note: "const refreshedSession" },
+			{ op: "getGuidedSweep", note: "shouldShowGuidedSweepHandoff(refreshedSession) — arg supplied, no getReviewSession" },
 			{ op: "enterGuidedSweepHandoff" },
 			{ op: "return", note: "true; branch order: handoff > panelOnly+next > cut+next > move > !range+next > select id" },
 		],
@@ -359,12 +425,36 @@ export const STATE_MACHINE_TRACES: StateMachineTrace[] = [
 		method: "acceptSuggestion",
 		scenario: "move operation re-selects same id",
 		steps: [
-			{ op: "getSuggestionById" },
+			{ op: "getSuggestionById", note: "acceptedSuggestion" },
+			{ op: "getReviewNoteContext" },
 			{ op: "store.getSession" },
-			{ op: "shouldShowGuidedSweepHandoff" },
-			{ op: "getAdjacentRevealableSuggestionId" },
-			{ op: "getPanelOnlyReviewStateForSession" },
-			{ op: "store.selectSuggestion", note: "operation 'move' -> select(id), not next" },
+			{ op: "getSuggestionById" },
+			{ op: "canAcceptSuggestion" },
+			{ op: "createSuggestionApplyPlan", note: "pure (filtered)" },
+			{ op: "editor.replaceRange" },
+			{ op: "editor.setSelection" },
+			{ op: "editor.scrollIntoView" },
+			{ op: "editor.focus" },
+			{ op: "registry.clearPersistedReviewDecision" },
+			{ op: "refreshSessionAfterAcceptedEdit" },
+			{ op: "getCurrentSessionTrackingContext" },
+			{ op: "store.getSession" },
+			{ op: "registry.syncReviewerSignalsForSession" },
+			{ op: "editor.getValue" },
+			{ op: "getNoteTextFingerprint", note: "pure (filtered)" },
+			{ op: "set.lastAppliedChange" },
+			{ op: "store.getSession" },
+			{ op: "registry.syncSceneInventoryForSession" },
+			{ op: "store.selectSuggestion" },
+			{ op: "setActiveHighlight" },
+			{ op: "syncActiveEditorDecorations" },
+			{ op: "store.getSession", note: "refreshedSession" },
+			{ op: "getGuidedSweep", note: "shouldShowGuidedSweepHandoff false" },
+			{ op: "getReviewSession", note: "getAdjacentRevealableSuggestionId('next', id)" },
+			{ op: "getSelectedSuggestionId" },
+			{ op: "getAdjacentRevealableSuggestionId", note: "pure (filtered)" },
+			{ op: "getPanelOnlyReviewStateForSession", note: "false -> not panel branch" },
+			{ op: "store.selectSuggestion", note: "operation 'move' -> select(id)" },
 			{ op: "revealSelectedSuggestion" },
 			{ op: "return" },
 		],
@@ -374,8 +464,7 @@ export const STATE_MACHINE_TRACES: StateMachineTrace[] = [
 		scenario: "no change / wrong note -> notify + return",
 		steps: [
 			{ op: "getReviewNoteContext" },
-			{ op: "getSuggestionById", note: "only if lastAppliedChange set" },
-			{ op: "store.getCompletedSweep" },
+			{ op: "store.getCompletedSweep", note: "getSuggestionById NOT called — change is null" },
 			{ op: "notify", note: "'No applied change is ready to undo.'" },
 			{ op: "return" },
 		],
@@ -385,15 +474,15 @@ export const STATE_MACHINE_TRACES: StateMachineTrace[] = [
 		scenario: "success with completed-sweep restore",
 		steps: [
 			{ op: "getReviewNoteContext" },
-			{ op: "getSuggestionById" },
+			{ op: "getSuggestionById", note: "only because lastAppliedChange is set" },
 			{ op: "store.getCompletedSweep" },
 			{ op: "focusReviewLeaf" },
 			{ op: "getActiveEditorView" },
-			{ op: "executeEditorUndo", note: "app.commands editor:undo; false -> notify+return" },
+			{ op: "executeEditorUndo", note: "false -> notify+return" },
 			{ op: "registry.clearPersistedReviewDecision", note: "only if appliedSuggestion resolved" },
-			{ op: "set.lastAppliedChange", note: "set to null" },
-			{ op: "store.setCompletedSweep", note: "null — only when completedSweep was present" },
-			{ op: "store.setGuidedSweep", note: "restores guided sweep from the completed snapshot" },
+			{ op: "set.lastAppliedChange", note: "= null" },
+			{ op: "store.setCompletedSweep", note: "null — only when completedSweep present" },
+			{ op: "store.setGuidedSweep", note: "restore from completed snapshot" },
 			{ op: "resyncSessionForActiveNote" },
 			{ op: "store.selectSuggestion" },
 			{ op: "revealSuggestionContext" },
@@ -406,32 +495,34 @@ export const STATE_MACHINE_TRACES: StateMachineTrace[] = [
 		steps: [
 			{ op: "hasReviewSessionContext" },
 			{ op: "getSuggestionById" },
+			{ op: "getSuggestionPrimaryTarget", note: "pure (filtered)" },
 			{ op: "store.selectSuggestion" },
-			{ op: "getSuggestionPrimaryTarget" },
 			{ op: "focusResolvedTarget" },
 		],
 	},
 ];
 
-// ── Invariants that must hold post-extraction ────────────────────────────
 export const ORDERING_INVARIANTS = [
 	"persistReviewDecision runs BEFORE store.updateSuggestionStatus (reject/defer/rewrite)",
-	"getAdjacentRevealableSuggestionId is computed BEFORE store.updateSuggestionStatus",
+	"the compute-next read pair (getReviewSession + getSelectedSuggestionId) runs BEFORE store.updateSuggestionStatus",
+	"each registry sync is preceded by its own store.getSession ARG read — these extra reads must NOT be optimized away",
 	"syncReviewerSignalsForSession uses persist:false; syncSceneInventoryForSession is the single persisting call",
 	"applySuggestionById sets lastAppliedChange BEFORE syncSceneInventoryForSession",
+	"editor.replaceRange precedes registry.clearPersistedReviewDecision",
 	"acceptSuggestion branch order: handoff > (panelOnly && next) > (cut && next) > move > (!range && next) > select(id)",
-	"deferSuggestion passes treatCurrentAsDeferred=true to getAdjacentRevealableSuggestionId; reject/rewrite pass false/default",
+	"deferSuggestion passes treatCurrentAsDeferred=true; reject/rewrite pass false/default",
 	"only markSuggestionRewritten has the findPreferredSuggestionId fallback tail",
+	"shouldShowGuidedSweepHandoff is NOT atomic: it decomposes to getGuidedSweep, and its caller arg `store.getSession()` is a recorded read",
 	"undo restores guided sweep from the completed-sweep snapshot only when one was present",
 ] as const;
 
-// ── Extraction gate ──────────────────────────────────────────────────────
 export const EXTRACTION_CHECKLIST = [
-	"A recording fake implementing ReviewStateMachineHost exists in tests.",
-	"Every STATE_MACHINE_TRACES entry is replayed against the fake post-extraction and the recorded op order toEqual the trace.",
+	"Host adds focused getSelectedSuggestionId() and getGuidedSweep() (done in this scaffold).",
+	"Recording fake implements ReviewStateMachineHost and replays every STATE_MACHINE_TRACES entry; host.ops toEqual expectedHostEffects(trace).",
 	"All ORDERING_INVARIANTS have a dedicated assertion.",
-	"createSuggestionApplyPlan is already characterized (done: OperationSupport.applyPlan.test.ts).",
-	"SuggestionTraversal is already pure + tested (done).",
+	"createSuggestionApplyPlan characterized (done: OperationSupport.applyPlan.test.ts).",
+	"SuggestionTraversal pure + tested (done).",
+	"The extracted machine reimplements getAdjacentRevealableSuggestionId/shouldShowGuidedSweepHandoff via host primitives — it must NOT collapse the documented extra store reads.",
 	"main.ts keeps thin async wrappers delegating to the extracted machine; no call sites change.",
 	"npm run check + npm run test + css-drift --strict green on the extraction commit.",
 	"Single revertible commit; wrappers keep main.ts independently compilable.",
