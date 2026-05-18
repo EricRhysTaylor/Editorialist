@@ -1,4 +1,5 @@
-import { ButtonComponent, Modal, TextComponent, setIcon, type App } from "obsidian";
+import { ButtonComponent, TextComponent, setIcon, type App } from "obsidian";
+import { PromiseModal } from "./modals/PromiseModal";
 import { formatReviewerTypeLabel } from "../core/ContributorIdentity";
 import {
 	CONTRIBUTOR_ROLE_DEFINITIONS,
@@ -18,7 +19,7 @@ export interface ContributorStrengthsModalResult {
 	reviewerType: ReviewerType;
 }
 
-class ContributorStrengthsModal extends Modal {
+class ContributorStrengthsModal extends PromiseModal<ContributorStrengthsModalResult> {
 	private displayName: string;
 	private identityNameEl: HTMLElement | null = null;
 	private identityRoleEl: HTMLSpanElement | null = null;
@@ -34,15 +35,13 @@ class ContributorStrengthsModal extends Modal {
 	constructor(
 		app: App,
 		private readonly options: ContributorStrengthsModalOptions,
-		private readonly resolveResult: (result: ContributorStrengthsModalResult | null) => void,
 	) {
 		super(app);
 		this.displayName = options.profile.displayName;
 		this.selectedRole = options.profile.reviewerType;
 	}
 
-	onOpen(): void {
-		this.contentEl.empty();
+	protected renderContent(): void {
 		this.contentEl.addClass("editorialist-contributor-modal");
 
 		this.contentEl.createEl("h3", { text: "Edit contributor" });
@@ -152,26 +151,17 @@ class ContributorStrengthsModal extends Modal {
 			if (!this.selectedRole) {
 				return;
 			}
-			this.resolveResult({
+			this.finish({
 				displayName: this.displayName.trim(),
 				strengths: [...this.selectedStrengths],
 				reviewerType: this.selectedRole,
 			});
-			this.close();
 		});
 
 		const cancel = new ButtonComponent(actions).setButtonText("Cancel");
-		cancel.onClick(() => {
-			this.resolveResult(null);
-			this.close();
-		});
+		cancel.onClick(() => this.finish(null));
 		this.syncIdentityPreview();
 		this.syncSaveState();
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-		this.resolveResult(null);
 	}
 
 	private createRoleTile(
@@ -296,15 +286,5 @@ export function openContributorStrengthsModal(
 	app: App,
 	options: ContributorStrengthsModalOptions,
 ): Promise<ContributorStrengthsModalResult | null> {
-	return new Promise((resolve) => {
-		let resolved = false;
-		const modal = new ContributorStrengthsModal(app, options, (result) => {
-			if (resolved) {
-				return;
-			}
-			resolved = true;
-			resolve(result);
-		});
-		modal.open();
-	});
+	return new ContributorStrengthsModal(app, options).present();
 }

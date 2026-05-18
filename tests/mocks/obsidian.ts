@@ -47,3 +47,25 @@ export function normalizePath(path: string): string {
 }
 
 export type App = Record<string, unknown>;
+
+// Minimal Modal stub mirroring Obsidian's open()->onOpen / close()->onClose
+// contract. contentEl only needs empty() for PromiseModal base tests.
+export class Modal {
+	app: App;
+	contentEl: { empty(): void } = { empty(): void {} };
+
+	constructor(app: App) {
+		this.app = app;
+	}
+
+	open(): void {
+		this.onOpen();
+	}
+
+	close(): void {
+		this.onClose();
+	}
+
+	onOpen(): void {}
+	onClose(): void {}
+}

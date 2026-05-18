@@ -4,6 +4,7 @@ import { formatContributorIdentityLabel, formatReviewerTypeLabel } from "../core
 import { getEffectiveSuggestionStatus, getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isImplicitlyAcceptedSuggestion, isMoveSuggestion } from "../core/OperationSupport";
 import type { ReviewSuggestion, SceneMemo } from "../models/ReviewSuggestion";
 import type { default as EditorialistPlugin, ReviewStateIndexEntry, ReviewStateOverview } from "../main";
+import { bindImmediateAction } from "./util/bindImmediateAction";
 
 export const REVIEW_PANEL_VIEW_TYPE = "editorialist-review-panel";
 
@@ -1798,56 +1799,7 @@ export class ReviewPanel extends ItemView {
 	}
 
 	private bindImmediateAction(element: HTMLElement, onClick: () => void): void {
-		let handledPointerDown = false;
-
-		element.addEventListener("pointerdown", (event) => {
-			if (element instanceof HTMLButtonElement && element.disabled) {
-				return;
-			}
-			if (this.shouldIgnoreImmediateActionEvent(element, event.target)) {
-				return;
-			}
-			if (event.button !== 0) {
-				return;
-			}
-
-			handledPointerDown = true;
-			event.preventDefault();
-			event.stopPropagation();
-			onClick();
-		});
-
-		element.addEventListener("click", (event) => {
-			if (element instanceof HTMLButtonElement && element.disabled) {
-				return;
-			}
-			if (this.shouldIgnoreImmediateActionEvent(element, event.target)) {
-				return;
-			}
-			event.preventDefault();
-			event.stopPropagation();
-			if (handledPointerDown) {
-				handledPointerDown = false;
-				return;
-			}
-
-			onClick();
-		});
-	}
-
-	private shouldIgnoreImmediateActionEvent(element: HTMLElement, target: EventTarget | null): boolean {
-		if (!(target instanceof HTMLElement)) {
-			return false;
-		}
-
-		if (target === element) {
-			return false;
-		}
-
-		const interactiveAncestor = target.closest(
-			"button, a, input, select, textarea, summary, [role='button'], [contenteditable='true'], .dropdown",
-		);
-		return Boolean(interactiveAncestor && interactiveAncestor !== element);
+		bindImmediateAction(element, () => onClick(), { guardInteractiveDescendants: true });
 	}
 
 	private getFilteredSuggestions(suggestions: ReviewSuggestion[]): ReviewSuggestion[] {

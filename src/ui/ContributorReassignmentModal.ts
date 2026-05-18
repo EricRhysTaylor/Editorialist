@@ -1,6 +1,7 @@
-import { ButtonComponent, DropdownComponent, Modal, TextComponent, type App } from "obsidian";
+import { ButtonComponent, DropdownComponent, TextComponent, type App } from "obsidian";
 import { formatContributorIdentityLabel } from "../core/ContributorIdentity";
 import type { ContributorProfile } from "../models/ContributorProfile";
+import { PromiseModal } from "./modals/PromiseModal";
 
 export type ContributorReassignmentMode = "merge" | "reassign";
 
@@ -15,7 +16,7 @@ interface ContributorReassignmentModalOptions {
 	targetProfiles: ContributorProfile[];
 }
 
-class ContributorReassignmentModal extends Modal {
+class ContributorReassignmentModal extends PromiseModal<ContributorReassignmentResult> {
 	private createName = "";
 	private confirmButton: ButtonComponent | null = null;
 	private dropdown: DropdownComponent | null = null;
@@ -24,13 +25,11 @@ class ContributorReassignmentModal extends Modal {
 	constructor(
 		app: App,
 		private readonly options: ContributorReassignmentModalOptions,
-		private readonly resolveResult: (result: ContributorReassignmentResult | null) => void,
 	) {
 		super(app);
 	}
 
-	onOpen(): void {
-		this.contentEl.empty();
+	protected renderContent(): void {
 		this.contentEl.addClass("editorialist-contributor-modal");
 
 		const title = this.options.mode === "merge" ? "Merge contributor" : "Reassign contributor";
@@ -119,30 +118,16 @@ class ContributorReassignmentModal extends Modal {
 			.setCta();
 		this.confirmButton.onClick(() => {
 			if (this.targetValue === "__create__") {
-				this.resolveResult({
-					createName: this.createName.trim(),
-				});
-				this.close();
+				this.finish({ createName: this.createName.trim() });
 				return;
 			}
 
-			this.resolveResult({
-				targetReviewerId: this.targetValue,
-			});
-			this.close();
+			this.finish({ targetReviewerId: this.targetValue });
 		});
 
 		const cancel = new ButtonComponent(actions).setButtonText("Cancel");
-		cancel.onClick(() => {
-			this.resolveResult(null);
-			this.close();
-		});
+		cancel.onClick(() => this.finish(null));
 		this.syncConfirmState();
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-		this.resolveResult(null);
 	}
 
 	private renderCreateInput = (): void => undefined;
@@ -169,16 +154,5 @@ export function openContributorReassignmentModal(
 	app: App,
 	options: ContributorReassignmentModalOptions,
 ): Promise<ContributorReassignmentResult | null> {
-	return new Promise((resolve) => {
-		let resolved = false;
-		const modal = new ContributorReassignmentModal(app, options, (result) => {
-			if (resolved) {
-				return;
-			}
-
-			resolved = true;
-			resolve(result);
-		});
-		modal.open();
-	});
+	return new ContributorReassignmentModal(app, options).present();
 }

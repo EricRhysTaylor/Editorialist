@@ -1,6 +1,7 @@
 import { ButtonComponent, setIcon } from "obsidian";
 import type EditorialistPlugin from "../main";
 import type { SupportedReviewOperationType } from "../models/ReviewSuggestion";
+import { bindImmediateAction } from "./util/bindImmediateAction";
 
 const OPERATION_ICONS: Record<SupportedReviewOperationType, string> = {
 	edit: "file-pen-line",
@@ -709,34 +710,6 @@ function renderMetaSeparator(parent: HTMLElement): void {
 	markAsNonEditorSurface(separator);
 }
 
-function bindImmediateAction(
-	element: HTMLElement,
-	onClick: (event: MouseEvent | PointerEvent) => void,
-): void {
-	let handledPointerDown = false;
-
-	element.addEventListener("pointerdown", (event) => {
-		if (event.button !== 0) {
-			return;
-		}
-
-		handledPointerDown = true;
-		event.preventDefault();
-		event.stopPropagation();
-		onClick(event);
-	});
-
-	element.addEventListener("click", (event) => {
-		event.preventDefault();
-		event.stopPropagation();
-		if (handledPointerDown) {
-			handledPointerDown = false;
-			return;
-		}
-
-		onClick(event);
-	});
-}
 
 function subscribeToModifierKeys(callback: (state: { modPressed: boolean; shiftPressed: boolean }) => void): () => void {
 	ensureShiftTracking();
