@@ -27,7 +27,18 @@ import type {
 } from "../models/ReviewerProfile";
 import type { ReviewerDirectory } from "../state/ReviewerDirectory";
 import { getLegacyContributorSignatureKind } from "../core/ContributorIdentity";
-import { getEffectiveSuggestionStatus, getSuggestionSignatureParts, isImplicitlyAcceptedCutSuggestion } from "../core/OperationSupport";
+import { getEffectiveSuggestionStatus, getSuggestionSignatureParts } from "../core/OperationSupport";
+import {
+	normalizeReviewDecisionStatus,
+	normalizeSceneStatus,
+	normalizeSweepStatus,
+} from "../core/status/ReviewStatusModel";
+import {
+	getSweepStatus,
+	isSweepCompleteFromCounts,
+	tallyReviewStatuses,
+	tallySuggestionStatuses,
+} from "../core/review/SweepCompletion";
 
 interface ReviewActivitySummary {
 	accepted: number;
@@ -65,10 +76,6 @@ export class ReviewRegistryService {
 
 	private getEffectiveSuggestionStatus(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
 		return getEffectiveSuggestionStatus(suggestion);
-	}
-
-	private isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
-		return isImplicitlyAcceptedCutSuggestion(suggestion);
 	}
 
 	constructor(
@@ -298,40 +305,8 @@ export class ReviewRegistryService {
 	}
 
 	getReviewActivitySummary(_reviewerProfiles: ReviewerProfile[]): ReviewActivitySummary {
-		const signalTotals = Object.values(this.reviewerSignalIndex).reduce(
-			(totals, profile) => {
-				totals.totalSuggestions += 1;
-				switch (profile.status) {
-					case "accepted":
-						totals.accepted += 1;
-						break;
-					case "pending":
-						totals.pending += 1;
-						break;
-					case "deferred":
-						totals.deferred += 1;
-						break;
-					case "rejected":
-						totals.rejected += 1;
-						break;
-					case "rewritten":
-						totals.rewritten += 1;
-						break;
-					case "unresolved":
-						totals.unresolved += 1;
-						break;
-				}
-				return totals;
-			},
-			{
-				totalSuggestions: 0,
-				accepted: 0,
-				deferred: 0,
-				pending: 0,
-				rejected: 0,
-				rewritten: 0,
-				unresolved: 0,
-			},
+		const signalTotals = tallyReviewStatuses(
+			Object.values(this.reviewerSignalIndex).map((profile) => profile.status),
 		);
 		const entries = this.getSweepRegistryEntries();
 
@@ -577,41 +552,14 @@ export class ReviewRegistryService {
 			}
 
 			const session = this.applyPersistedReviewState(this.reviewEngine.buildSession(file.path, noteText, null));
-			let acceptedCount = 0;
-			let deferredCount = 0;
-			let pendingCount = 0;
-			let rejectedCount = 0;
-			let rewrittenCount = 0;
-			let unresolvedCount = 0;
 			let lastDecisionAt = 0;
-
 			for (const suggestion of session.suggestions) {
 				const record = this.getPersistedReviewDecisionRecord(file.path, suggestion);
 				if (record?.updatedAt) {
 					lastDecisionAt = Math.max(lastDecisionAt, record.updatedAt);
 				}
-
-				switch (this.getEffectiveSuggestionStatus(suggestion)) {
-					case "accepted":
-						acceptedCount += 1;
-						break;
-					case "deferred":
-						deferredCount += 1;
-						break;
-					case "pending":
-						pendingCount += 1;
-						break;
-					case "rejected":
-						rejectedCount += 1;
-						break;
-					case "rewritten":
-						rewrittenCount += 1;
-						break;
-					case "unresolved":
-						unresolvedCount += 1;
-						break;
-				}
 			}
+			const tally = tallySuggestionStatuses(session.suggestions);
 
 			nextIndex[file.path] = {
 				sceneId: getSceneIdForFile(this.app, file),
@@ -620,16 +568,17 @@ export class ReviewRegistryService {
 				bookLabel: getBookHintForPath(file.path, this.activeBookScope),
 				batchIds,
 				batchCount: batchIds.length,
-				pendingCount,
-				unresolvedCount,
-				deferredCount,
-				acceptedCount,
-				rejectedCount,
-				rewrittenCount,
-				status:
-					pendingCount === 0 && unresolvedCount === 0 && deferredCount === 0
-						? "completed"
-						: "in_progress",
+				pendingCount: tally.pending,
+				unresolvedCount: tally.unresolved,
+				deferredCount: tally.deferred,
+				acceptedCount: tally.accepted,
+				rejectedCount: tally.rejected,
+				rewrittenCount: tally.rewritten,
+				status: getSweepStatus({
+					pendingCount: tally.pending,
+					unresolvedCount: tally.unresolved,
+					deferredCount: tally.deferred,
+				}),
 				lastUpdated: Math.max(file.stat.mtime, lastDecisionAt),
 			};
 		}
@@ -695,41 +644,14 @@ export class ReviewRegistryService {
 			return;
 		}
 
-		let acceptedCount = 0;
-		let deferredCount = 0;
-		let pendingCount = 0;
-		let rejectedCount = 0;
-		let rewrittenCount = 0;
-		let unresolvedCount = 0;
 		let lastDecisionAt = 0;
-
 		for (const suggestion of session.suggestions) {
 			const record = this.getPersistedReviewDecisionRecord(session.notePath, suggestion);
 			if (record?.updatedAt) {
 				lastDecisionAt = Math.max(lastDecisionAt, record.updatedAt);
 			}
-
-			switch (this.getEffectiveSuggestionStatus(suggestion)) {
-				case "accepted":
-					acceptedCount += 1;
-					break;
-				case "deferred":
-					deferredCount += 1;
-					break;
-				case "pending":
-					pendingCount += 1;
-					break;
-				case "rejected":
-					rejectedCount += 1;
-					break;
-				case "rewritten":
-					rewrittenCount += 1;
-					break;
-				case "unresolved":
-					unresolvedCount += 1;
-					break;
-			}
 		}
+		const tally = tallySuggestionStatuses(session.suggestions);
 
 		const batchIds = [
 			...new Set(importedBlocks.map((block) => block.batchId).filter((value): value is string => Boolean(value))),
@@ -741,16 +663,17 @@ export class ReviewRegistryService {
 			bookLabel: getBookHintForPath(file.path, this.activeBookScope),
 			batchIds,
 			batchCount: batchIds.length,
-			pendingCount,
-			unresolvedCount,
-			deferredCount,
-			acceptedCount,
-			rejectedCount,
-			rewrittenCount,
-			status:
-				pendingCount === 0 && unresolvedCount === 0 && deferredCount === 0
-					? "completed"
-					: "in_progress",
+			pendingCount: tally.pending,
+			unresolvedCount: tally.unresolved,
+			deferredCount: tally.deferred,
+			acceptedCount: tally.accepted,
+			rejectedCount: tally.rejected,
+			rewrittenCount: tally.rewritten,
+			status: getSweepStatus({
+				pendingCount: tally.pending,
+				unresolvedCount: tally.unresolved,
+				deferredCount: tally.deferred,
+			}),
 			lastUpdated: Math.max(file.stat.mtime, lastDecisionAt),
 		};
 
@@ -770,6 +693,32 @@ export class ReviewRegistryService {
 		}
 	}
 
+	// A scene with no record yet, or whose batch block has been removed
+	// (batchCount === 0), is not blocking — it carries no open items. Every
+	// other scene defers to the centralized sweep-completion rule.
+	private areSweepPathsComplete(sweepPaths: readonly string[]): boolean {
+		return sweepPaths.every((path) => {
+			const record = this.sceneReviewIndex[path];
+			if (!record || record.batchCount === 0) {
+				return true;
+			}
+
+			return isSweepCompleteFromCounts(record);
+		});
+	}
+
+	// Registry-level completeness for a single sweep, used by the guided-sweep
+	// finish guard. Mirrors reconcileSweepRegistryStatus's path-completion check.
+	isSweepRegistryComplete(batchId: string): boolean {
+		const entry = this.sweepRegistry[batchId];
+		if (!entry) {
+			return false;
+		}
+
+		const sweepPaths = entry.sceneOrder.length > 0 ? entry.sceneOrder : entry.importedNotePaths;
+		return this.areSweepPathsComplete(sweepPaths);
+	}
+
 	private reconcileSweepRegistryStatus(updatedRecord: SceneReviewRecord): void {
 		for (const entry of Object.values(this.sweepRegistry)) {
 			if (entry.status !== "in_progress") {
@@ -781,16 +730,7 @@ export class ReviewRegistryService {
 				continue;
 			}
 
-			const allCompleted = sweepPaths.every((path) => {
-				const record = this.sceneReviewIndex[path];
-				if (!record || record.batchCount === 0) {
-					return true;
-				}
-
-				return record.pendingCount === 0 && record.unresolvedCount === 0 && record.deferredCount === 0;
-			});
-
-			if (allCompleted) {
+			if (this.areSweepPathsComplete(sweepPaths)) {
 				this.sweepRegistry[entry.batchId] = {
 					...entry,
 					status: "completed",
@@ -1436,12 +1376,11 @@ export class ReviewRegistryService {
 
 		return Object.fromEntries(
 			Object.entries(index).map(([key, record]) => {
-				const legacyStatus = record?.status as string | undefined;
 				return [
 					key,
 					{
 						key,
-						status: legacyStatus === "later" ? "deferred" : (legacyStatus as PersistedReviewDecisionRecord["status"] | undefined) ?? "deferred",
+						status: normalizeReviewDecisionStatus(record?.status),
 						updatedAt: record?.updatedAt ?? Date.now(),
 						sessionId: record?.sessionId,
 						sessionStartedAt: record?.sessionStartedAt,
@@ -1470,7 +1409,6 @@ export class ReviewRegistryService {
 
 		return Object.fromEntries(
 			Object.entries(index).map(([notePath, record]) => {
-				const legacyStatus = record?.status as string | undefined;
 				return [
 					notePath,
 					{
@@ -1486,7 +1424,7 @@ export class ReviewRegistryService {
 						acceptedCount: record?.acceptedCount ?? record?.resolvedCount ?? 0,
 						rejectedCount: record?.rejectedCount ?? 0,
 						rewrittenCount: record?.rewrittenCount ?? 0,
-						status: legacyStatus === "not_started" ? "in_progress" : (legacyStatus as SceneReviewRecord["status"] | undefined) ?? "in_progress",
+						status: normalizeSceneStatus(record?.status),
 						lastUpdated: record?.lastUpdated ?? Date.now(),
 						cleanedAt: record?.cleanedAt,
 					},
@@ -1513,7 +1451,6 @@ export class ReviewRegistryService {
 
 		return Object.fromEntries(
 			Object.entries(registry).map(([batchId, entry]) => {
-				const legacyStatus = entry?.status as string | undefined;
 				return [
 					batchId,
 					{
@@ -1527,12 +1464,7 @@ export class ReviewRegistryService {
 						importedNotePaths: [...(entry?.importedNotePaths ?? [])],
 						currentNotePath: entry?.currentNotePath,
 						sceneOrder: [...(entry?.sceneOrder ?? [])],
-						status:
-							legacyStatus === "cleaned_up"
-								? "cleaned"
-								: legacyStatus === "imported"
-									? "in_progress"
-									: (legacyStatus as ReviewSweepRegistryEntry["status"] | undefined) ?? "in_progress",
+						status: normalizeSweepStatus(entry?.status),
 						totalSuggestions: entry?.totalSuggestions ?? 0,
 						updatedAt: entry?.updatedAt ?? Date.now(),
 					},

@@ -134,6 +134,23 @@ export class ReviewWorkflowService {
 			return;
 		}
 
+		// A sweep can only complete when no pending/deferred/unresolved items
+		// remain (centralized rule in SweepCompletion). If the user reaches the
+		// end of the guided navigation with work still open, stop the guided
+		// run but leave the sweep in_progress so it can be resumed — do not
+		// fabricate a "completed" state or open the completed-sweep audit.
+		if (!this.registry.isSweepRegistryComplete(guidedSweep.batchId)) {
+			await this.registry.updateSweepRegistry(guidedSweep.batchId, {
+				status: "in_progress",
+			});
+			this.store.setGuidedSweep(null);
+			await this.host.clearReviewSelection();
+			this.host.notify(
+				"Sweep paused — pending, deferred, or unresolved items remain. Resolve them, then finish the sweep again.",
+			);
+			return;
+		}
+
 		const currentNotePath = guidedSweep.notePaths[guidedSweep.currentNoteIndex];
 		if (currentNotePath) {
 			const revisionUpdate = await this.host.recordCompletedSceneRevision(currentNotePath, guidedSweep.batchId);

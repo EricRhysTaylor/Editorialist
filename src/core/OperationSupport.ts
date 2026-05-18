@@ -8,7 +8,6 @@ import {
 	type EditSuggestion,
 	type MoveSuggestion,
 	type ReviewSuggestion,
-	type ReviewStatus,
 	type ReviewTargetRef,
 } from "../models/ReviewSuggestion";
 import { normalizeMatchText } from "./TextMatching";
@@ -301,7 +300,7 @@ export function getSuggestionReason(suggestion: ReviewSuggestion): string {
 		return "Accepted into the manuscript.";
 	}
 
-	if (isImplicitlyAcceptedCutSuggestion(suggestion)) {
+	if (isImplicitlyAcceptedSuggestion(suggestion)) {
 		return "Already removed from the scene.";
 	}
 
@@ -366,12 +365,6 @@ export function isImplicitlyAcceptedSuggestion(suggestion: ReviewSuggestion): bo
 	return false;
 }
 
-// Backward-compatible alias retained for call sites that still reference the
-// older cut-only name. Both names now share the same generalized predicate.
-export function isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
-	return isImplicitlyAcceptedSuggestion(suggestion);
-}
-
 export function isSuggestionOpen(suggestion: ReviewSuggestion): boolean {
 	const status = getEffectiveSuggestionStatus(suggestion);
 	return status === "pending" || status === "deferred" || status === "unresolved";
@@ -381,7 +374,7 @@ export function isSuggestionResolved(suggestion: ReviewSuggestion): boolean {
 	if (
 		suggestion.status === "accepted" ||
 		suggestion.status === "rewritten" ||
-		isImplicitlyAcceptedCutSuggestion(suggestion)
+		isImplicitlyAcceptedSuggestion(suggestion)
 	) {
 		return true;
 	}
@@ -398,9 +391,6 @@ export function getSuggestionPresentationTone(suggestion: ReviewSuggestion): Rev
 	return status === "accepted" || status === "rejected" || status === "rewritten" ? "muted" : "active";
 }
 
-export function getSuggestionStatusRank(_status: ReviewStatus): number {
-	return 0;
-}
 
 export function canApplySuggestionDirectly(suggestion: ReviewSuggestion): boolean {
 	return operationSupport[suggestion.operation].canApply(suggestion as never);

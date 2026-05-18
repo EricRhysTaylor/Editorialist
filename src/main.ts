@@ -27,10 +27,9 @@ import {
 	getSuggestionAnchorTarget,
 	getSuggestionPresentationTone,
 	getSuggestionPrimaryTarget,
-	getSuggestionStatusRank,
-	isImplicitlyAcceptedCutSuggestion as isImplicitlyAcceptedCutSuggestionShared,
 	isSuggestionOpen as isSuggestionOpenShared,
 } from "./core/OperationSupport";
+import { isSweepComplete as isSweepCompleteShared } from "./core/review/SweepCompletion";
 import {
 	REVIEW_BLOCK_FENCE,
 	getReviewBlockFenceLabel,
@@ -2338,10 +2337,6 @@ export default class EditorialistPlugin extends Plugin {
 		return getSuggestionPresentationTone(suggestion);
 	}
 
-	getSuggestionPresentationRank(suggestion: ReviewSuggestion): number {
-		return getSuggestionStatusRank(suggestion.status);
-	}
-
 	getAppliedReviewState(): AppliedReviewState | null {
 		return this.store.getAppliedReview();
 	}
@@ -3360,7 +3355,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private isSweepComplete(suggestions: ReviewSuggestion[]): boolean {
-		return !suggestions.some((suggestion) => this.isSuggestionOpen(suggestion));
+		return isSweepCompleteShared(suggestions);
 	}
 
 	private isSuggestionOpen(suggestion: ReviewSuggestion): boolean {
@@ -3369,10 +3364,6 @@ export default class EditorialistPlugin extends Plugin {
 
 	private getEffectiveSuggestionStatus(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
 		return getEffectiveSuggestionStatusShared(suggestion);
-	}
-
-	private isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
-		return isImplicitlyAcceptedCutSuggestionShared(suggestion);
 	}
 
 	private isAcceptedReviewSuggestion(suggestion: ReviewSuggestion): boolean {

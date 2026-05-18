@@ -1,7 +1,7 @@
 import { ButtonComponent, DropdownComponent, ItemView, setIcon, type WorkspaceLeaf } from "obsidian";
 import { renderContributorBrandMark, resolveContributorBrand } from "../core/ContributorBrandMarks";
 import { formatContributorIdentityLabel, formatReviewerTypeLabel } from "../core/ContributorIdentity";
-import { getEffectiveSuggestionStatus, getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isImplicitlyAcceptedCutSuggestion, isMoveSuggestion } from "../core/OperationSupport";
+import { getEffectiveSuggestionStatus, getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isImplicitlyAcceptedSuggestion, isMoveSuggestion } from "../core/OperationSupport";
 import type { ReviewSuggestion, SceneMemo } from "../models/ReviewSuggestion";
 import type { default as EditorialistPlugin, ReviewStateIndexEntry, ReviewStateOverview } from "../main";
 
@@ -1660,7 +1660,7 @@ export class ReviewPanel extends ItemView {
 	}
 
 	private getVisualStatusName(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
-		if (this.isImplicitlyAcceptedCutSuggestion(suggestion)) {
+		if (this.isImplicitlyAcceptedSuggestion(suggestion)) {
 			return "accepted";
 		}
 
@@ -1668,7 +1668,7 @@ export class ReviewPanel extends ItemView {
 	}
 
 	private getVisualTone(suggestion: ReviewSuggestion): "active" | "muted" {
-		if (this.isImplicitlyAcceptedCutSuggestion(suggestion)) {
+		if (this.isImplicitlyAcceptedSuggestion(suggestion)) {
 			return "active";
 		}
 
@@ -1867,11 +1867,6 @@ export class ReviewPanel extends ItemView {
 	}
 
 	private compareSuggestions(left: ReviewSuggestion, right: ReviewSuggestion): number {
-		const rankOrder = this.plugin.getSuggestionPresentationRank(left) - this.plugin.getSuggestionPresentationRank(right);
-		if (rankOrder !== 0) {
-			return rankOrder;
-		}
-
 		const leftProfile = this.plugin.getReviewerProfile(left.contributor.reviewerId);
 		const rightProfile = this.plugin.getReviewerProfile(right.contributor.reviewerId);
 		const leftStarred = Boolean(leftProfile?.isStarred);
@@ -1911,7 +1906,7 @@ export class ReviewPanel extends ItemView {
 			// engine inferred ("the original isn't here anymore — must already
 			// have been handled"). The implicit case gets the "Already X" framing
 			// the author asked for; the explicit case keeps the active verb.
-			if (this.isImplicitlyAcceptedCutSuggestion(suggestion)) {
+			if (this.isImplicitlyAcceptedSuggestion(suggestion)) {
 				switch (suggestion.operation) {
 					case "edit":
 						return "Already revised";
@@ -1967,8 +1962,8 @@ export class ReviewPanel extends ItemView {
 		return getEffectiveSuggestionStatus(suggestion);
 	}
 
-	private isImplicitlyAcceptedCutSuggestion(suggestion: ReviewSuggestion): boolean {
-		return isImplicitlyAcceptedCutSuggestion(suggestion);
+	private isImplicitlyAcceptedSuggestion(suggestion: ReviewSuggestion): boolean {
+		return isImplicitlyAcceptedSuggestion(suggestion);
 	}
 
 	private isOtherTextSuggestion(suggestion: ReviewSuggestion): boolean {

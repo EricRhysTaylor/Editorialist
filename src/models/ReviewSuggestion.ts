@@ -16,11 +16,9 @@ export const SUPPORTED_REVIEW_OPERATION_LABELS: Record<SupportedReviewOperationT
 	condense: "Condense",
 };
 
-export type ReviewOperationType = SupportedReviewOperationType | "insert" | "split" | "merge" | "advisory";
-
 export type ReviewStatus = "pending" | "accepted" | "rejected" | "deferred" | "unresolved" | "rewritten";
 
-export type MatchType = "exact" | "multiple" | "none" | "text_changed" | "already_applied";
+export type MatchType = "exact" | "multiple" | "none" | "already_applied";
 
 export type ReviewPlacement = "before" | "after";
 
@@ -167,8 +165,3 @@ export function isCutSuggestion(suggestion: ReviewSuggestion): suggestion is Cut
 export function isCondenseSuggestion(suggestion: ReviewSuggestion): suggestion is CondenseSuggestion {
 	return suggestion.operation === "condense";
 }
-
-// TODO Phase 2: add first-class insert parsing, matching, and apply support.
-// TODO Phase 2: add split and merge operations with dedicated validation rules.
-// TODO Phase 2: add advisory-only suggestion variants with richer non-apply workflows.
-// TODO Phase 2: add reviewer filtering and grouped review passes or batches.

@@ -1,5 +1,5 @@
 import type { ReviewSweepRegistryEntry } from "./ReviewImport";
-import type { ReviewOperationType } from "./ReviewSuggestion";
+import type { SupportedReviewOperationType } from "./ReviewSuggestion";
 
 export type ReviewerResolutionStatus = "exact" | "alias" | "suggested" | "unresolved" | "new";
 export type ContributorKind = "human" | "ai";
@@ -74,13 +74,12 @@ export interface ContributorResolution {
 	raw: ParsedContributorReference;
 }
 
-export type ReviewerResolution = ContributorResolution;
 
 export interface ReviewerSignalRecord {
 	key: string;
 	reviewerId: string;
 	status: "accepted" | "pending" | "deferred" | "rejected" | "rewritten" | "unresolved";
-	operation: ReviewOperationType;
+	operation: SupportedReviewOperationType;
 	sessionId?: string;
 	sessionStartedAt?: number;
 }
@@ -118,9 +117,3 @@ export interface EditorialistPluginData {
 	sceneReviewIndex: Record<string, SceneReviewRecord>;
 	sweepRegistry: Record<string, ReviewSweepRegistryEntry>;
 }
-
-// TODO Phase 2: add reviewer profile import/export.
-// TODO Phase 2: add reviewer tagging such as pacing/tone/line-edit strengths.
-// TODO Phase 2: add advanced reviewer and operation-type filtering.
-// TODO Phase 2: add explicit batch review sessions grouped by reviewer.
-// TODO Phase 2: add explicit review-batch grouping metadata.
