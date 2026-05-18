@@ -15,10 +15,12 @@ import type {
 import type { ParsedContributorReference } from "../models/ContributorProfile";
 import type { ContributorDirectory } from "../state/ContributorDirectory";
 import { extractReviewBlocks } from "./ReviewBlockFormat";
+import {
+	REVIEW_FIELD_PATTERN as FIELD_PATTERN,
+	REVIEW_SECTION_HEADER_PATTERN as SECTION_HEADER_PATTERN,
+	normalizeReviewFieldKey,
+} from "./ReviewBlockGrammar";
 import { getLinesWithOffsets, type LineWithOffsets } from "./TextOffsets";
-
-const SECTION_HEADER_PATTERN = /^\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\[)\s*(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\])?\s*$/i;
-const FIELD_PATTERN = /^([A-Za-z][A-Za-z ]+):\s*(.*)$/;
 
 type SectionKind = SupportedReviewOperationType | "memo";
 
@@ -126,7 +128,7 @@ export class SuggestionParser {
 				continue;
 			}
 
-			const key = this.normalizeFieldName(rawKey);
+			const key = normalizeReviewFieldKey(rawKey);
 			const value = fieldMatch[2]?.trim();
 			if (!value) {
 				continue;
@@ -389,7 +391,7 @@ export class SuggestionParser {
 					continue;
 				}
 
-				currentField = this.normalizeFieldName(rawKey);
+				currentField = normalizeReviewFieldKey(rawKey);
 				fields.set(currentField, [fieldMatch[2] ?? ""]);
 				continue;
 			}
@@ -446,9 +448,6 @@ export class SuggestionParser {
 		return inner.replace(escapeSequence, first);
 	}
 
-	private normalizeFieldName(value: string): string {
-		return value.toLowerCase().replace(/\s+/g, "");
-	}
 
 	private parseRouting(fields: Map<string, string[]>): ReviewSuggestionRouting | undefined {
 		const routing: ReviewSuggestionRouting = {

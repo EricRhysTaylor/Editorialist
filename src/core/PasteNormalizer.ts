@@ -1,4 +1,9 @@
 import { REVIEW_BLOCK_FENCE } from "./ReviewBlockFormat";
+import {
+	REVIEW_METADATA_KEYS as METADATA_KEYS,
+	REVIEW_OPERATION_KEYWORDS as OPERATION_KEYWORDS,
+	type ReviewOperationKeyword as OperationKeyword,
+} from "./ReviewBlockGrammar";
 
 // A line whose trimmed content is ONLY the bare fence label (e.g.
 // `editorialist-review`) with NO leading triple-backticks. Many chat UIs strip
@@ -12,30 +17,15 @@ const FENCE_LABEL_LINE_PATTERN = new RegExp(
 	"i",
 );
 
-const OPERATION_KEYWORDS = ["EDIT", "MOVE", "CUT", "CONDENSE", "MEMO"] as const;
-type OperationKeyword = (typeof OPERATION_KEYWORDS)[number];
-
-const METADATA_KEYS = new Set([
-	"batchid",
-	"importedby",
-	"template",
-	"templateyear",
-	"supportedoperations",
-	"sceneidsource",
-	"reviewer",
-	"reviewertype",
-	"provider",
-	"model",
-]);
-
 const METADATA_KEY_LINE = /^([A-Za-z][A-Za-z]*)\s*:/;
 
+const OPS = OPERATION_KEYWORDS.join("|");
 const DECORATED_SECTION_VARIANTS: RegExp[] = [
-	/^\s*={2,}\s*(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*={2,}\s*$/i,
-	/^\s*-{2,}\s*(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*-{2,}\s*$/i,
-	/^\s*#{1,6}\s+(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*#*\s*$/i,
-	/^\s*\*{1,3}\s*(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*\*{1,3}\s*$/i,
-	/^\s*\[\s*(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*\]\s*$/i,
+	new RegExp(`^\\s*={2,}\\s*(${OPS})\\s*={2,}\\s*$`, "i"),
+	new RegExp(`^\\s*-{2,}\\s*(${OPS})\\s*-{2,}\\s*$`, "i"),
+	new RegExp(`^\\s*#{1,6}\\s+(${OPS})\\s*#*\\s*$`, "i"),
+	new RegExp(`^\\s*\\*{1,3}\\s*(${OPS})\\s*\\*{1,3}\\s*$`, "i"),
+	new RegExp(`^\\s*\\[\\s*(${OPS})\\s*\\]\\s*$`, "i"),
 ];
 
 interface StructuredOperation {

@@ -1,27 +1,19 @@
 import { normalizeReviewPaste } from "./PasteNormalizer";
+import {
+	REVIEW_FIELD_PATTERN as GENERAL_FIELD_PATTERN,
+	REVIEW_METADATA_KEYS,
+	REVIEW_SECTION_HEADER_PATTERN as REVIEW_SECTION_PATTERN,
+	normalizeReviewFieldKey,
+} from "./ReviewBlockGrammar";
 import { getLinesWithOffsets } from "./TextOffsets";
 
 export const REVIEW_BLOCK_FENCE = "editorialist-review";
-const REVIEW_SECTION_PATTERN = /^\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\[)\s*(EDIT|MOVE|CUT|CONDENSE|MEMO)\s*(?:={2,}|-{2,}|#{1,6}|\*{1,3}|\])?\s*$/im;
 const REVIEW_METADATA_PATTERN =
 	/^(BatchId|ImportedBy|Template|TemplateYear|SupportedOperations|SceneIdSource|Reviewer|ReviewerType|Provider|Model)\s*:/im;
-const GENERAL_FIELD_PATTERN = /^([A-Za-z][A-Za-z ]+):\s*(.*)$/;
 // Decorative dividers some LLMs emit between sections (e.g. `⸻`, `---`, `***`,
 // `═══`). Detected as a line of punctuation/symbol characters with no letters
 // or digits — skipped without terminating the raw block.
 const DIVIDER_LINE_PATTERN = /^[^\p{L}\p{N}]+$/u;
-const REVIEW_METADATA_KEYS = new Set([
-	"batchid",
-	"importedby",
-	"template",
-	"templateyear",
-	"supportedoperations",
-	"sceneidsource",
-	"reviewer",
-	"reviewertype",
-	"provider",
-	"model",
-]);
 
 export interface ExtractedReviewBlock {
 	bodyText: string;
@@ -103,7 +95,7 @@ export function getReviewBlockMetadata(bodyText: string): Record<string, string>
 			continue;
 		}
 
-		const key = normalizeFieldKey(match[1] ?? "");
+		const key = normalizeReviewFieldKey(match[1] ?? "");
 		if (!REVIEW_METADATA_KEYS.has(key)) {
 			if (REVIEW_SECTION_PATTERN.test(line.trim())) {
 				break;
@@ -290,7 +282,7 @@ function extractRawTopReviewBlock(noteText: string): ExtractedReviewBlock | null
 
 			const fieldMatch = trimmed.match(GENERAL_FIELD_PATTERN);
 			if (!sawSection) {
-				if (fieldMatch && REVIEW_METADATA_KEYS.has(normalizeFieldKey(fieldMatch[1] ?? ""))) {
+				if (fieldMatch && REVIEW_METADATA_KEYS.has(normalizeReviewFieldKey(fieldMatch[1] ?? ""))) {
 					lastIncludedIndex = index;
 					endOffset = line.endOffset;
 					continue;
@@ -299,7 +291,7 @@ function extractRawTopReviewBlock(noteText: string): ExtractedReviewBlock | null
 			}
 
 			if (fieldMatch) {
-				currentField = normalizeFieldKey(fieldMatch[1] ?? "");
+				currentField = normalizeReviewFieldKey(fieldMatch[1] ?? "");
 				lastIncludedIndex = index;
 				endOffset = line.endOffset;
 				continue;
@@ -356,8 +348,4 @@ function normalizeRemovedReviewSpacing(text: string): string {
 		.replace(/\n{3,}/g, "\n\n");
 
 	return collapsed.trimEnd().length > 0 ? `${collapsed.trimEnd()}\n` : "";
-}
-
-function normalizeFieldKey(value: string): string {
-	return value.toLowerCase().replace(/\s+/g, "");
 }
