@@ -158,9 +158,12 @@ const operationSupport: {
 			};
 		},
 		getCopyBlocks: (suggestion: MoveSuggestion) => [
-			{ label: "Target", body: suggestion.payload.target },
+			{ label: "Move this text", body: suggestion.payload.target },
 			{
-				label: suggestion.payload.placement === "after" ? "After anchor" : "Before anchor",
+				label:
+					suggestion.payload.placement === "after"
+						? "Place it after this"
+						: "Place it before this",
 				body: suggestion.payload.anchor,
 			},
 		],
@@ -256,9 +259,9 @@ const operationSupport: {
 			};
 		},
 		getCopyBlocks: (suggestion: CondenseSuggestion) => [
-			{ label: "Target", body: suggestion.payload.target },
+			{ label: "Condense this", body: suggestion.payload.target },
 			...(suggestion.payload.suggestion
-				? [{ label: "Suggestion", body: suggestion.payload.suggestion }]
+				? [{ label: "Suggested version", body: suggestion.payload.suggestion }]
 				: []),
 		],
 		getPrimaryTarget: (suggestion: CondenseSuggestion) => suggestion.location.target,

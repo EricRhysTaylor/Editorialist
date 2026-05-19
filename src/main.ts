@@ -1124,6 +1124,17 @@ export default class EditorialistPlugin extends Plugin {
 		this.app.workspace.detachLeavesOfType(REVIEW_PANEL_VIEW_TYPE);
 	}
 
+	// Terminal/audit toolbar exit. Unlike dismissReviewToolbar() (a transient
+	// overlay hide used mid-review), this cleanly ends the review: clears the
+	// session/sweep state and acknowledges completion, so the side panel
+	// re-renders to its passive "no active review" state and the toolbar does
+	// not rebuild. The side panel leaf itself stays open.
+	async finishActiveReview(): Promise<void> {
+		await this.closeActiveReviewContext();
+		this.dismissReviewToolbar();
+		this.refreshReviewPanel();
+	}
+
 	dismissReviewToolbar(): void {
 		this.toolbarOverlayDismissedSignature = this.computeToolbarDismissalSignature(
 			this.toolbarOverlayState,
@@ -1215,6 +1226,13 @@ export default class EditorialistPlugin extends Plugin {
 		await this.rejectSuggestion(selectedSuggestion.id);
 	}
 
+	// TODO (RC follow-up — deferred this pass): rewrite capture. Today this
+	// only sets status="rewritten" (counts DONE, never blocks completion,
+	// shows "Rewritten by the author"). A later pass should optionally persist
+	// { originalMatchedText, suggestedReplacement, authorReplacement,
+	// timestamp } via a "Use my rewrite" / "Use selected text as rewrite"
+	// flow. Also deferred: RT scene-inventory glyphs, contributor-management
+	// redesign, advanced analytics/history.
 	async rewriteSelectedSuggestion(): Promise<void> {
 		if (!this.hasActiveReviewSession()) {
 			return;
@@ -2372,6 +2390,7 @@ export default class EditorialistPlugin extends Plugin {
 			acceptedReviewPreview: this.getAcceptedReviewPreviewState(session),
 			acceptedReviewCanNext: this.getAdjacentAcceptedSuggestionId("next") !== null,
 			acceptedReviewCanPrevious: this.getAdjacentAcceptedSuggestionId("previous") !== null,
+			sessionHasNoOpenWork: session ? !this.hasLiveActionableSuggestions(session.suggestions) : false,
 			guidedSweepHandoff: this.getGuidedSweepHandoffState(),
 			panelOnly: this.getPanelOnlyReviewStateForSession(session),
 			hasSelectedSuggestion: selected !== null,

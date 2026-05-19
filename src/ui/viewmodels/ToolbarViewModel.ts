@@ -135,10 +135,24 @@ export function buildToolbarState(inputs: ToolbarStateInputs): ToolbarState | nu
 		};
 	}
 
+	// Terminal/audit fallback: an active session whose work is fully decided
+	// (no pending/deferred/unresolved) always converges to the "All revisions
+	// complete" audit toolbar — review navigation + undo, no edit actions —
+	// instead of a dead/empty toolbar. This is the lifecycle end state and
+	// must not be preempted by handoff/panel/bulk (handled above).
+	if (inputs.sessionHasNoOpenWork) {
+		return {
+			mode: "completed_review",
+			title: "All revisions complete",
+			canNext: inputs.completedReviewCanNext,
+			canPrevious: inputs.completedReviewCanPrevious,
+			canUndo: inputs.hasLastAppliedChange,
+		};
+	}
+
+	// Open work remains but nothing is selected yet (transient — selection
+	// auto-runs). No coherent terminal state to show.
 	if (!inputs.hasSelectedSuggestion) {
-		// The original had an `if (panelOnly) return panel` here, but the
-		// panel:pre-selection branch above already returns for
-		// `panelOnly && !selected`, so it was unreachable. Removed.
 		return null;
 	}
 

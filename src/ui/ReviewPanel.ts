@@ -1269,9 +1269,9 @@ export class ReviewPanel extends ItemView {
 			case "condense":
 				this.renderComparisonStructure(
 					parent,
-					"Before",
+					"Condense this",
 					suggestion.payload.target,
-					"After",
+					"Suggested version",
 					suggestion.payload.suggestion ?? "Condense this paragraph.",
 					true,
 				);
@@ -1327,7 +1327,8 @@ export class ReviewPanel extends ItemView {
 			cls: "editorialist-suggestion__structure-bridge editorialist-suggestion__structure-bridge--move",
 		});
 		const destinationColumn = split.createDiv({ cls: "editorialist-suggestion__structure-column" });
-		const placementLabel = suggestion.payload.placement === "after" ? "After this" : "Before this";
+		const placementLabel =
+			suggestion.payload.placement === "after" ? "Place it after this" : "Place it before this";
 		const placementIcon = suggestion.payload.placement === "after" ? "corner-up-left" : "corner-down-left";
 
 		this.renderStructureMiniHeader(sourceColumn, "Move this text", {
@@ -1456,7 +1457,9 @@ export class ReviewPanel extends ItemView {
 			case "condense":
 				return suggestion.payload.suggestion ?? "Condense paragraph";
 			case "move":
-				return `Move ${suggestion.payload.placement} anchor`;
+				return suggestion.payload.placement === "after"
+					? "Move text after another passage"
+					: "Move text before another passage";
 		}
 	}
 
@@ -1520,7 +1523,7 @@ export class ReviewPanel extends ItemView {
 				disabled: !this.plugin.canJumpToSuggestionTarget(suggestion.id),
 				icon: "crosshair",
 				iconOnly: true,
-				tooltip: "Jump to target",
+				tooltip: "Jump to this text",
 			},
 		);
 		this.renderControlButton(
@@ -1534,7 +1537,7 @@ export class ReviewPanel extends ItemView {
 				disabled: !this.plugin.canJumpToSuggestionSource(suggestion.id),
 				icon: "file-text",
 				iconOnly: true,
-				tooltip: "Jump to source",
+				tooltip: "Jump to the note",
 			},
 		);
 		if (isMoveSuggestion(suggestion)) {
@@ -1549,7 +1552,7 @@ export class ReviewPanel extends ItemView {
 					disabled: !this.plugin.canJumpToSuggestionAnchor(suggestion.id),
 					icon: "link",
 					iconOnly: true,
-					tooltip: "Jump to anchor",
+					tooltip: "Jump to the destination",
 				},
 			);
 		}

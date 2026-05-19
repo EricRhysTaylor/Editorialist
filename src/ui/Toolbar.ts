@@ -204,8 +204,8 @@ export function createReviewToolbarElement(
 	if (state.mode === "applied_review") {
 		toolbar.addClass("editorialist-toolbar--panel");
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
-		buildFlatIconButton(leading, "Hide toolbar", "x", () => {
-			plugin.dismissReviewToolbar();
+		buildFlatIconButton(leading, "Finish review", "x", () => {
+			void plugin.finishActiveReview();
 		});
 
 		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });
@@ -232,8 +232,8 @@ export function createReviewToolbarElement(
 	if (state.mode === "accepted_review") {
 		toolbar.addClass("editorialist-toolbar--panel");
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
-		buildFlatIconButton(leading, "Hide toolbar", "x", () => {
-			plugin.dismissReviewToolbar();
+		buildFlatIconButton(leading, "Finish review", "x", () => {
+			void plugin.finishActiveReview();
 		});
 
 		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });
@@ -347,8 +347,8 @@ export function createReviewToolbarElement(
 	if (state.mode === "completed_review") {
 		toolbar.addClass("editorialist-toolbar--completed-review");
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
-		buildFlatIconButton(leading, "Hide toolbar", "x", () => {
-			plugin.dismissReviewToolbar();
+		buildFlatIconButton(leading, "Finish review", "x", () => {
+			void plugin.finishActiveReview();
 		});
 
 		const meta = toolbar.createDiv({ cls: "editorialist-toolbar__meta editorialist-toolbar__meta--centered" });

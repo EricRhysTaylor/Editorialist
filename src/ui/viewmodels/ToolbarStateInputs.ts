@@ -28,9 +28,10 @@ export const TOOLBAR_BRANCH_ORDER = [
 	"handoff", // 7. getGuidedSweepHandoffState()
 	"panel:pre-selection", // 8. panelOnly && !selectedSuggestion
 	"bulk_confirm", // 9. bulkApplyConfirm matches note && canApplyAndReview
-	"panel:post-selection", // 10. !selected && panelOnly
-	"null:no-selection", // 10b. !selected && !panelOnly
-	"review", // 11. selected present
+	"completed_review:audit-fallback", // 10. session active, zero OPEN work (terminal audit)
+	"panel:post-selection", // 11. !selected && panelOnly
+	"null:no-selection", // 11b. !selected && !panelOnly && open work
+	"review", // 12. selected present + open work
 ] as const;
 export type ToolbarBranch = (typeof TOOLBAR_BRANCH_ORDER)[number];
 
@@ -82,6 +83,9 @@ export interface ToolbarStateInputs {
 	acceptedReviewPreview: AcceptedReviewPreviewInput | null;
 	acceptedReviewCanNext: boolean;
 	acceptedReviewCanPrevious: boolean;
+	// True when the active session has zero OPEN work (no pending/deferred/
+	// unresolved by effective status). Drives the terminal audit fallback.
+	sessionHasNoOpenWork: boolean;
 	guidedSweepHandoff: GuidedSweepHandoffInput | null;
 	panelOnly: PanelOnlyInput | null;
 	hasSelectedSuggestion: boolean;
@@ -131,6 +135,7 @@ export const INPUT_GATHERERS: Record<keyof ToolbarStateInputs, string> = {
 	acceptedReviewPreview: "getAcceptedReviewPreviewState(session)",
 	acceptedReviewCanNext: 'getAdjacentAcceptedSuggestionId("next") !== null',
 	acceptedReviewCanPrevious: 'getAdjacentAcceptedSuggestionId("previous") !== null',
+	sessionHasNoOpenWork: "session ? !hasLiveActionableSuggestions(session.suggestions) : false",
 	guidedSweepHandoff: "getGuidedSweepHandoffState()",
 	panelOnly: "getPanelOnlyReviewStateForSession(session)",
 	hasSelectedSuggestion: "store.getSelectedSuggestion() != null",

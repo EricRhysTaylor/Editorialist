@@ -30,10 +30,10 @@ function selectBranch(i: ToolbarStateInputs): ToolbarBranch {
 	) {
 		return "bulk_confirm";
 	}
+	if (i.sessionHasNoOpenWork) return "completed_review:audit-fallback";
 	if (!i.hasSelectedSuggestion) {
-		// NOTE: getToolbarState also has `if (panelOnly) return panel` here, but
-		// branch 8 already returned for `panelOnly && !selected`, so that inner
-		// panel return is UNREACHABLE. Only the null path is live here.
+		// panel:pre-selection (branch 8) already returned for
+		// `panelOnly && !selected`, so panel:post-selection is unreachable.
 		return i.panelOnly ? "panel:post-selection" : "null:no-selection";
 	}
 	return "review";
