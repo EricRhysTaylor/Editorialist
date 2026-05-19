@@ -95,7 +95,7 @@ export interface ReviewStateMachineHost {
 	revealSelectedSuggestion(): Promise<void>;
 	revealSuggestionContext(id: string): Promise<void>;
 	enterGuidedSweepHandoff(): Promise<void>;
-	refreshSessionAfterAcceptedEdit(session: ReviewSession, suggestionId: string): void;
+	refreshSessionAfterAcceptedEdit(session: ReviewSession, suggestionId: string): void | Promise<void>;
 	syncActiveEditorDecorations(): void;
 	resyncSessionForActiveNote(): void;
 	focusResolvedTarget(target: unknown): Promise<void>;

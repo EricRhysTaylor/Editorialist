@@ -13,6 +13,8 @@ import {
 	getAdjacentRevealableSuggestionId as getAdjacentRevealableSuggestionIdShared,
 	hasLiveActionableSuggestions as hasLiveActionableSuggestionsShared,
 } from "./SuggestionTraversal";
+import { ReviewMutationScope } from "./ReviewMutationScope";
+import type { ReviewSuggestion } from "../../models/ReviewSuggestion";
 import type {
 	ReviewSession,
 	ReviewStateMachineHost,
@@ -135,31 +137,46 @@ export class ReviewStateMachine {
 
 		const session = this.host.getReviewSession();
 		const suggestion = this.host.getSuggestionById(id);
-		const { sessionId, sessionStartedAt } = this.host.getCurrentSessionTrackingContext();
-		if (session && suggestion) {
-			await this.host.registry.persistReviewDecision(session.notePath, suggestion, "rejected", {
+		const previousStatus = suggestion?.status ?? null;
+		const tracking = this.host.getCurrentSessionTrackingContext();
+		const { sessionId, sessionStartedAt } = tracking;
+		const scope = new ReviewMutationScope();
+		try {
+			if (session && suggestion) {
+				await this.host.registry.persistReviewDecision(session.notePath, suggestion, "rejected", {
+					persist: false,
+					sessionId,
+					sessionStartedAt,
+				});
+				scope.onRollback(() =>
+					this.host.registry.clearPersistedReviewDecision(session.notePath, suggestion, {
+						persist: false,
+					}),
+				);
+			}
+
+			const nextSuggestionId = this.computeAdjacent("next", id);
+			this.host.store.updateSuggestionStatus(id, "rejected");
+			if (previousStatus) {
+				scope.onRollback(() => this.host.store.updateSuggestionStatus(id, previousStatus));
+			}
+			await this.host.registry.syncReviewerSignalsForSession(this.host.store.getSession(), {
 				persist: false,
 				sessionId,
 				sessionStartedAt,
 			});
-		}
+			await this.host.registry.syncSceneInventoryForSession(this.host.store.getSession());
+			if (nextSuggestionId) {
+				this.host.store.selectSuggestion(nextSuggestionId);
+				await this.host.revealSelectedSuggestion();
+				return;
+			}
 
-		const nextSuggestionId = this.computeAdjacent("next", id);
-		this.host.store.updateSuggestionStatus(id, "rejected");
-		await this.host.registry.syncReviewerSignalsForSession(this.host.store.getSession(), {
-			persist: false,
-			sessionId,
-			sessionStartedAt,
-		});
-		await this.host.registry.syncSceneInventoryForSession(this.host.store.getSession());
-		if (nextSuggestionId) {
-			this.host.store.selectSuggestion(nextSuggestionId);
-			await this.host.revealSelectedSuggestion();
-			return;
-		}
-
-		if (this.handoffApplies(this.host.store.getSession())) {
-			await this.host.enterGuidedSweepHandoff();
+			if (this.handoffApplies(this.host.store.getSession())) {
+				await this.host.enterGuidedSweepHandoff();
+			}
+		} catch {
+			await this.repairFailedDecision(scope, tracking);
 		}
 	}
 
@@ -170,38 +187,53 @@ export class ReviewStateMachine {
 
 		const session = this.host.getReviewSession();
 		const suggestion = this.host.getSuggestionById(id);
-		const { sessionId, sessionStartedAt } = this.host.getCurrentSessionTrackingContext();
-		if (session && suggestion) {
-			await this.host.registry.persistReviewDecision(session.notePath, suggestion, "rewritten", {
+		const previousStatus = suggestion?.status ?? null;
+		const tracking = this.host.getCurrentSessionTrackingContext();
+		const { sessionId, sessionStartedAt } = tracking;
+		const scope = new ReviewMutationScope();
+		try {
+			if (session && suggestion) {
+				await this.host.registry.persistReviewDecision(session.notePath, suggestion, "rewritten", {
+					persist: false,
+					sessionId,
+					sessionStartedAt,
+				});
+				scope.onRollback(() =>
+					this.host.registry.clearPersistedReviewDecision(session.notePath, suggestion, {
+						persist: false,
+					}),
+				);
+			}
+
+			const nextSuggestionId = this.computeAdjacent("next", id);
+			this.host.store.updateSuggestionStatus(id, "rewritten");
+			if (previousStatus) {
+				scope.onRollback(() => this.host.store.updateSuggestionStatus(id, previousStatus));
+			}
+			await this.host.registry.syncReviewerSignalsForSession(this.host.store.getSession(), {
 				persist: false,
 				sessionId,
 				sessionStartedAt,
 			});
-		}
+			await this.host.registry.syncSceneInventoryForSession(this.host.store.getSession());
+			if (nextSuggestionId) {
+				this.host.store.selectSuggestion(nextSuggestionId);
+				await this.host.revealSelectedSuggestion();
+				return;
+			}
 
-		const nextSuggestionId = this.computeAdjacent("next", id);
-		this.host.store.updateSuggestionStatus(id, "rewritten");
-		await this.host.registry.syncReviewerSignalsForSession(this.host.store.getSession(), {
-			persist: false,
-			sessionId,
-			sessionStartedAt,
-		});
-		await this.host.registry.syncSceneInventoryForSession(this.host.store.getSession());
-		if (nextSuggestionId) {
-			this.host.store.selectSuggestion(nextSuggestionId);
+			if (this.handoffApplies(this.host.store.getSession())) {
+				await this.host.enterGuidedSweepHandoff();
+				return;
+			}
+
+			this.host.store.selectSuggestion(
+				findPreferredSuggestionIdShared(this.host.store.getSession()?.suggestions ?? []),
+			);
 			await this.host.revealSelectedSuggestion();
-			return;
+		} catch {
+			await this.repairFailedDecision(scope, tracking);
 		}
-
-		if (this.handoffApplies(this.host.store.getSession())) {
-			await this.host.enterGuidedSweepHandoff();
-			return;
-		}
-
-		this.host.store.selectSuggestion(
-			findPreferredSuggestionIdShared(this.host.store.getSession()?.suggestions ?? []),
-		);
-		await this.host.revealSelectedSuggestion();
 	}
 
 	async deferSuggestion(id: string): Promise<void> {
@@ -211,31 +243,46 @@ export class ReviewStateMachine {
 
 		const session = this.host.getReviewSession();
 		const suggestion = this.host.getSuggestionById(id);
-		const { sessionId, sessionStartedAt } = this.host.getCurrentSessionTrackingContext();
-		if (session && suggestion) {
-			await this.host.registry.persistReviewDecision(session.notePath, suggestion, "deferred", {
+		const previousStatus = suggestion?.status ?? null;
+		const tracking = this.host.getCurrentSessionTrackingContext();
+		const { sessionId, sessionStartedAt } = tracking;
+		const scope = new ReviewMutationScope();
+		try {
+			if (session && suggestion) {
+				await this.host.registry.persistReviewDecision(session.notePath, suggestion, "deferred", {
+					persist: false,
+					sessionId,
+					sessionStartedAt,
+				});
+				scope.onRollback(() =>
+					this.host.registry.clearPersistedReviewDecision(session.notePath, suggestion, {
+						persist: false,
+					}),
+				);
+			}
+
+			const nextSuggestionId = this.computeAdjacent("next", id, true);
+			this.host.store.updateSuggestionStatus(id, "deferred");
+			if (previousStatus) {
+				scope.onRollback(() => this.host.store.updateSuggestionStatus(id, previousStatus));
+			}
+			await this.host.registry.syncReviewerSignalsForSession(this.host.store.getSession(), {
 				persist: false,
 				sessionId,
 				sessionStartedAt,
 			});
-		}
+			await this.host.registry.syncSceneInventoryForSession(this.host.store.getSession());
+			if (nextSuggestionId) {
+				this.host.store.selectSuggestion(nextSuggestionId);
+				await this.host.revealSelectedSuggestion();
+				return;
+			}
 
-		const nextSuggestionId = this.computeAdjacent("next", id, true);
-		this.host.store.updateSuggestionStatus(id, "deferred");
-		await this.host.registry.syncReviewerSignalsForSession(this.host.store.getSession(), {
-			persist: false,
-			sessionId,
-			sessionStartedAt,
-		});
-		await this.host.registry.syncSceneInventoryForSession(this.host.store.getSession());
-		if (nextSuggestionId) {
-			this.host.store.selectSuggestion(nextSuggestionId);
-			await this.host.revealSelectedSuggestion();
-			return;
-		}
-
-		if (this.handoffApplies(this.host.store.getSession())) {
-			await this.host.enterGuidedSweepHandoff();
+			if (this.handoffApplies(this.host.store.getSession())) {
+				await this.host.enterGuidedSweepHandoff();
+			}
+		} catch {
+			await this.repairFailedDecision(scope, tracking);
 		}
 	}
 
@@ -275,32 +322,45 @@ export class ReviewStateMachine {
 		editor.scrollIntoView({ from: appliedFrom, to: appliedTo }, true);
 		editor.focus();
 
-		await this.host.registry.clearPersistedReviewDecision(context.filePath, suggestion, {
-			persist: false,
-		});
-		this.host.refreshSessionAfterAcceptedEdit(session, suggestion.id);
-		const { sessionId, sessionStartedAt } = this.host.getCurrentSessionTrackingContext();
-		await this.host.registry.syncReviewerSignalsForSession(this.host.store.getSession(), {
-			persist: false,
-			sessionId,
-			sessionStartedAt,
-		});
-		this.host.lastAppliedChange = {
-			start: appliedStartOffset,
-			end: appliedEndOffset,
-			notePath: context.filePath,
-			suggestionId: suggestion.id,
-			textFingerprint: noteTextFingerprint(editor.getValue()),
-		};
-		if (options?.syncSceneInventory !== false) {
-			await this.host.registry.syncSceneInventoryForSession(this.host.store.getSession());
-		}
-		if (!options?.preserveSelection) {
-			this.host.store.selectSuggestion(id);
-		}
-		if (options?.highlightMode === "muted") {
-			this.host.setActiveHighlight({ start: appliedStartOffset, end: appliedEndOffset }, "muted");
-			this.host.syncActiveEditorDecorations();
+		// The document edit above is committed and intentionally NOT rolled
+		// back on a post-edit failure: reverting applied editor text would
+		// require an editor-undo and change user-visible UX. Instead a
+		// post-edit failure is repaired so the change stays tracked
+		// (undoable) and the registry projections cannot silently diverge
+		// from the applied document state.
+		try {
+			await this.host.registry.clearPersistedReviewDecision(context.filePath, suggestion, {
+				persist: false,
+			});
+			await this.host.refreshSessionAfterAcceptedEdit(session, suggestion.id);
+			const { sessionId, sessionStartedAt } = this.host.getCurrentSessionTrackingContext();
+			await this.host.registry.syncReviewerSignalsForSession(this.host.store.getSession(), {
+				persist: false,
+				sessionId,
+				sessionStartedAt,
+			});
+			this.host.lastAppliedChange = {
+				start: appliedStartOffset,
+				end: appliedEndOffset,
+				notePath: context.filePath,
+				suggestionId: suggestion.id,
+				textFingerprint: noteTextFingerprint(editor.getValue()),
+			};
+			if (options?.syncSceneInventory !== false) {
+				await this.host.registry.syncSceneInventoryForSession(this.host.store.getSession());
+			}
+			if (!options?.preserveSelection) {
+				this.host.store.selectSuggestion(id);
+			}
+			if (options?.highlightMode === "muted") {
+				this.host.setActiveHighlight({ start: appliedStartOffset, end: appliedEndOffset }, "muted");
+				this.host.syncActiveEditorDecorations();
+			}
+		} catch {
+			await this.repairFailedAcceptedEdit(context.filePath, suggestion, {
+				start: appliedStartOffset,
+				end: appliedEndOffset,
+			});
 		}
 
 		return {
@@ -364,5 +424,73 @@ export class ReviewStateMachine {
 
 		this.host.store.selectSuggestion(id);
 		await this.host.focusResolvedTarget(getSuggestionPrimaryTarget(suggestion));
+	}
+
+	// Failure path for reject / rewrite / defer. Replays the registered
+	// inverses (clear persisted decision, restore prior store status) so the
+	// two authoritative sources of truth cannot diverge, then recomputes the
+	// derived projections (reviewer signals + scene inventory) from the
+	// reverted state. If that reconciliation itself fails the authoritative
+	// pair is still consistent; the user is notified rather than left with a
+	// silent split.
+	private async repairFailedDecision(
+		scope: ReviewMutationScope,
+		tracking: { sessionId?: string; sessionStartedAt?: number },
+	): Promise<void> {
+		await scope.rollback();
+		try {
+			await this.host.registry.syncReviewerSignalsForSession(this.host.store.getSession(), {
+				persist: false,
+				sessionId: tracking.sessionId,
+				sessionStartedAt: tracking.sessionStartedAt,
+			});
+			await this.host.registry.syncSceneInventoryForSession(this.host.store.getSession());
+		} catch {
+			// Projection reconciliation failed; authoritative state is
+			// already consistent and the next successful decision rebuilds
+			// signals / inventory. Surfaced loudly below.
+		}
+		this.host.notify("The review decision could not be completed; your changes were rolled back.");
+	}
+
+	// Failure path for applySuggestionById AFTER the editor edit committed.
+	// The edit is not reverted (see callsite). This guarantees the change
+	// stays undoable (lastAppliedChange set) and best-effort reconciles the
+	// registry so an accepted edit never carries a stale pending decision or
+	// diverged projections.
+	private async repairFailedAcceptedEdit(
+		notePath: string,
+		suggestion: ReviewSuggestion,
+		appliedRange: { start: number; end: number },
+	): Promise<void> {
+		const change = this.host.lastAppliedChange;
+		if (!change || change.suggestionId !== suggestion.id || change.notePath !== notePath) {
+			const context = this.host.getReviewNoteContext();
+			const editorValue = context
+				? (context.view as { editor: EditorLike }).editor.getValue()
+				: "";
+			this.host.lastAppliedChange = {
+				start: appliedRange.start,
+				end: appliedRange.end,
+				notePath,
+				suggestionId: suggestion.id,
+				textFingerprint: noteTextFingerprint(editorValue),
+			};
+		}
+		try {
+			await this.host.registry.clearPersistedReviewDecision(notePath, suggestion, {
+				persist: false,
+			});
+			await this.host.registry.syncReviewerSignalsForSession(this.host.store.getSession(), {
+				persist: false,
+			});
+			await this.host.registry.syncSceneInventoryForSession(this.host.store.getSession());
+		} catch {
+			// Best-effort reconcile failed; the edit is applied and tracked.
+			// Surfaced loudly below.
+		}
+		this.host.notify(
+			"The accepted edit was applied but follow-up sync failed; it remains undoable.",
+		);
 	}
 }

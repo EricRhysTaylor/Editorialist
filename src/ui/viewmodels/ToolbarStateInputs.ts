@@ -1,11 +1,11 @@
-// PROPOSAL ONLY — not wired into main.ts yet.
+// WIRED — the input contract for the extracted pure projection.
 //
-// Parity scaffold for the eventual extraction of
-// EditorialistPlugin.getToolbarState(hasReviewBlock) into a pure
-// `buildToolbarState(inputs)`. Capturing the input contract + golden
-// fixtures NOW lets the future extraction be a behavior-neutral move:
-// flip the fixtures' `expected` to `buildToolbarState(inputs)` and the
-// test becomes a true parity gate with zero new fixture authoring.
+// EditorialistPlugin.getToolbarState(hasReviewBlock) gathers these inputs
+// (see INPUT_GATHERERS) and delegates the decision to the pure
+// `buildToolbarState(inputs)` in ToolbarViewModel.ts (main.ts imports and
+// calls it). The golden fixtures in ToolbarStateInputs.fixtures.ts are an
+// ACTIVE parity gate: ToolbarStateInputs.test.ts round-trips every fixture
+// through buildToolbarState, so any behavior drift fails the build.
 //
 // getToolbarState is a *priority-ordered decision tree*. It performs no
 // mutation and writes no state — it is already a pure projection of

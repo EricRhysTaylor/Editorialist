@@ -1,10 +1,10 @@
-// Golden fixtures for the future buildToolbarState(inputs) parity gate.
+// Golden fixtures for the ACTIVE buildToolbarState(inputs) parity gate.
 //
-// Each `expected` is hand-derived by reading the CURRENT
-// EditorialistPlugin.getToolbarState (src/main.ts) decision tree — it is the
-// frozen behavior contract. When ToolbarViewModel is extracted, replace
-// `expected` assertions with `buildToolbarState(fixture.inputs)` and this
-// becomes a true parity test with no new fixtures to author.
+// Each `expected` is the frozen behavior contract for the toolbar decision
+// tree. ToolbarStateInputs.test.ts asserts buildToolbarState(fixture.inputs)
+// equals fixture.expected for every entry, so any drift in the extracted
+// projection (ToolbarViewModel.ts, called from main.ts getToolbarState)
+// fails the build. Add a fixture whenever a new toolbar branch is added.
 
 import type { ToolbarState } from "../Toolbar";
 import type { ToolbarBranch, ToolbarStateInputs } from "./ToolbarStateInputs";

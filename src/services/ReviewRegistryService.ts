@@ -1284,7 +1284,7 @@ export class ReviewRegistryService {
 				deferredCount = deferred;
 			}
 
-			nextRegistry[entry.batchId] = {
+			const candidate: ReviewSweepRegistryEntry = {
 				...entry,
 				activeBookLabel: entry.activeBookLabel ?? this.activeBookScope.label ?? undefined,
 				activeBookSourceFolder: entry.activeBookSourceFolder ?? this.activeBookScope.sourceFolder ?? undefined,
@@ -1294,12 +1294,21 @@ export class ReviewRegistryService {
 				currentNotePath,
 				sceneOrder: nextSceneOrder,
 				status: currentPaths.length === 0 ? "cleaned" : entry.status,
-				updatedAt: now,
+				updatedAt: entry.updatedAt,
 				acceptedCount,
 				rejectedCount,
 				rewrittenCount,
 				deferredCount,
 			};
+
+			// Only stamp a fresh updatedAt when something material actually
+			// changed. Bumping it unconditionally made every syncSceneInventory
+			// rewrite + re-persist every entry and reorder Recent Reviews (which
+			// sorts by updatedAt) with no underlying activity.
+			const materiallyChanged =
+				!this.sameJsonValue({ ...entry, updatedAt: 0 }, { ...candidate, updatedAt: 0 });
+			candidate.updatedAt = materiallyChanged ? now : entry.updatedAt;
+			nextRegistry[entry.batchId] = candidate;
 		}
 
 		return nextRegistry;
@@ -1472,6 +1481,13 @@ export class ReviewRegistryService {
 						status: normalizeSweepStatus(entry?.status),
 						totalSuggestions: entry?.totalSuggestions ?? 0,
 						updatedAt: entry?.updatedAt ?? Date.now(),
+						// Frozen historical decision counts: preserve across reload.
+						// Dropping these reset every cleaned sweep's Recent Reviews
+						// stats to zero on each plugin restart.
+						acceptedCount: entry?.acceptedCount,
+						rejectedCount: entry?.rejectedCount,
+						rewrittenCount: entry?.rewrittenCount,
+						deferredCount: entry?.deferredCount,
 					},
 				];
 			}),

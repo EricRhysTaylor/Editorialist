@@ -1,9 +1,10 @@
-// Pure toolbar-state projection, extracted verbatim from
-// EditorialistPlugin.getToolbarState. No store / Obsidian / UI access — the
-// caller (main.ts) gathers the resolved values into ToolbarStateInputs (see
-// INPUT_GATHERERS) and this function performs only the priority-ordered
-// if-ladder + return-shape assembly. Behavior is byte-identical to the prior
-// inline logic; the ToolbarStateInputs fixtures are the parity gate.
+// Pure toolbar-state projection. This is the live decision logic for the
+// toolbar: EditorialistPlugin.getToolbarState (main.ts) imports and calls
+// buildToolbarState after gathering the resolved values into
+// ToolbarStateInputs (see INPUT_GATHERERS). No store / Obsidian / UI access
+// — only the priority-ordered if-ladder + return-shape assembly. The
+// ToolbarStateInputs golden fixtures are an active parity gate guarding
+// this projection's behavior.
 
 import type { ToolbarState } from "../Toolbar";
 import type { ReviewStatus } from "../../models/ReviewSuggestion";

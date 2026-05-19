@@ -1,17 +1,5 @@
 import type { EditorView } from "@codemirror/view";
 import { MarkdownView, normalizePath, Notice, Plugin, TFile, type App } from "obsidian";
-import {
-	collectPendingEdits,
-	describeCollectFailure,
-} from "./core/PendingEditsCollector";
-import {
-	drainSegmentFromFrontmatter,
-	extractInquiryBriefLinkTarget,
-	formatPendingEditForDisplay,
-	parsePendingEditsField,
-	readPendingEditsField,
-} from "./core/PendingEditsSegments";
-import { InquiryBriefResolver, type InquiryBriefContext } from "./core/InquiryBriefContext";
 import type {
 	PendingEditSegment,
 	PendingEditsSession,
@@ -38,9 +26,7 @@ import {
 import { ReviewStateMachine } from "./core/review/ReviewStateMachine";
 import type { ReviewStateMachineHost } from "./core/review/ReviewStateMachineScaffold";
 import {
-	REVIEW_BLOCK_FENCE,
 	getReviewBlockFenceLabel,
-	normalizeImportedReviewText,
 	noteContainsReviewBlock,
 	removeImportedReviewBlocks,
 } from "./core/ReviewBlockFormat";
@@ -50,7 +36,6 @@ import { getSceneIdForFile, isPathInFolderScope, isSceneClassFile } from "./core
 import { SuggestionParser } from "./core/SuggestionParser";
 import type {
 	EditorialistMetadataExport,
-	ReviewImportBatch,
 	ReviewSweepRegistryEntry,
 } from "./models/ReviewImport";
 import type { ReviewSession, ReviewSuggestion, ReviewTargetRef } from "./models/ReviewSuggestion";
@@ -67,7 +52,7 @@ import { ContributorDirectory } from "./state/ContributorDirectory";
 import { EditorialismService } from "./services/EditorialismService";
 import { ReviewRegistryService } from "./services/ReviewRegistryService";
 import { ReviewWorkflowService } from "./services/ReviewWorkflowService";
-import { EditorialistModal, type ClipboardReviewBatch } from "./ui/EditorialistModal";
+import { EditorialistModal } from "./ui/EditorialistModal";
 import { openEditorialistChoiceModal } from "./ui/EditorialistChoiceModal";
 import { openContributorReassignmentModal, type ContributorReassignmentMode } from "./ui/ContributorReassignmentModal";
 import { openContributorStrengthsModal } from "./ui/ContributorStrengthsModal";
@@ -76,6 +61,9 @@ import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
 import { EditorialistSettingTab } from "./ui/EditorialistSettingTab";
 import { createReviewDecorationsExtension, syncReviewDecorations } from "./ui/Decorations";
 import { createReviewToolbarElement, forceTeardownToolbarSubscriptions, type ToolbarState } from "./ui/Toolbar";
+import { ToolbarOverlayController } from "./controllers/ToolbarOverlayController";
+import { ReviewBatchProcessor } from "./controllers/ReviewBatchProcessor";
+import { PendingEditsCoordinator, type PendingEditsSummary } from "./controllers/PendingEditsCoordinator";
 import { buildToolbarState } from "./ui/viewmodels/ToolbarViewModel";
 import type { ReviewBranchInputs, ToolbarStateInputs } from "./ui/viewmodels/ToolbarStateInputs";
 
@@ -185,16 +173,7 @@ interface ReviewLaunchTarget {
 	unitLabel: "note" | "scene";
 }
 
-export interface PendingEditsSummary {
-	sceneCount: number;
-	segmentCount: number;
-	humanCount: number;
-	inquiryCount: number;
-	scenePaths: ReadonlySet<string>;
-	segmentCountsByScene: ReadonlyMap<string, number>;
-}
-
-const PENDING_EDITS_SUMMARY_MIN_REFRESH_MS = 2000;
+export type { PendingEditsSummary };
 
 export default class EditorialistPlugin extends Plugin {
 	readonly store = new ReviewStore();
@@ -216,7 +195,7 @@ export default class EditorialistPlugin extends Plugin {
 			await this.revealSelectedSuggestion();
 		},
 		cleanupBatchById: async (batchId) => {
-			await this.cleanupReviewBatch(batchId);
+			await this.batchProcessor.cleanupReviewBatch(batchId);
 		},
 		enterCompletedSweepAudit: async () => {
 			await this.enterCompletedSweepAudit();
@@ -239,30 +218,52 @@ export default class EditorialistPlugin extends Plugin {
 	private activeAnchorHighlightRange: OffsetRange | null = null;
 	private bulkApplyConfirmState: BulkApplyConfirmState | null = null;
 	private lastAppliedChange: LastAppliedChange | null = null;
-	private toolbarOverlayEl: HTMLElement | null = null;
-	private toolbarOverlayEditorView: EditorView | null = null;
-	private toolbarOverlayFrameId: number | null = null;
-	private toolbarOverlayHeight = 0;
-	private toolbarOverlayLastPosition: { hidden: boolean; left: string; top: string } | null = null;
-	private toolbarOverlayState: ToolbarState | null = null;
-	private toolbarOverlayDismissedSignature: string | null = null;
-	private pendingEditsSession: PendingEditsSession | null = null;
-	private pendingEditsSummary: PendingEditsSummary | null = null;
-	private pendingEditsSummaryInflight: Promise<void> | null = null;
-	private pendingEditsSummaryLastRefreshAt = 0;
-	private inquiryBriefResolver: InquiryBriefResolver | null = null;
-	private inquiryBriefContextBySegmentId = new Map<string, InquiryBriefContext | null>();
-	private inquiryBriefRequestsInflight = new Set<string>();
-	private readonly toolbarOverlayScrollHandler = (): void => {
-		this.scheduleToolbarOverlayPositionUpdate();
-	};
+	private readonly toolbarOverlay = new ToolbarOverlayController({
+		getActiveHighlightRange: () => this.activeHighlightRange,
+		getSelectedSuggestionId: () => this.store.getState().selectedSuggestionId ?? null,
+		createToolbarElement: (state) => createReviewToolbarElement(this, state),
+	});
+	private readonly batchProcessor = new ReviewBatchProcessor({
+		app: this.app,
+		getImportEngine: () => this.importEngine,
+		getActiveNoteContext: () => this.getActiveNoteContext(),
+		getReviewNoteContext: () => this.getReviewNoteContext(),
+		getNoteContextByPath: (filePath) => this.getNoteContextByPath(filePath),
+		getResolvedCompletedSweepState: () => this.getResolvedCompletedSweepState(),
+		getGuidedSweep: () => this.getGuidedSweep(),
+		setGuidedSweep: (value) => this.store.setGuidedSweep(value),
+		persistContributorProfilesIfNeeded: () => this.persistContributorProfilesIfNeeded(),
+		savePluginData: () => this.savePluginData(),
+		resyncSessionForActiveNote: () => this.resyncSessionForActiveNote(),
+		refreshReviewPanel: () => this.refreshReviewPanel(),
+		findDuplicateSweep: (batch) => this.registry.findDuplicateSweep(batch),
+		recordImportedBatch: (batch, groups, status, currentNotePath) =>
+			this.registry.recordImportedBatch(batch, groups, status, currentNotePath),
+		getSweepRegistryEntry: (batchId) => this.getSweepRegistryEntry(batchId),
+		updateSweepRegistry: (batchId, updates, options) =>
+			this.registry.updateSweepRegistry(batchId, updates, options),
+		syncSceneInventory: () => this.registry.syncSceneInventory(),
+		getSceneReviewRecords: () => this.registry.getSceneReviewRecords(),
+		resetBatchHistoryInRegistry: (batchId) => this.registry.resetBatchHistory(batchId),
+		openExistingSweep: (entry) => this.workflow.openExistingSweep(entry),
+		startGuidedSweep: (batchId, importedAt, notePaths) =>
+			this.workflow.startGuidedSweep(batchId, importedAt, notePaths),
+		cleanupCurrentBatch: (noteText) => this.workflow.cleanupCurrentBatch(noteText),
+	});
+	private readonly pendingEdits = new PendingEditsCoordinator({
+		app: this.app,
+		refreshReviewPanel: () => this.refreshReviewPanel(),
+		syncActiveEditorDecorations: () => this.syncActiveEditorDecorations(),
+		openReviewPanel: () => this.openReviewPanel(),
+		closeSettingsModal: () => this.closeSettingsModal(),
+	});
 
 	async onload(): Promise<void> {
 		await this.loadPluginData();
 		await this.persistContributorProfilesIfNeeded();
 		await this.registry.refreshActiveBookScope();
 		this.importEngine = new ImportEngine(this.app, this.parser, this.matchEngine);
-		this.inquiryBriefResolver = new InquiryBriefResolver(this.app);
+		this.pendingEdits.initialize();
 		this.registerEditorExtension(createReviewDecorationsExtension());
 		this.registerView(REVIEW_PANEL_VIEW_TYPE, (leaf) => new ReviewPanel(leaf, this));
 		this.registerView(EDITORIALISM_PANEL_VIEW_TYPE, (leaf) => new EditorialismPanel(leaf, this));
@@ -275,8 +276,7 @@ export default class EditorialistPlugin extends Plugin {
 		});
 		registerCommands(this);
 		this.registerDomEvent(window, "resize", () => {
-			this.measureToolbarOverlayHeight();
-			this.scheduleToolbarOverlayPositionUpdate();
+			this.toolbarOverlay.handleResize();
 		});
 
 		const unsubscribe = this.store.subscribe(() => {
@@ -302,7 +302,7 @@ export default class EditorialistPlugin extends Plugin {
 				}
 				this.resyncSessionForActiveNote();
 				this.syncActiveEditorDecorations();
-				void this.refreshPendingEditsSummary();
+				void this.pendingEdits.refreshPendingEditsSummary();
 			}),
 		);
 
@@ -313,14 +313,15 @@ export default class EditorialistPlugin extends Plugin {
 		);
 
 		this.syncActiveEditorDecorations();
-		void this.refreshPendingEditsSummary({ force: true });
+		void this.pendingEdits.refreshPendingEditsSummary({ force: true });
 	}
 
 	async onunload(): Promise<void> {
 		// Obsidian submission guideline: do NOT detach leaves of your own view type here —
 		// Obsidian restores workspace state on reload, and registerView() already handles cleanup.
-		this.destroyToolbarOverlay();
+		this.toolbarOverlay.destroy();
 		forceTeardownToolbarSubscriptions();
+		this.pendingEdits.clearInquiryMaps();
 	}
 
 	async parseCurrentNote(options?: { suppressNotice?: boolean }): Promise<void> {
@@ -402,17 +403,17 @@ export default class EditorialistPlugin extends Plugin {
 				await this.copyReviewTemplateToClipboard(selectedText);
 			},
 			onImportBatch: async (batch, startReview) => {
-				await this.importReviewBatch(batch, startReview);
+				await this.batchProcessor.importReviewBatch(batch, startReview);
 			},
 			onImportRawToActiveNote: async (rawText, startReview) => {
-				await this.importReviewBatchToActiveNote(rawText, startReview);
+				await this.batchProcessor.importReviewBatchToActiveNote(rawText, startReview);
 			},
 			onInspectBatch: async (rawText, correctedTargets) =>
-				this.inspectReviewBatch(rawText, {
+				this.batchProcessor.inspectReviewBatch(rawText, {
 					activeNotePath: context?.filePath,
 					correctedTargets,
 				}),
-			onLoadClipboardBatch: async () => this.loadClipboardReviewBatch(),
+			onLoadClipboardBatch: async () => this.batchProcessor.loadClipboardReviewBatch(),
 			onOpenReviewPanel: async () => {
 				await this.openReviewPanel();
 			},
@@ -443,7 +444,7 @@ export default class EditorialistPlugin extends Plugin {
 		});
 		this.app.workspace.revealLeaf(leaf);
 		this.refreshReviewPanel();
-		void this.refreshPendingEditsSummary({ force: true });
+		void this.pendingEdits.refreshPendingEditsSummary({ force: true });
 	}
 
 	isReviewPanelOpen(): boolean {
@@ -492,396 +493,63 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	getPendingEditsSession(): PendingEditsSession | null {
-		return this.pendingEditsSession;
+		return this.pendingEdits.getPendingEditsSession();
 	}
 
 	getPendingEditsSummary(): PendingEditsSummary | null {
-		return this.pendingEditsSummary;
+		return this.pendingEdits.getPendingEditsSummary();
 	}
 
 	hasPendingEditsForScene(scenePath: string): boolean {
-		return this.pendingEditsSummary?.scenePaths.has(scenePath) ?? false;
+		return this.pendingEdits.hasPendingEditsForScene(scenePath);
 	}
 
 	getPendingEditsCountForScene(scenePath: string): number {
-		return this.pendingEditsSummary?.segmentCountsByScene.get(scenePath) ?? 0;
+		return this.pendingEdits.getPendingEditsCountForScene(scenePath);
 	}
 
 	async refreshPendingEditsSummary(options?: { force?: boolean }): Promise<void> {
-		const force = options?.force ?? false;
-		const now = Date.now();
-		if (!force && now - this.pendingEditsSummaryLastRefreshAt < PENDING_EDITS_SUMMARY_MIN_REFRESH_MS) {
-			return this.pendingEditsSummaryInflight ?? Promise.resolve();
-		}
-		if (this.pendingEditsSummaryInflight) {
-			return this.pendingEditsSummaryInflight;
-		}
-
-		const task = (async () => {
-			try {
-				const result = await collectPendingEdits(this.app);
-				if (!result.ok) {
-					this.pendingEditsSummary = null;
-					return;
-				}
-
-				let humanCount = 0;
-				let inquiryCount = 0;
-				const scenePaths = new Set<string>();
-				const segmentCountsByScene = new Map<string, number>();
-				for (const scene of result.session.scenes) {
-					scenePaths.add(scene.scenePath);
-					segmentCountsByScene.set(scene.scenePath, scene.segments.length);
-					for (const segment of scene.segments) {
-						if (segment.kind === "human") humanCount += 1;
-						else inquiryCount += 1;
-					}
-				}
-
-				this.pendingEditsSummary = {
-					sceneCount: result.session.scenes.length,
-					segmentCount: humanCount + inquiryCount,
-					humanCount,
-					inquiryCount,
-					scenePaths,
-					segmentCountsByScene,
-				};
-			} finally {
-				this.pendingEditsSummaryLastRefreshAt = Date.now();
-				this.pendingEditsSummaryInflight = null;
-				this.refreshReviewPanel();
-			}
-		})();
-
-		this.pendingEditsSummaryInflight = task;
-		return task;
+		return this.pendingEdits.refreshPendingEditsSummary(options);
 	}
 
 	async startPendingEditsReview(): Promise<void> {
-		const result = await collectPendingEdits(this.app);
-		if (!result.ok) {
-			new Notice(describeCollectFailure(result.reason));
-			this.pendingEditsSession = null;
-			return;
-		}
-
-		this.pendingEditsSession = result.session;
-		const segmentCount = result.session.scenes.reduce(
-			(total, scene) => total + scene.segments.length,
-			0,
-		);
-		new Notice(
-			`Pending edits: ${segmentCount} item${segmentCount === 1 ? "" : "s"} across ${result.session.scenes.length} scene${result.session.scenes.length === 1 ? "" : "s"}.`,
-		);
-
-		this.closeSettingsModal();
-		await this.openReviewPanel();
-
-		const firstSegment = result.session.scenes[0]?.segments[0] ?? null;
-		if (firstSegment) {
-			await this.openPendingEditSegment(firstSegment);
-		}
+		await this.pendingEdits.startPendingEditsReview();
 	}
 
 	async openPendingEditSegment(segment: PendingEditSegment): Promise<void> {
-		const session = this.pendingEditsSession;
-		if (!session) {
-			return;
-		}
-
-		session.selectedSegmentId = segment.id;
-
-		const file = this.app.vault.getAbstractFileByPath(segment.scenePath);
-		if (!(file instanceof TFile)) {
-			new Notice(`Scene file not found: ${segment.scenePath}`);
-			return;
-		}
-
-		const activeFilePath = this.app.workspace.getActiveFile()?.path;
-		if (activeFilePath !== segment.scenePath) {
-			try {
-				// Use a main-area leaf (not the side panel that getLeaf(false) can return after
-				// the side-panel reveal) and explicitly activate it so getActiveViewOfType(MarkdownView)
-				// returns the new view in syncActiveEditorDecorations.
-				const leaf = this.app.workspace.getMostRecentLeaf() ?? this.app.workspace.getLeaf(false);
-				await leaf.openFile(file, { active: true }); // SAFE: we hold a resolved TFile; activate so the markdown view becomes the active view of the workspace.
-			} catch (error) {
-				new Notice(`Couldn't open ${file.basename}: ${error instanceof Error ? error.message : "unknown error"}`);
-				return;
-			}
-		}
-		this.syncActiveEditorDecorations();
+		await this.pendingEdits.openPendingEditSegment(segment);
 	}
 
 	async completePendingEditSegment(segment: PendingEditSegment): Promise<void> {
-		const file = this.app.vault.getAbstractFileByPath(segment.scenePath);
-		if (!(file instanceof TFile)) {
-			new Notice("Scene file no longer available.");
-			return;
-		}
-
-		const drain = await drainSegmentFromFrontmatter(this.app, file, segment);
-		if (drain.outcome === "not_found") {
-			new Notice("This pending-edit item is no longer in the scene — skipping.");
-		}
-
-		this.rebuildPendingEditsSessionForScene(segment.scenePath);
-		void this.refreshPendingEditsSummary({ force: true });
-		await this.advanceToNextPendingEditSegment(segment);
+		await this.pendingEdits.completePendingEditSegment(segment);
 	}
 
 	async skipPendingEditSegment(segment: PendingEditSegment): Promise<void> {
-		await this.advanceToNextPendingEditSegment(segment);
+		await this.pendingEdits.skipPendingEditSegment(segment);
 	}
 
 	async completeSelectedPendingEditSegment(): Promise<void> {
-		const segment = this.resolveActivePendingEditSegment();
-		if (!segment) {
-			return;
-		}
-		await this.completePendingEditSegment(segment);
+		await this.pendingEdits.completeSelectedPendingEditSegment();
 	}
 
 	async skipSelectedPendingEditSegment(): Promise<void> {
-		const segment = this.resolveActivePendingEditSegment();
-		if (!segment) {
-			return;
-		}
-		await this.skipPendingEditSegment(segment);
+		await this.pendingEdits.skipSelectedPendingEditSegment();
 	}
 
 	async selectNextPendingEditSegment(): Promise<void> {
-		const segment = this.resolveActivePendingEditSegment();
-		if (!segment) {
-			return;
-		}
-		await this.advancePendingEditSegmentBy(segment, "next");
+		await this.pendingEdits.selectNextPendingEditSegment();
 	}
 
 	async selectPreviousPendingEditSegment(): Promise<void> {
-		const segment = this.resolveActivePendingEditSegment();
-		if (!segment) {
-			return;
-		}
-		await this.advancePendingEditSegmentBy(segment, "previous");
-	}
-
-	/**
-	 * Source-of-truth resolver shared by the toolbar render and the action handlers.
-	 * Returns whichever segment the toolbar is *currently displaying*, so Next/Prev/Complete
-	 * always operate on what the user sees — even if `selectedSegmentId` is null/stale.
-	 */
-	private resolveActivePendingEditSegment(): PendingEditSegment | null {
-		const session = this.pendingEditsSession;
-		if (!session || session.scenes.length === 0) {
-			return null;
-		}
-		const explicit = this.getSelectedPendingEditSegment();
-		if (explicit) {
-			return explicit;
-		}
-		const activeFilePath = this.app.workspace.getActiveFile()?.path;
-		const sceneForActive = activeFilePath
-			? session.scenes.find((scene) => scene.scenePath === activeFilePath)
-			: undefined;
-		return sceneForActive?.segments[0] ?? session.scenes[0]?.segments[0] ?? null;
+		await this.pendingEdits.selectPreviousPendingEditSegment();
 	}
 
 	async closePendingEditsReview(): Promise<void> {
-		this.pendingEditsSession = null;
-		this.syncActiveEditorDecorations();
-	}
-
-	private getSelectedPendingEditSegment(): PendingEditSegment | null {
-		const session = this.pendingEditsSession;
-		if (!session || !session.selectedSegmentId) {
-			return null;
-		}
-
-		for (const scene of session.scenes) {
-			for (const segment of scene.segments) {
-				if (segment.id === session.selectedSegmentId) {
-					return segment;
-				}
-			}
-		}
-		return null;
-	}
-
-	private getOrderedPendingEditSegments(): PendingEditSegment[] {
-		const session = this.pendingEditsSession;
-		if (!session) {
-			return [];
-		}
-		return session.scenes.flatMap((scene) => scene.segments);
-	}
-
-	private getPendingEditsToolbarState(): ToolbarState | null {
-		const session = this.pendingEditsSession;
-		if (!session || session.scenes.length === 0) {
-			return null;
-		}
-
-		const activeFilePath = this.app.workspace.getActiveFile()?.path;
-		// If the user navigated to a file that is not part of the session, hide the toolbar.
-		// During cross-scene Next, the active file may briefly lag the selected segment — that's fine,
-		// as long as the active file is some scene in the session we keep showing the toolbar.
-		if (activeFilePath && !session.scenes.some((scene) => scene.scenePath === activeFilePath)) {
-			return null;
-		}
-
-		const segment = this.resolveActivePendingEditSegment();
-		if (!segment) {
-			return null;
-		}
-
-		const ordered = this.getOrderedPendingEditSegments();
-		const currentIndex = ordered.findIndex((candidate) => candidate.id === segment.id);
-		const segmentIndexLabel =
-			currentIndex === -1
-				? `${ordered.length} total`
-				: `Item ${currentIndex + 1} of ${ordered.length}`;
-		const segmentKindLabel = segment.kind === "human" ? "HUMAN NOTE" : "INQUIRY ITEM";
-		const display = formatPendingEditForDisplay(segment);
-		const briefContext = this.getOrFetchInquiryBriefContext(segment);
-
-		return {
-			mode: "pending_edits_review",
-			title: "Pending edits",
-			sceneLabel: segment.sceneTitle,
-			segmentKindLabel,
-			segmentIndexLabel,
-			segmentMutedPrefix: display.mutedPrefix,
-			segmentActionText: display.actionText,
-			briefContext: briefContext
-				? {
-					noteTitle: briefContext.noteTitle,
-					notePath: briefContext.notePath,
-					summary: briefContext.summary,
-				}
-				: undefined,
-			canComplete: true,
-			canNext: currentIndex !== -1 && currentIndex < ordered.length - 1,
-			canPrevious: currentIndex > 0,
-		};
-	}
-
-	private getOrFetchInquiryBriefContext(segment: PendingEditSegment): InquiryBriefContext | null {
-		if (segment.kind !== "inquiry") {
-			return null;
-		}
-		const linkTarget = extractInquiryBriefLinkTarget(segment);
-		if (!linkTarget) {
-			return null;
-		}
-		if (this.inquiryBriefContextBySegmentId.has(segment.id)) {
-			return this.inquiryBriefContextBySegmentId.get(segment.id) ?? null;
-		}
-		if (!this.inquiryBriefRequestsInflight.has(segment.id) && this.inquiryBriefResolver) {
-			this.inquiryBriefRequestsInflight.add(segment.id);
-			void this.inquiryBriefResolver
-				.resolve(linkTarget, segment.scenePath)
-				.then((context) => {
-					this.inquiryBriefContextBySegmentId.set(segment.id, context);
-					this.inquiryBriefRequestsInflight.delete(segment.id);
-					this.syncActiveEditorDecorations();
-				})
-				.catch(() => {
-					this.inquiryBriefContextBySegmentId.set(segment.id, null);
-					this.inquiryBriefRequestsInflight.delete(segment.id);
-				});
-		}
-		return null;
+		await this.pendingEdits.closePendingEditsReview();
 	}
 
 	openInquiryBriefNote(notePath: string): void {
-		void this.app.workspace.openLinkText(notePath, "", false);
-	}
-
-	private async advancePendingEditSegmentBy(
-		fromSegment: PendingEditSegment,
-		direction: "next" | "previous",
-	): Promise<void> {
-		const ordered = this.getOrderedPendingEditSegments();
-		if (ordered.length === 0) {
-			return;
-		}
-
-		const currentIndex = ordered.findIndex((candidate) => candidate.id === fromSegment.id);
-		if (currentIndex === -1) {
-			return;
-		}
-
-		const targetIndex = direction === "next" ? currentIndex + 1 : currentIndex - 1;
-		if (targetIndex < 0 || targetIndex >= ordered.length) {
-			return;
-		}
-
-		const target = ordered[targetIndex];
-		if (!target) {
-			return;
-		}
-		await this.openPendingEditSegment(target);
-	}
-
-	private rebuildPendingEditsSessionForScene(scenePath: string): void {
-		const session = this.pendingEditsSession;
-		if (!session) {
-			return;
-		}
-
-		const file = this.app.vault.getAbstractFileByPath(scenePath);
-		if (!(file instanceof TFile)) {
-			session.scenes = session.scenes.filter((scene) => scene.scenePath !== scenePath);
-			return;
-		}
-
-		const rawField = readPendingEditsField(this.app, file);
-		const existing = session.scenes.find((scene) => scene.scenePath === scenePath);
-		const segments = parsePendingEditsField(
-			scenePath,
-			existing?.sceneTitle ?? file.basename,
-			existing?.sceneOrder ?? 0,
-			rawField,
-		);
-
-		if (segments.length === 0) {
-			session.scenes = session.scenes.filter((scene) => scene.scenePath !== scenePath);
-			return;
-		}
-
-		session.scenes = session.scenes.map((scene) =>
-			scene.scenePath === scenePath
-				? { ...scene, rawField, segments }
-				: scene,
-		);
-	}
-
-	private async advanceToNextPendingEditSegment(fromSegment: PendingEditSegment): Promise<void> {
-		const session = this.pendingEditsSession;
-		if (!session) {
-			return;
-		}
-
-		const ordered: PendingEditSegment[] = session.scenes.flatMap((scene) => scene.segments);
-		if (ordered.length === 0) {
-			new Notice("All pending edits processed.");
-			this.pendingEditsSession = null;
-			return;
-		}
-
-		const unchangedIndex = ordered.findIndex((candidate) => candidate.id === fromSegment.id);
-		const nextSegment = unchangedIndex >= 0
-			? ordered[unchangedIndex + 1] ?? ordered[0]
-			: ordered[0];
-
-		if (!nextSegment) {
-			new Notice("All pending edits processed.");
-			this.pendingEditsSession = null;
-			return;
-		}
-
-		await this.openPendingEditSegment(nextSegment);
+		this.pendingEdits.openInquiryBriefNote(notePath);
 	}
 
 	openSettings(): void {
@@ -1115,7 +783,7 @@ export default class EditorialistPlugin extends Plugin {
 		this.store.acknowledgeCompletedSweep(completedSweep?.batchId ?? this.store.getAcknowledgedCompletedSweepBatchId());
 		this.clearActiveHighlights();
 		this.lastAppliedChange = null;
-		this.toolbarOverlayDismissedSignature = null;
+		this.toolbarOverlay.clearDismissedSignature();
 		this.syncActiveEditorDecorations();
 	}
 
@@ -1136,16 +804,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	dismissReviewToolbar(): void {
-		this.toolbarOverlayDismissedSignature = this.computeToolbarDismissalSignature(
-			this.toolbarOverlayState,
-		);
-		this.destroyToolbarOverlay();
-	}
-
-	private computeToolbarDismissalSignature(state: ToolbarState | null): string {
-		const mode = state?.mode ?? "none";
-		const selectionId = this.store.getState().selectedSuggestionId ?? "";
-		return `${mode}:${selectionId}`;
+		this.toolbarOverlay.dismiss();
 	}
 
 	async continueGuidedSweep(): Promise<void> {
@@ -1471,34 +1130,7 @@ export default class EditorialistPlugin extends Plugin {
 		rewritten: number;
 		deferred: number;
 	} {
-		// Prefer the frozen snapshot on the registry entry. It tracks counts live
-		// while the batch is in_progress / completed and preserves them after the
-		// batch is cleaned, so historical Recent Reviews entries keep their stats.
-		const entry = this.registry.getSweepRegistryEntry(batchId);
-		if (entry) {
-			return {
-				accepted: entry.acceptedCount ?? 0,
-				rejected: entry.rejectedCount ?? 0,
-				rewritten: entry.rewrittenCount ?? 0,
-				deferred: entry.deferredCount ?? 0,
-			};
-		}
-
-		const records = this.registry.getSceneReviewRecords();
-		let accepted = 0;
-		let rejected = 0;
-		let rewritten = 0;
-		let deferred = 0;
-		for (const record of records) {
-			if (!record.batchIds.includes(batchId)) {
-				continue;
-			}
-			accepted += record.acceptedCount;
-			rejected += record.rejectedCount;
-			rewritten += record.rewrittenCount;
-			deferred += record.deferredCount;
-		}
-		return { accepted, rejected, rewritten, deferred };
+		return this.batchProcessor.getBatchDecisionStats(batchId);
 	}
 
 	getSceneReviewRecords(options?: { activeBookOnly?: boolean }): SceneReviewRecord[] {
@@ -1533,11 +1165,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async resetBatchHistory(batchId: string): Promise<{ removedDecisions: number; removedSignals: number; removedSweep: boolean }> {
-		const result = await this.registry.resetBatchHistory(batchId);
-		await this.savePluginData();
-		this.resyncSessionForActiveNote();
-		this.refreshReviewPanel();
-		return result;
+		return this.batchProcessor.resetBatchHistory(batchId);
 	}
 
 	async resetAllRevisionHistory(): Promise<{ removedDecisions: number; removedSignals: number; removedSweeps: number }> {
@@ -2375,7 +2003,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		const appliedReview = this.store.getAppliedReview();
 		const inputs: ToolbarStateInputs = {
-			pendingEditsToolbarState: this.getPendingEditsToolbarState(),
+			pendingEditsToolbarState: this.pendingEdits.getPendingEditsToolbarState(),
 			hasReviewBlock,
 			hasSession: session !== null,
 			sessionNotePath: session?.notePath ?? null,
@@ -2451,7 +2079,7 @@ export default class EditorialistPlugin extends Plugin {
 		const editorView = this.getActiveEditorView();
 		const context = this.getActiveNoteContext();
 		if (!editorView || !context) {
-			this.destroyToolbarOverlay();
+			this.toolbarOverlay.destroy();
 			return;
 		}
 
@@ -2460,7 +2088,7 @@ export default class EditorialistPlugin extends Plugin {
 		const toolbarState = this.getToolbarState(hasReviewBlock);
 
 		syncReviewDecorations(editorView, this.getReviewDecorationSnapshot(highlight));
-		this.syncToolbarOverlay(editorView, toolbarState, highlight);
+		this.toolbarOverlay.sync(editorView, toolbarState, highlight);
 	}
 
 	private resyncSessionForActiveNote(): void {
@@ -3462,7 +3090,7 @@ export default class EditorialistPlugin extends Plugin {
 		if (topOffset < topPadding) {
 			editorView.scrollDOM.scrollTop -= topPadding - topOffset;
 		}
-		this.scheduleToolbarOverlayPositionUpdate();
+		this.toolbarOverlay.scheduleReposition();
 	}
 
 	private async focusReviewLeaf(view: MarkdownView): Promise<void> {
@@ -3473,148 +3101,6 @@ export default class EditorialistPlugin extends Plugin {
 
 		await this.app.workspace.setActiveLeaf(leaf, false, true);
 		this.app.workspace.revealLeaf(leaf);
-	}
-
-	private syncToolbarOverlay(
-		editorView: EditorView | null,
-		toolbarState: ToolbarState | null,
-		highlight: OffsetRange | null,
-	): void {
-		const isHandoff = toolbarState?.mode === "handoff";
-		const isPanel = toolbarState?.mode === "panel";
-		const isPendingEdits = toolbarState?.mode === "pending_edits_review";
-		const hasHighlight = Boolean(highlight && highlight.end > highlight.start);
-		if (!editorView || !toolbarState || (!isHandoff && !isPanel && !isPendingEdits && !hasHighlight)) {
-			this.destroyToolbarOverlay();
-			return;
-		}
-
-		if (this.toolbarOverlayDismissedSignature !== null) {
-			const currentSignature = this.computeToolbarDismissalSignature(toolbarState);
-			if (currentSignature === this.toolbarOverlayDismissedSignature) {
-				this.destroyToolbarOverlay();
-				return;
-			}
-			this.toolbarOverlayDismissedSignature = null;
-		}
-
-		if (this.toolbarOverlayEditorView !== editorView) {
-			if (this.toolbarOverlayEditorView) {
-				this.toolbarOverlayEditorView.scrollDOM.removeEventListener("scroll", this.toolbarOverlayScrollHandler);
-			}
-
-			this.toolbarOverlayEditorView = editorView;
-			this.toolbarOverlayEditorView.scrollDOM.addEventListener("scroll", this.toolbarOverlayScrollHandler, {
-				passive: true,
-			});
-		}
-
-		if (this.toolbarOverlayEl) {
-			this.toolbarOverlayEl.remove();
-		}
-
-		this.toolbarOverlayState = toolbarState;
-		this.toolbarOverlayEl = createReviewToolbarElement(this, toolbarState);
-		document.body.appendChild(this.toolbarOverlayEl);
-		this.measureToolbarOverlayHeight();
-		this.toolbarOverlayLastPosition = null;
-		this.scheduleToolbarOverlayPositionUpdate();
-	}
-
-	private measureToolbarOverlayHeight(): void {
-		const toolbar = this.toolbarOverlayEl?.firstElementChild as HTMLElement | null;
-		this.toolbarOverlayHeight = toolbar?.getBoundingClientRect().height ?? 0;
-	}
-
-	private scheduleToolbarOverlayPositionUpdate(): void {
-		if (this.toolbarOverlayFrameId !== null) {
-			return;
-		}
-
-		this.toolbarOverlayFrameId = window.requestAnimationFrame(() => {
-			this.toolbarOverlayFrameId = null;
-			this.positionToolbarOverlay();
-		});
-	}
-
-	private cancelToolbarOverlayPositionUpdate(): void {
-		if (this.toolbarOverlayFrameId === null) {
-			return;
-		}
-
-		window.cancelAnimationFrame(this.toolbarOverlayFrameId);
-		this.toolbarOverlayFrameId = null;
-	}
-
-	private positionToolbarOverlay(): void {
-		if (!this.toolbarOverlayEl || !this.toolbarOverlayEditorView || !this.toolbarOverlayState) {
-			return;
-		}
-
-		const editorRect = this.toolbarOverlayEditorView.scrollDOM.getBoundingClientRect();
-		const toolbarHeight = this.toolbarOverlayHeight;
-		const left = editorRect.left + editorRect.width / 2;
-		let clampedTop = editorRect.top + 8;
-		let isHidden = false;
-
-		if (this.toolbarOverlayState.mode === "review" || this.toolbarOverlayState.mode === "applied_review") {
-			if (!this.activeHighlightRange) {
-				isHidden = true;
-			} else {
-				const coords = this.toolbarOverlayEditorView.coordsAtPos(this.activeHighlightRange.start);
-				if (!coords) {
-					isHidden = true;
-				} else {
-					const top = coords.top - 50 - toolbarHeight;
-					const minimumTop = editorRect.top + 8;
-					const maximumTop = editorRect.bottom - 8 - toolbarHeight;
-					clampedTop = Math.min(Math.max(top, minimumTop), maximumTop);
-
-					if (coords.bottom < editorRect.top || coords.top > editorRect.bottom) {
-						isHidden = true;
-					}
-				}
-			}
-		} else {
-			const minimumTop = editorRect.top + 12;
-			const maximumTop = editorRect.bottom - 8 - toolbarHeight;
-			clampedTop = Math.min(Math.max(editorRect.top + 20, minimumTop), maximumTop);
-		}
-
-		const nextPosition = {
-			hidden: isHidden,
-			left: `${left}px`,
-			top: `${clampedTop}px`,
-		};
-
-		if (this.toolbarOverlayLastPosition?.hidden !== nextPosition.hidden) {
-			this.toolbarOverlayEl.classList.toggle("is-hidden", nextPosition.hidden);
-		}
-		if (!nextPosition.hidden) {
-			if (this.toolbarOverlayLastPosition?.left !== nextPosition.left) {
-				this.toolbarOverlayEl.style.setProperty("--editorialist-toolbar-overlay-left", nextPosition.left);
-			}
-			if (this.toolbarOverlayLastPosition?.top !== nextPosition.top) {
-				this.toolbarOverlayEl.style.setProperty("--editorialist-toolbar-overlay-top", nextPosition.top);
-			}
-		}
-		this.toolbarOverlayLastPosition = nextPosition;
-	}
-
-	private destroyToolbarOverlay(): void {
-		this.cancelToolbarOverlayPositionUpdate();
-		if (this.toolbarOverlayEditorView) {
-			this.toolbarOverlayEditorView.scrollDOM.removeEventListener("scroll", this.toolbarOverlayScrollHandler);
-			this.toolbarOverlayEditorView = null;
-		}
-		this.toolbarOverlayHeight = 0;
-		this.toolbarOverlayLastPosition = null;
-		this.toolbarOverlayState = null;
-
-		if (this.toolbarOverlayEl) {
-			this.toolbarOverlayEl.remove();
-			this.toolbarOverlayEl = null;
-		}
 	}
 
 	private async loadPluginData(): Promise<void> {
@@ -3815,175 +3301,6 @@ export default class EditorialistPlugin extends Plugin {
 		}
 	}
 
-	private async loadClipboardReviewBatch(): Promise<ClipboardReviewBatch | null> {
-		if (!navigator.clipboard?.readText) {
-			return null;
-		}
-
-		try {
-			const rawText = await navigator.clipboard.readText();
-			const normalizedText = normalizeImportedReviewText(rawText);
-			if (!normalizedText) {
-				return null;
-			}
-
-			const context = this.getActiveNoteContext();
-			const batch = await this.importEngine.inspectBatch(normalizedText, {
-				activeNotePath: context?.filePath,
-			});
-			await this.persistContributorProfilesIfNeeded();
-			if (batch.summary.totalSuggestions === 0) {
-				return null;
-			}
-
-			return {
-				rawText: normalizedText,
-				batch,
-			};
-		} catch {
-			return null;
-		}
-	}
-
-	private async importReviewBatch(batch: ReviewImportBatch, startReview: boolean): Promise<void> {
-		const duplicateSweep = this.registry.findDuplicateSweep(batch);
-		if (duplicateSweep) {
-			const choice = await openEditorialistChoiceModal(this.app, {
-				title: "Possible existing review batch detected",
-				description: "This review batch appears to match an existing imported sweep. Open it, import again, or cancel.",
-				choices: [
-					{ label: "Open existing sweep", value: "open" },
-					{ label: "Import anyway", value: "import" },
-					{ label: "Cancel", value: "cancel" },
-				],
-			});
-			if (choice === "open") {
-				await this.workflow.openExistingSweep(duplicateSweep);
-			}
-			if (choice !== "import") {
-				return;
-			}
-		}
-
-		const importedGroups = await this.importEngine.importBatch(batch);
-		if (importedGroups.length === 0) {
-			new Notice("No review blocks were imported.");
-			return;
-		}
-
-		await this.registry.recordImportedBatch(batch, importedGroups, "in_progress");
-
-		if (!startReview) {
-			new Notice(
-				`Imported ${importedGroups.reduce((count, group) => count + group.suggestions.length, 0)} suggestions into ${importedGroups.length} note${importedGroups.length === 1 ? "" : "s"}.`,
-			);
-		}
-
-		if (!startReview) {
-			return;
-		}
-
-		await this.workflow.startGuidedSweep(
-			batch.batchId,
-			batch.createdAt,
-			importedGroups.map((group) => group.filePath),
-		);
-	}
-
-	private async importReviewBatchToActiveNote(rawText: string, startReview: boolean): Promise<void> {
-		const context = this.getActiveNoteContext();
-		if (!context) {
-			new Notice("No active markdown note to import into.");
-			return;
-		}
-
-		const normalizedText = normalizeImportedReviewText(rawText);
-		if (!normalizedText) {
-			new Notice(`No ${getReviewBlockFenceLabel()} found in the imported text.`);
-			return;
-		}
-
-		const batch = await this.inspectReviewBatch(rawText, { activeNotePath: context.filePath });
-		const duplicateSweep = this.registry.findDuplicateSweep(batch);
-		if (duplicateSweep) {
-			const choice = await openEditorialistChoiceModal(this.app, {
-				title: "Possible existing review batch detected",
-				description: "This review batch appears to match an existing imported sweep. Open it, import again, or cancel.",
-				choices: [
-					{ label: "Open existing sweep", value: "open" },
-					{ label: "Import anyway", value: "import" },
-					{ label: "Cancel", value: "cancel" },
-				],
-			});
-			if (choice === "open") {
-				await this.workflow.openExistingSweep(duplicateSweep);
-			}
-			if (choice !== "import") {
-				return;
-			}
-		}
-
-		const batchText = this.addImportedBlockMetadata(normalizedText, batch.batchId);
-
-		const currentText = context.view.editor.getValue();
-		const trimmedCurrentText = currentText.trimEnd();
-		const trimmedBatch = batchText.trim();
-		const separator = trimmedCurrentText.length > 0 ? "\n\n" : "";
-		const nextText = `${trimmedCurrentText}${separator}${trimmedBatch}\n`;
-		context.view.editor.setValue(nextText);
-		await this.registry.recordImportedBatch(
-			batch,
-			[
-				{
-					filePath: context.filePath,
-					fileName: context.view.file?.basename ?? context.filePath,
-					sceneId: undefined,
-					suggestions: batch.results,
-					memos: [],
-					exactCount: batch.summary.totalExactMatches,
-					declaredCount: batch.summary.totalDeclaredRoutes,
-					inferredCount: batch.summary.totalInferredRoutes,
-					exactInferredCount: batch.results.filter(
-						(result) => result.routeStrategy === "inferred_exact" && result.verificationStatus === "exact",
-					).length,
-					advisoryCount: batch.summary.totalAdvisoryOnly,
-					unresolvedCount: batch.summary.totalUnresolvedMatches,
-					mismatchCount: batch.summary.totalMismatches,
-					isReady: true,
-				},
-			],
-			"in_progress",
-			context.filePath,
-		);
-
-		if (startReview) {
-			await this.workflow.startGuidedSweep(batch.batchId, batch.createdAt, [context.filePath]);
-			return;
-		}
-
-		new Notice("Imported review block into the active note.");
-	}
-
-	private addImportedBlockMetadata(blockText: string, batchId: string): string {
-		if (blockText.includes(`BatchId: ${batchId}`)) {
-			return blockText;
-		}
-
-		return blockText.replace(
-			new RegExp(`^\\\`\\\`\\\`${REVIEW_BLOCK_FENCE}\\s*$`, "m"),
-			(match) => `${match}\nBatchId: ${batchId}\nImportedBy: Editorialist`,
-		);
-	}
-
-	private async inspectReviewBatch(
-		rawText: string,
-		options?: Parameters<ImportEngine["inspectBatch"]>[1],
-	): Promise<ReviewImportBatch> {
-		const batch = await this.importEngine.inspectBatch(rawText, options);
-		await this.persistContributorProfilesIfNeeded();
-		return batch;
-	}
-
 	private async persistContributorProfilesIfNeeded(): Promise<void> {
 		if (!this.reviewerDirectory.consumeDidChange()) {
 			return;
@@ -3993,95 +3310,18 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async cleanupCurrentReviewBatch(): Promise<void> {
-		const context = this.getReviewNoteContext() ?? this.getActiveNoteContext();
-		if (!(await this.workflow.cleanupCurrentBatch(context?.text))) {
-			new Notice("No imported review batch is active.");
-		}
+		await this.batchProcessor.cleanupCurrentReviewBatch();
 	}
 
 	async cleanupReviewBatchById(batchId: string): Promise<void> {
-		await this.cleanupReviewBatch(batchId);
+		await this.batchProcessor.cleanupReviewBatchById(batchId);
 	}
 
 	async cleanupCompletedSweepReviewBlocks(): Promise<void> {
-		const completedSweep = this.getResolvedCompletedSweepState();
-		if (!completedSweep) {
-			new Notice("No completed revision pass is available to clean.");
-			return;
-		}
-
-		await this.cleanupReviewBatch(completedSweep.batchId);
+		await this.batchProcessor.cleanupCompletedSweepReviewBlocks();
 	}
 
 	async removeImportedReviewBlocksInCurrentNote(): Promise<void> {
-		const context = this.getActiveNoteContext();
-		if (!context) {
-			new Notice("No active markdown note.");
-			return;
-		}
-
-		const removed = removeImportedReviewBlocks(context.view.editor.getValue());
-		if (removed.removedCount === 0) {
-			new Notice("No imported Editorialist review blocks found in this note.");
-			return;
-		}
-
-		context.view.editor.setValue(removed.text);
-		await this.registry.syncSceneInventory();
-		this.resyncSessionForActiveNote();
-		new Notice(`Removed ${removed.removedCount} imported review block${removed.removedCount === 1 ? "" : "s"} from this note.`);
-	}
-
-	private async cleanupReviewBatch(batchId: string): Promise<void> {
-		const entry = this.getSweepRegistryEntry(batchId);
-		if (!entry) {
-			new Notice("Review batch registry entry not found.");
-			return;
-		}
-
-		let removedCount = 0;
-		for (const notePath of entry.importedNotePaths) {
-			const context = this.getNoteContextByPath(notePath);
-			if (context) {
-				const removed = removeImportedReviewBlocks(context.view.editor.getValue(), batchId);
-				if (removed.removedCount > 0) {
-					context.view.editor.setValue(removed.text);
-					removedCount += removed.removedCount;
-				}
-				continue;
-			}
-
-			const file = this.app.vault.getAbstractFileByPath(notePath);
-			if (!(file instanceof TFile)) {
-				continue;
-			}
-
-			let currentRemovedCount = 0;
-			await this.app.vault.process(file, (currentText) => {
-				const removed = removeImportedReviewBlocks(currentText, batchId);
-				currentRemovedCount = removed.removedCount;
-				return removed.removedCount > 0 ? removed.text : currentText;
-			});
-			removedCount += currentRemovedCount;
-		}
-
-		await this.registry.updateSweepRegistry(
-			batchId,
-			{
-				status: "cleaned",
-				cleanedAt: Date.now(),
-			},
-			{ persist: false },
-		);
-		if (this.getGuidedSweep()?.batchId === batchId) {
-			this.store.setGuidedSweep(null);
-		}
-		await this.registry.syncSceneInventory();
-		this.resyncSessionForActiveNote();
-		new Notice(
-			removedCount > 0
-				? `Cleaned ${removedCount} imported review block${removedCount === 1 ? "" : "s"}.`
-				: "No imported review blocks were found for this batch.",
-		);
+		await this.batchProcessor.removeImportedReviewBlocksInCurrentNote();
 	}
 }
