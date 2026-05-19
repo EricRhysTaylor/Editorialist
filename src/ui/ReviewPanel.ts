@@ -19,6 +19,9 @@ export class ReviewPanel extends ItemView {
 	private starredOnly = false;
 	private reviewStateProcessedExpanded = false;
 	private commentsCollapsed = false;
+	// null = follow the cold-start default; an explicit boolean once the user
+	// toggles the onboarding disclosure within this view session.
+	private onboardingExpanded: boolean | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -90,66 +93,30 @@ export class ReviewPanel extends ItemView {
 				return;
 			}
 
+			const overview = this.plugin.getReviewStateOverview();
+			const hasHistory =
+				this.plugin.getSweepRegistryEntries().length > 0 ||
+				this.plugin.getSortedReviewerProfiles().length > 0;
+
+			// 1. Continue Review — the dominant resumable workspace card.
 			if (launchTarget) {
-				const actionStrip = header.createDiv({
-					cls: "editorialist-panel__launch-strip editorialist-panel__launch-strip--continuation",
-				});
-
-				const next = actionStrip.createDiv({
-					cls: "editorialist-panel__launch-section editorialist-panel__launch-section--next editorialist-panel__launch-section--next-primary",
-				});
-				const nextLine = next.createDiv({ cls: "editorialist-panel__launch-target editorialist-panel__launch-target--primary" });
-				nextLine.createSpan({
-					cls: "editorialist-panel__launch-target-prefix editorialist-panel__launch-target-prefix--primary",
-					text: `→ ${launchTarget.intent === "active" ? `Resume ${launchTarget.unitLabel}` : `Next ${launchTarget.unitLabel}`} `,
-				});
-				const nextLink = nextLine.createEl("a", {
-					cls: "editorialist-panel__launch-target-link",
-					attr: {
-						href: "#",
-						title: `Open ${launchTarget.label}`,
-					},
-				});
-				nextLink.createSpan({
-					cls: "editorialist-panel__launch-target-text editorialist-panel__launch-target-text--primary",
-					text: launchTarget.label,
-				});
-				this.bindImmediateAction(nextLink, () => {
-					void this.plugin.startOrResumeReviewForNote(launchTarget.notePath);
-				});
-
-				actionStrip.createDiv({ cls: "editorialist-panel__launch-divider" });
-
-				const intro = actionStrip.createDiv({ cls: "editorialist-panel__launch-section editorialist-panel__launch-section--intro" });
-				const sentence = intro.createDiv({ cls: "editorialist-panel__empty editorialist-panel__launch-copy" });
-				sentence.appendText("Continue revision sweep or use ");
-				const shortcut = sentence.createSpan({ cls: "editorialist-panel__command-shortcut" });
-				shortcut.createEl("kbd", { text: "⌘" });
-				shortcut.createEl("kbd", { text: "P" });
-				sentence.appendText(" to open ");
-				const launchLink = sentence.createEl("a", {
-					cls: "editorialist-panel__command-link",
-					attr: {
-						href: "#",
-						title: "Open the Editorialist launcher",
-					},
-				});
-				launchLink.createSpan({
-					cls: "editorialist-panel__command-name",
-					text: "Open review launcher",
-				});
-				this.bindImmediateAction(launchLink, () => {
-					void this.plugin.openEditorialistModal();
-				});
-				sentence.appendText(" for further options.");
-			} else {
-				this.renderColdIdleBody(this.contentEl);
+				this.renderContinueReviewCard(launchTarget, overview);
 			}
 
-			const overview = this.plugin.getReviewStateOverview();
+			// 2. Recent review sessions.
+			this.renderRecentActivityBlock(this.contentEl);
+
+			// 3. Pending sweeps / review state.
 			if (overview) {
 				this.renderReviewStateCard(overview);
 			}
+
+			// 4. Contributors.
+			this.renderContributorsBlock(this.contentEl);
+
+			// 5. Onboarding — demoted to a disclosure. Auto-expanded only on a
+			// cold-start vault where there is nothing else to anchor on.
+			this.renderWorkflowsDisclosure(this.contentEl, !hasHistory && !launchTarget);
 			return;
 		}
 
@@ -465,17 +432,95 @@ export class ReviewPanel extends ItemView {
 		});
 	}
 
-	private renderColdIdleBody(parent: HTMLElement): void {
-		this.renderWorkflowsBlock(parent);
-		this.renderRecentActivityBlock(parent);
-		this.renderContributorsBlock(parent);
+	private renderContinueReviewCard(
+		launchTarget: NonNullable<ReturnType<EditorialistPlugin["getNextLogicalReviewLaunchTarget"]>>,
+		overview: ReturnType<EditorialistPlugin["getReviewStateOverview"]>,
+	): void {
+		const entry = overview
+			? [...overview.pending, ...overview.processed].find(
+				(candidate) => candidate.notePath === launchTarget.notePath,
+			)
+			: undefined;
+
+		const card = this.contentEl.createDiv({ cls: "editorialist-panel__continue" });
+
+		const eyebrow = card.createDiv({ cls: "editorialist-panel__continue-eyebrow" });
+		const eyebrowIcon = eyebrow.createSpan({ cls: "editorialist-panel__continue-eyebrow-icon" });
+		setIcon(eyebrowIcon, "pen-tool");
+		eyebrow.createSpan({
+			cls: "editorialist-panel__continue-eyebrow-text",
+			text: launchTarget.intent === "active" ? "Continue review" : "Next in sweep",
+		});
+
+		card.createDiv({
+			cls: "editorialist-panel__continue-title",
+			text: launchTarget.label,
+		});
+
+		const metaParts: string[] = [];
+		if (entry) {
+			if (entry.pendingCount > 0) {
+				metaParts.push(`${entry.pendingCount} unresolved`);
+			}
+			if (entry.deferredCount > 0) {
+				metaParts.push(`${entry.deferredCount} deferred`);
+			}
+			if (entry.processedCount > 0) {
+				metaParts.push(`${entry.processedCount} resolved`);
+			}
+		}
+		if (metaParts.length === 0) {
+			metaParts.push(`Resume this ${launchTarget.unitLabel}`);
+		}
+		card.createDiv({
+			cls: "editorialist-panel__continue-meta",
+			text: metaParts.join(" · "),
+		});
+
+		if (entry) {
+			card.createDiv({
+				cls: "editorialist-panel__continue-timestamp",
+				text: `Last opened ${this.formatRelativeTime(entry.lastUpdated)}`,
+			});
+		}
+
+		const resumeButton = card.createEl("button", {
+			cls: "editorialist-panel__continue-action",
+			attr: {
+				type: "button",
+				title: `Open ${launchTarget.label}`,
+			},
+		});
+		resumeButton.createSpan({
+			cls: "editorialist-panel__continue-action-text",
+			text: launchTarget.intent === "active" ? "Resume review" : `Start ${launchTarget.unitLabel}`,
+		});
+		this.bindImmediateAction(resumeButton, () => {
+			void this.plugin.startOrResumeReviewForNote(launchTarget.notePath);
+		});
 	}
 
-	private renderWorkflowsBlock(parent: HTMLElement): void {
-		const section = parent.createDiv({ cls: "editorialist-panel__workflows" });
-		const heading = section.createDiv({ cls: "editorialist-panel__section-header" });
-		heading.createDiv({ cls: "editorialist-panel__section-title", text: "How to use Editorialist" });
+	private renderWorkflowsDisclosure(parent: HTMLElement, defaultExpanded: boolean): void {
+		const expanded = this.onboardingExpanded ?? defaultExpanded;
+		const section = parent.createDiv({
+			cls: `editorialist-panel__workflows${expanded ? "" : " is-collapsed"}`,
+		});
+
+		const heading = section.createDiv({
+			cls: "editorialist-panel__section-header editorialist-panel__workflows-header",
+		});
+		const caret = heading.createSpan({ cls: "editorialist-panel__workflows-caret" });
+		setIcon(caret, expanded ? "chevron-down" : "chevron-right");
+		heading.createDiv({ cls: "editorialist-panel__section-title", text: "How Editorialist works" });
+		this.bindImmediateAction(heading, () => {
+			this.onboardingExpanded = !expanded;
+			this.render();
+		});
 		this.renderHeaderLauncherChip(heading);
+
+		if (!expanded) {
+			return;
+		}
 
 		const grid = section.createDiv({ cls: "editorialist-panel__workflow-grid" });
 		const workflows: Array<{ icon: string; title: string; body: string }> = [
@@ -706,7 +751,7 @@ export class ReviewPanel extends ItemView {
 		setIcon(titleIcon, "list-checks");
 		header.createSpan({
 			cls: "editorialist-panel__review-state-title",
-			text: "Review state",
+			text: "Pending sweeps",
 		});
 		const summaryParts: string[] = [];
 		if (overview.pending.length > 0) {
