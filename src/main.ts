@@ -176,7 +176,7 @@ interface ReviewLaunchTarget {
 export type { PendingEditsSummary };
 
 export default class EditorialistPlugin extends Plugin {
-	readonly store = new ReviewStore();
+	private readonly store = new ReviewStore();
 
 	private readonly reviewerDirectory = new ContributorDirectory();
 	private readonly parser = new SuggestionParser(this.reviewerDirectory);
@@ -777,10 +777,12 @@ export default class EditorialistPlugin extends Plugin {
 	async closeActiveReviewContext(): Promise<void> {
 		const completedSweep = this.getResolvedCompletedSweepState();
 		this.bulkApplyConfirmState = null;
-		this.store.setAppliedReview(null);
-		this.store.setCompletedSweep(null);
-		this.store.clearSession();
-		this.store.acknowledgeCompletedSweep(completedSweep?.batchId ?? this.store.getAcknowledgedCompletedSweepBatchId());
+		this.store.batch(() => {
+			this.store.setAppliedReview(null);
+			this.store.setCompletedSweep(null);
+			this.store.clearSession();
+			this.store.acknowledgeCompletedSweep(completedSweep?.batchId ?? this.store.getAcknowledgedCompletedSweepBatchId());
+		});
 		this.clearActiveHighlights();
 		this.lastAppliedChange = null;
 		this.toolbarOverlay.clearDismissedSignature();
@@ -866,8 +868,10 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async exitCompletedReviewMode(): Promise<void> {
-		this.store.setCompletedSweep(null);
-		this.store.clearSession();
+		this.store.batch(() => {
+			this.store.setCompletedSweep(null);
+			this.store.clearSession();
+		});
 		this.clearActiveHighlights();
 		this.syncActiveEditorDecorations();
 	}
@@ -1171,8 +1175,10 @@ export default class EditorialistPlugin extends Plugin {
 	async resetAllRevisionHistory(): Promise<{ removedDecisions: number; removedSignals: number; removedSweeps: number }> {
 		const result = await this.registry.resetAllRevisionHistory();
 		await this.closeActiveReviewContext();
-		this.store.setGuidedSweep(null);
-		this.store.acknowledgeCompletedSweep(null);
+		this.store.batch(() => {
+			this.store.setGuidedSweep(null);
+			this.store.acknowledgeCompletedSweep(null);
+		});
 		await this.savePluginData();
 		this.resyncSessionForActiveNote();
 		this.refreshReviewPanel();
@@ -1820,6 +1826,17 @@ export default class EditorialistPlugin extends Plugin {
 		return this.store.getAppliedReview();
 	}
 
+	// Public read-through facades for the panel UI. The store itself is private
+	// to the plugin — external callers go through these getters so that store
+	// mutations remain owned by the plugin/state-machine path.
+	getCurrentReviewSession(): ReviewSession | null {
+		return this.store.getSession();
+	}
+
+	getSelectedSuggestionId(): string | null {
+		return this.store.getState().selectedSuggestionId;
+	}
+
 	canJumpToSuggestionTarget(id: string): boolean {
 		if (!this.hasReviewSessionContext()) {
 			return false;
@@ -2096,12 +2113,14 @@ export default class EditorialistPlugin extends Plugin {
 		const session = this.store.getSession();
 		if (!context) {
 			this.bulkApplyConfirmState = null;
-			this.store.setAppliedReview(null);
+			this.store.batch(() => {
+				this.store.setAppliedReview(null);
+				if (session) {
+					this.store.clearSession();
+				}
+			});
 			this.clearActiveHighlights();
 			this.lastAppliedChange = null;
-			if (session) {
-				this.store.clearSession();
-			}
 			return;
 		}
 
@@ -2122,10 +2141,12 @@ export default class EditorialistPlugin extends Plugin {
 		void this.persistContributorProfilesIfNeeded();
 		if (!hydratedSession.hasReviewBlock) {
 			this.bulkApplyConfirmState = null;
-			this.store.setAppliedReview(null);
+			this.store.batch(() => {
+				this.store.setAppliedReview(null);
+				this.store.clearSession();
+			});
 			this.clearActiveHighlights();
 			this.lastAppliedChange = null;
-			this.store.clearSession();
 			return;
 		}
 
@@ -2821,8 +2842,10 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private async enterGuidedSweepHandoff(): Promise<void> {
-		this.store.setAppliedReview(null);
-		this.store.selectSuggestion(null);
+		this.store.batch(() => {
+			this.store.setAppliedReview(null);
+			this.store.selectSuggestion(null);
+		});
 		this.clearActiveHighlights();
 		this.syncActiveEditorDecorations();
 	}
@@ -2972,8 +2995,10 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		this.store.updateAppliedReviewCurrentIndex(safeIndex);
-		this.store.selectSuggestion(entry.suggestionId);
+		this.store.batch(() => {
+			this.store.updateAppliedReviewCurrentIndex(safeIndex);
+			this.store.selectSuggestion(entry.suggestionId);
+		});
 		await this.focusEditorRange(entry.start, entry.end);
 	}
 

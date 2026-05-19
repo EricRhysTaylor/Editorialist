@@ -25,9 +25,8 @@ import type {
 	SceneReviewRecord,
 } from "../models/ContributorProfile";
 import type { ContributorDirectory } from "../state/ContributorDirectory";
-import { getLegacyContributorSignatureKind } from "../core/ContributorIdentity";
-import { getSuggestionSignatureParts } from "../core/OperationSupport";
 import { ReviewerStatsProjector } from "./registry/ReviewerStatsProjector";
+import { ReviewDecisionIndex } from "./registry/ReviewDecisionIndex";
 import {
 	normalizeReviewDecisionIndex,
 	normalizeReviewerSignalIndex,
@@ -74,6 +73,7 @@ export class ReviewRegistryService {
 	private readonly statsProjector: ReviewerStatsProjector;
 	private readonly sweepManager: SweepRegistryManager;
 	private readonly inventoryBuilder: SceneInventoryBuilder;
+	private readonly decisionIndex: ReviewDecisionIndex;
 
 	constructor(
 		private readonly app: App,
@@ -86,6 +86,9 @@ export class ReviewRegistryService {
 			getSceneReviewIndex: () => this.sceneReviewIndex,
 			getActiveBookScope: () => this.activeBookScope,
 		});
+		this.decisionIndex = new ReviewDecisionIndex({
+			noteIdentitiesOf: (notePath) => this.getNoteIdentityKeys(notePath),
+		});
 		this.inventoryBuilder = new SceneInventoryBuilder({
 			getMarkdownFiles: () => this.app.vault.getMarkdownFiles(),
 			resolveNoteText: async (file) =>
@@ -94,7 +97,7 @@ export class ReviewRegistryService {
 				this.reviewEngine.buildSession(notePath, noteText, null),
 			applyPersistedReviewState: (session) => this.applyPersistedReviewState(session),
 			getPersistedDecisionRecord: (notePath, suggestion) =>
-				this.getPersistedReviewDecisionRecord(notePath, suggestion),
+				this.decisionIndex.getRecord(this.reviewDecisionIndex, notePath, suggestion),
 			getSceneId: (file) => getSceneIdForFile(this.app, file),
 			getBookHint: (notePath) => getBookHintForPath(notePath, this.activeBookScope),
 			getSceneReviewIndex: () => this.sceneReviewIndex,
@@ -286,20 +289,7 @@ export class ReviewRegistryService {
 	}
 
 	applyPersistedReviewState(session: ReviewSession): ReviewSession {
-		return {
-			...session,
-			suggestions: session.suggestions.map((suggestion) => {
-				const record = this.getPersistedReviewDecisionRecord(session.notePath, suggestion);
-				if (!record) {
-					return suggestion;
-				}
-
-				return {
-					...suggestion,
-					status: record.status,
-				};
-			}),
-		};
+		return this.decisionIndex.applyTo(this.reviewDecisionIndex, session);
 	}
 
 	async persistReviewDecision(
@@ -308,42 +298,11 @@ export class ReviewRegistryService {
 		status: PersistedReviewDecisionRecord["status"],
 		options?: { persist?: boolean; sessionId?: string; sessionStartedAt?: number },
 	): Promise<void> {
-		const keys = this.createPersistedReviewDecisionKeys(notePath, suggestion);
-		const key = keys[0];
-		if (!key) {
-			return;
-		}
-		const existing = keys
-			.map((candidate) => this.reviewDecisionIndex[candidate])
-			.find((record): record is PersistedReviewDecisionRecord => Boolean(record));
-		if (existing?.status === status) {
-			if (existing.key !== key) {
-				delete this.reviewDecisionIndex[existing.key];
-				this.reviewDecisionIndex[key] = {
-					...existing,
-					key,
-				};
-				if (options?.persist !== false) {
-					await this.persistData();
-				}
-			}
-			return;
-		}
-
-		for (const candidate of keys) {
-			if (candidate !== key) {
-				delete this.reviewDecisionIndex[candidate];
-			}
-		}
-
-		this.reviewDecisionIndex[key] = {
-			key,
-			status,
-			updatedAt: Date.now(),
+		const changed = this.decisionIndex.persist(this.reviewDecisionIndex, notePath, suggestion, status, {
 			sessionId: options?.sessionId,
 			sessionStartedAt: options?.sessionStartedAt,
-		};
-		if (options?.persist !== false) {
+		});
+		if (changed && options?.persist !== false) {
 			await this.persistData();
 		}
 	}
@@ -353,21 +312,8 @@ export class ReviewRegistryService {
 		suggestion: ReviewSuggestion,
 		options?: { persist?: boolean },
 	): Promise<void> {
-		const keys = this.createPersistedReviewDecisionKeys(notePath, suggestion);
-		let removed = false;
-		for (const key of keys) {
-			if (!this.reviewDecisionIndex[key]) {
-				continue;
-			}
-
-			delete this.reviewDecisionIndex[key];
-			removed = true;
-		}
-
-		if (!removed) {
-			return;
-		}
-		if (options?.persist !== false) {
+		const removed = this.decisionIndex.clear(this.reviewDecisionIndex, notePath, suggestion);
+		if (removed && options?.persist !== false) {
 			await this.persistData();
 		}
 	}
@@ -778,52 +724,6 @@ export class ReviewRegistryService {
 		}
 
 		return findImportedReviewBlocks(noteText)[0]?.batchId ?? null;
-	}
-
-	private createPersistedReviewDecisionKeys(notePath: string, suggestion: ReviewSuggestion): string[] {
-		const keys: string[] = [];
-		for (const noteIdentity of this.getNoteIdentityKeys(notePath)) {
-			keys.push(
-				[
-					noteIdentity,
-					suggestion.operation,
-					suggestion.executionMode,
-					suggestion.contributor.raw.rawName ?? "",
-					suggestion.contributor.raw.rawType ?? "",
-					suggestion.contributor.raw.rawProvider ?? "",
-					suggestion.contributor.raw.rawModel ?? "",
-					...getSuggestionSignatureParts(suggestion),
-					suggestion.why ?? "",
-				].join("::"),
-			);
-			keys.push(
-				[
-					noteIdentity,
-					suggestion.operation,
-					suggestion.executionMode,
-					suggestion.contributor.displayName,
-					getLegacyContributorSignatureKind(suggestion.contributor),
-					...getSuggestionSignatureParts(suggestion),
-					suggestion.why ?? "",
-				].join("::"),
-			);
-		}
-
-		return keys.filter((key, index) => keys.indexOf(key) === index);
-	}
-
-	private getPersistedReviewDecisionRecord(
-		notePath: string,
-		suggestion: ReviewSuggestion,
-	): PersistedReviewDecisionRecord | undefined {
-		for (const key of this.createPersistedReviewDecisionKeys(notePath, suggestion)) {
-			const record = this.reviewDecisionIndex[key];
-			if (record) {
-				return record;
-			}
-		}
-
-		return undefined;
 	}
 
 	private getSceneReviewStatusRank(status: SceneReviewRecord["status"]): number {

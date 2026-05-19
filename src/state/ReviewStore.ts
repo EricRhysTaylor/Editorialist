@@ -51,6 +51,13 @@ export class ReviewStore {
 		session: null,
 	};
 
+	// Batch depth + pending-emit flag let multi-step transitions emit exactly
+	// once. emit() defers while depth > 0; the outermost batch() flushes a
+	// single notification if anything actually changed. try/finally guarantees
+	// depth resets even if the batched function throws.
+	private batchDepth = 0;
+	private pendingEmit = false;
+
 	subscribe(listener: Listener): () => void {
 		this.listeners.add(listener);
 		listener(this.getState());
@@ -317,7 +324,25 @@ export class ReviewStore {
 		);
 	}
 
+	batch(fn: () => void): void {
+		this.batchDepth += 1;
+		try {
+			fn();
+		} finally {
+			this.batchDepth -= 1;
+			if (this.batchDepth === 0 && this.pendingEmit) {
+				this.pendingEmit = false;
+				const snapshot = this.getState();
+				this.listeners.forEach((listener) => listener(snapshot));
+			}
+		}
+	}
+
 	private emit(): void {
+		if (this.batchDepth > 0) {
+			this.pendingEmit = true;
+			return;
+		}
 		const snapshot = this.getState();
 		this.listeners.forEach((listener) => listener(snapshot));
 	}

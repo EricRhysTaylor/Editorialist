@@ -52,7 +52,8 @@ export class ReviewPanel extends ItemView {
 	}
 
 	render(): void {
-		const { session, selectedSuggestionId } = this.plugin.store.getState();
+		const session = this.plugin.getCurrentReviewSession();
+		const selectedSuggestionId = this.plugin.getSelectedSuggestionId();
 		this.contentEl.empty();
 		this.contentEl.addClass("editorialist-panel");
 
@@ -1660,7 +1661,7 @@ export class ReviewPanel extends ItemView {
 
 	private getSuggestionReason(suggestion: ReviewSuggestion): string {
 		if (this.isOtherTextSuggestion(suggestion)) {
-			const session = this.plugin.store.getSession();
+			const session = this.plugin.getCurrentReviewSession();
 			const unitLabel = this.plugin.usesSceneTerminology(session?.notePath) ? "scene" : "note";
 			if (suggestion.operation === "cut") {
 				return `This line may already have been removed or rewritten in this ${unitLabel}.`;
