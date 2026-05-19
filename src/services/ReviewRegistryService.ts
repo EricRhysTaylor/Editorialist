@@ -21,24 +21,22 @@ import type {
 	EditorialistPluginData,
 	PersistedReviewDecisionRecord,
 	ContributorProfile,
-	ReviewerStats,
 	ReviewerSignalRecord,
 	SceneReviewRecord,
 } from "../models/ContributorProfile";
 import type { ContributorDirectory } from "../state/ContributorDirectory";
 import { getLegacyContributorSignatureKind } from "../core/ContributorIdentity";
-import { getEffectiveSuggestionStatus, getSuggestionSignatureParts } from "../core/OperationSupport";
+import { getSuggestionSignatureParts } from "../core/OperationSupport";
+import { ReviewerStatsProjector } from "./registry/ReviewerStatsProjector";
 import {
-	normalizeReviewDecisionStatus,
-	normalizeSceneStatus,
-	normalizeSweepStatus,
-} from "../core/status/ReviewStatusModel";
-import {
-	getSweepStatus,
-	isSweepCompleteFromCounts,
-	tallyReviewStatuses,
-	tallySuggestionStatuses,
-} from "../core/review/SweepCompletion";
+	normalizeReviewDecisionIndex,
+	normalizeReviewerSignalIndex,
+	normalizeSceneReviewIndex,
+	normalizeSweepRegistry,
+} from "./registry/ReviewRegistryNormalization";
+import { SweepRegistryManager } from "./registry/SweepRegistryManager";
+import { SceneInventoryBuilder } from "./registry/SceneInventoryBuilder";
+import { tallyReviewStatuses } from "../core/review/SweepCompletion";
 
 interface ReviewActivitySummary {
 	accepted: number;
@@ -73,83 +71,45 @@ export class ReviewRegistryService {
 	private reviewerSignalIndex: Record<string, ReviewerSignalRecord> = {};
 	private sceneReviewIndex: Record<string, SceneReviewRecord> = {};
 	private sweepRegistry: Record<string, ReviewSweepRegistryEntry> = {};
-
-	private getEffectiveSuggestionStatus(suggestion: ReviewSuggestion): ReviewSuggestion["status"] {
-		return getEffectiveSuggestionStatus(suggestion);
-	}
+	private readonly statsProjector: ReviewerStatsProjector;
+	private readonly sweepManager: SweepRegistryManager;
+	private readonly inventoryBuilder: SceneInventoryBuilder;
 
 	constructor(
 		private readonly app: App,
 		private readonly reviewEngine: ReviewEngine,
 		private readonly reviewerDirectory: ContributorDirectory,
 		private readonly persistData: () => Promise<void>,
-	) {}
+	) {
+		this.statsProjector = new ReviewerStatsProjector(this.reviewerDirectory);
+		this.sweepManager = new SweepRegistryManager({
+			getSceneReviewIndex: () => this.sceneReviewIndex,
+			getActiveBookScope: () => this.activeBookScope,
+		});
+		this.inventoryBuilder = new SceneInventoryBuilder({
+			getMarkdownFiles: () => this.app.vault.getMarkdownFiles(),
+			resolveNoteText: async (file) =>
+				this.getOpenNoteText(file.path) ?? (await this.app.vault.cachedRead(file)),
+			buildEngineSession: (notePath, noteText) =>
+				this.reviewEngine.buildSession(notePath, noteText, null),
+			applyPersistedReviewState: (session) => this.applyPersistedReviewState(session),
+			getPersistedDecisionRecord: (notePath, suggestion) =>
+				this.getPersistedReviewDecisionRecord(notePath, suggestion),
+			getSceneId: (file) => getSceneIdForFile(this.app, file),
+			getBookHint: (notePath) => getBookHintForPath(notePath, this.activeBookScope),
+			getSceneReviewIndex: () => this.sceneReviewIndex,
+		});
+	}
 
 	load(savedData: Partial<EditorialistPluginData> | null): void {
-		this.reviewDecisionIndex = this.normalizeReviewDecisionIndex(savedData?.reviewDecisionIndex);
-		this.reviewerSignalIndex =
-			savedData?.reviewerSignalIndex && typeof savedData.reviewerSignalIndex === "object"
-				? savedData.reviewerSignalIndex
-				: {};
-		this.sceneReviewIndex = this.normalizeSceneReviewIndex(savedData?.sceneReviewIndex);
-		this.sweepRegistry = this.normalizeSweepRegistry(savedData?.sweepRegistry);
+		this.reviewDecisionIndex = normalizeReviewDecisionIndex(savedData?.reviewDecisionIndex);
+		this.reviewerSignalIndex = normalizeReviewerSignalIndex(savedData?.reviewerSignalIndex);
+		this.sceneReviewIndex = normalizeSceneReviewIndex(savedData?.sceneReviewIndex);
+		this.sweepRegistry = normalizeSweepRegistry(savedData?.sweepRegistry);
 	}
 
 	rebuildReviewerStatsFromSignals(): void {
-		const profiles = this.reviewerDirectory.getProfiles();
-		const totalsByReviewerId = new Map<string, ReviewerStats>();
-
-		for (const profile of profiles) {
-			totalsByReviewerId.set(profile.id, {
-				totalSuggestions: 0,
-				accepted: 0,
-				pending: 0,
-				deferred: 0,
-				rejected: 0,
-				rewritten: 0,
-				unresolved: 0,
-				acceptedEdits: 0,
-				acceptedMoves: 0,
-			});
-		}
-
-		for (const record of Object.values(this.reviewerSignalIndex)) {
-			const stats = totalsByReviewerId.get(record.reviewerId);
-			if (!stats) {
-				continue;
-			}
-
-			stats.totalSuggestions += 1;
-			switch (record.status) {
-				case "accepted":
-					stats.accepted += 1;
-					if (record.operation === "move") {
-						stats.acceptedMoves = (stats.acceptedMoves ?? 0) + 1;
-					} else if (record.operation === "edit" || record.operation === "cut" || record.operation === "condense") {
-						stats.acceptedEdits = (stats.acceptedEdits ?? 0) + 1;
-					}
-					break;
-				case "pending":
-					stats.pending = (stats.pending ?? 0) + 1;
-					break;
-				case "deferred":
-					stats.deferred += 1;
-					break;
-				case "rejected":
-					stats.rejected += 1;
-					break;
-				case "rewritten":
-					stats.rewritten += 1;
-					break;
-				case "unresolved":
-					stats.unresolved += 1;
-					break;
-			}
-		}
-
-		for (const [reviewerId, stats] of totalsByReviewerId) {
-			this.reviewerDirectory.setStats(reviewerId, stats);
-		}
+		this.statsProjector.rebuildFromSignals(this.reviewerSignalIndex);
 	}
 
 	buildPluginData(reviewerProfiles: ContributorProfile[]): EditorialistPluginData {
@@ -185,15 +145,11 @@ export class ReviewRegistryService {
 	}
 
 	getSweepRegistryEntries(): ReviewSweepRegistryEntry[] {
-		return Object.values(this.sweepRegistry).sort((left, right) => right.updatedAt - left.updatedAt);
+		return this.sweepManager.getEntries(this.sweepRegistry);
 	}
 
 	getSweepRegistryEntry(batchId?: string): ReviewSweepRegistryEntry | null {
-		if (!batchId) {
-			return null;
-		}
-
-		return this.sweepRegistry[batchId] ?? null;
+		return this.sweepManager.getEntry(this.sweepRegistry, batchId);
 	}
 
 	getSceneReviewRecords(options?: { activeBookOnly?: boolean }): SceneReviewRecord[] {
@@ -326,11 +282,7 @@ export class ReviewRegistryService {
 	// longer has blocks. Re-importing identical content whose sweep is already
 	// completed therefore starts a fresh pass instead of reopening the old one.
 	findDuplicateSweep(batch: ReviewImportBatch): ReviewSweepRegistryEntry | null {
-		return (
-			Object.values(this.sweepRegistry).find(
-				(entry) => entry.contentHash === batch.contentHash && entry.status === "in_progress",
-			) ?? null
-		);
+		return this.sweepManager.findDuplicate(this.sweepRegistry, batch);
 	}
 
 	applyPersistedReviewState(session: ReviewSession): ReviewSession {
@@ -428,66 +380,12 @@ export class ReviewRegistryService {
 			return;
 		}
 
-		let didChange = false;
-		const nextIndex = {
-			...this.reviewerSignalIndex,
-		};
-		const activeKeys = new Set<string>();
-
-		for (const suggestion of session.suggestions) {
-			const candidateKeys = this.createReviewerSignalKeys(session.notePath, suggestion);
-			const key = candidateKeys[0];
-			if (!key) {
-				continue;
-			}
-			activeKeys.add(key);
-			const existingRecord = candidateKeys
-				.map((candidate) => nextIndex[candidate])
-				.find((record): record is ReviewerSignalRecord => Boolean(record));
-			const desiredRecord = this.createReviewerSignalRecord(
-				key,
-				suggestion,
-				options?.sessionId,
-				options?.sessionStartedAt,
-			);
-
-			if (this.sameReviewerSignalRecord(existingRecord, desiredRecord)) {
-				continue;
-			}
-
-			if (existingRecord) {
-				this.applyReviewerSignalDelta(existingRecord, -1);
-				delete nextIndex[existingRecord.key];
-				didChange = true;
-			}
-
-			for (const candidate of candidateKeys) {
-				if (candidate === key || !nextIndex[candidate]) {
-					continue;
-				}
-
-				this.applyReviewerSignalDelta(nextIndex[candidate] as ReviewerSignalRecord, -1);
-				delete nextIndex[candidate];
-				didChange = true;
-			}
-
-			if (desiredRecord) {
-				this.applyReviewerSignalDelta(desiredRecord, 1);
-				nextIndex[key] = desiredRecord;
-				didChange = true;
-			}
-		}
-
-		const keyPrefixes = this.getReviewerSignalKeyPrefixes(session.notePath);
-		for (const [key, existingRecord] of Object.entries(nextIndex)) {
-			if (!keyPrefixes.some((prefix) => key.startsWith(prefix)) || activeKeys.has(key)) {
-				continue;
-			}
-
-			this.applyReviewerSignalDelta(existingRecord, -1);
-			delete nextIndex[key];
-			didChange = true;
-		}
+		const { nextIndex, didChange } = this.statsProjector.reconcileSession(
+			this.reviewerSignalIndex,
+			session,
+			(notePath) => this.getNoteIdentityKeys(notePath),
+			{ sessionId: options?.sessionId, sessionStartedAt: options?.sessionStartedAt },
+		);
 
 		if (didChange) {
 			this.reviewerSignalIndex = nextIndex;
@@ -535,87 +433,9 @@ export class ReviewRegistryService {
 	}
 
 	async syncSceneInventory(options?: { persist?: boolean }): Promise<void> {
-		const nextIndex: Record<string, SceneReviewRecord> = {};
-		const batchPresence = new Map<string, Set<string>>();
-		const now = Date.now();
+		const { nextIndex, batchPresence, now } = await this.inventoryBuilder.buildFullInventory();
 
-		for (const file of this.app.vault.getMarkdownFiles()) {
-			const noteText =
-				this.getOpenNoteText(file.path) ?? (await this.app.vault.cachedRead(file));
-			const importedBlocks = findImportedReviewBlocks(noteText);
-			if (importedBlocks.length === 0) {
-				continue;
-			}
-
-			const batchIds = [
-				...new Set(importedBlocks.map((block) => block.batchId).filter((value): value is string => Boolean(value))),
-			];
-			for (const batchId of batchIds) {
-				const paths = batchPresence.get(batchId) ?? new Set<string>();
-				paths.add(file.path);
-				batchPresence.set(batchId, paths);
-			}
-
-			const session = this.applyPersistedReviewState(this.reviewEngine.buildSession(file.path, noteText, null));
-			let lastDecisionAt = 0;
-			for (const suggestion of session.suggestions) {
-				const record = this.getPersistedReviewDecisionRecord(file.path, suggestion);
-				if (record?.updatedAt) {
-					lastDecisionAt = Math.max(lastDecisionAt, record.updatedAt);
-				}
-			}
-			const tally = tallySuggestionStatuses(session.suggestions);
-
-			nextIndex[file.path] = {
-				sceneId: getSceneIdForFile(this.app, file),
-				notePath: file.path,
-				noteTitle: file.basename,
-				bookLabel: getBookHintForPath(file.path, this.activeBookScope),
-				batchIds,
-				batchCount: batchIds.length,
-				pendingCount: tally.pending,
-				unresolvedCount: tally.unresolved,
-				deferredCount: tally.deferred,
-				acceptedCount: tally.accepted,
-				rejectedCount: tally.rejected,
-				rewrittenCount: tally.rewritten,
-				status: getSweepStatus({
-					pendingCount: tally.pending,
-					unresolvedCount: tally.unresolved,
-					deferredCount: tally.deferred,
-				}),
-				lastUpdated: Math.max(file.stat.mtime, lastDecisionAt),
-			};
-		}
-
-		for (const existing of Object.values(this.sceneReviewIndex)) {
-			// Retire any prior record whose note no longer carries the batch. A note that
-			// still holds blocks already has a fresh record in nextIndex. Do NOT keep a
-			// stale record alive just because its sceneId now appears in another note —
-			// that happens when a batch is moved between scenes (e.g. routed to the wrong
-			// scene, then yanked into the right one) and would leave the review panel
-			// permanently stuck on the abandoned scene.
-			if (nextIndex[existing.notePath]) {
-				continue;
-			}
-
-			nextIndex[existing.notePath] = {
-				...existing,
-				batchIds: [],
-				batchCount: 0,
-				pendingCount: 0,
-				unresolvedCount: 0,
-				deferredCount: 0,
-				acceptedCount: 0,
-				rejectedCount: 0,
-				rewrittenCount: 0,
-				status: "cleaned",
-				cleanedAt: existing.cleanedAt ?? now,
-				lastUpdated: existing.cleanedAt ?? now,
-			};
-		}
-
-		const nextRegistry = this.buildSweepRegistryFromSceneInventory(batchPresence, nextIndex, now);
+		const nextRegistry = this.sweepManager.buildFromSceneInventory(this.sweepRegistry, batchPresence, nextIndex, now);
 		const inventoryChanged = !this.sameJsonValue(this.sceneReviewIndex, nextIndex);
 		const registryChanged = !this.sameJsonValue(this.sweepRegistry, nextRegistry);
 		if (!inventoryChanged && !registryChanged) {
@@ -642,45 +462,11 @@ export class ReviewRegistryService {
 			return;
 		}
 
-		const noteText = this.getOpenNoteText(session.notePath) ?? (await this.app.vault.cachedRead(file));
-		const importedBlocks = findImportedReviewBlocks(noteText);
-		if (importedBlocks.length === 0) {
+		const nextRecord = await this.inventoryBuilder.buildSessionRecord(file, session);
+		if (nextRecord === null) {
 			await this.syncSceneInventory(options);
 			return;
 		}
-
-		let lastDecisionAt = 0;
-		for (const suggestion of session.suggestions) {
-			const record = this.getPersistedReviewDecisionRecord(session.notePath, suggestion);
-			if (record?.updatedAt) {
-				lastDecisionAt = Math.max(lastDecisionAt, record.updatedAt);
-			}
-		}
-		const tally = tallySuggestionStatuses(session.suggestions);
-
-		const batchIds = [
-			...new Set(importedBlocks.map((block) => block.batchId).filter((value): value is string => Boolean(value))),
-		];
-		const nextRecord: SceneReviewRecord = {
-			sceneId: getSceneIdForFile(this.app, file),
-			notePath: file.path,
-			noteTitle: file.basename,
-			bookLabel: getBookHintForPath(file.path, this.activeBookScope),
-			batchIds,
-			batchCount: batchIds.length,
-			pendingCount: tally.pending,
-			unresolvedCount: tally.unresolved,
-			deferredCount: tally.deferred,
-			acceptedCount: tally.accepted,
-			rejectedCount: tally.rejected,
-			rewrittenCount: tally.rewritten,
-			status: getSweepStatus({
-				pendingCount: tally.pending,
-				unresolvedCount: tally.unresolved,
-				deferredCount: tally.deferred,
-			}),
-			lastUpdated: Math.max(file.stat.mtime, lastDecisionAt),
-		};
 
 		if (this.sameJsonValue(this.sceneReviewIndex[session.notePath], nextRecord)) {
 			return;
@@ -691,58 +477,17 @@ export class ReviewRegistryService {
 			[session.notePath]: nextRecord,
 		};
 
-		this.reconcileSweepRegistryStatus(nextRecord);
+		this.sweepManager.reconcileStatus(this.sweepRegistry, nextRecord);
 
 		if (options?.persist !== false) {
 			await this.persistData();
 		}
 	}
 
-	// A scene with no record yet, or whose batch block has been removed
-	// (batchCount === 0), is not blocking — it carries no open items. Every
-	// other scene defers to the centralized sweep-completion rule.
-	private areSweepPathsComplete(sweepPaths: readonly string[]): boolean {
-		return sweepPaths.every((path) => {
-			const record = this.sceneReviewIndex[path];
-			if (!record || record.batchCount === 0) {
-				return true;
-			}
-
-			return isSweepCompleteFromCounts(record);
-		});
-	}
-
 	// Registry-level completeness for a single sweep, used by the guided-sweep
-	// finish guard. Mirrors reconcileSweepRegistryStatus's path-completion check.
+	// finish guard.
 	isSweepRegistryComplete(batchId: string): boolean {
-		const entry = this.sweepRegistry[batchId];
-		if (!entry) {
-			return false;
-		}
-
-		const sweepPaths = entry.sceneOrder.length > 0 ? entry.sceneOrder : entry.importedNotePaths;
-		return this.areSweepPathsComplete(sweepPaths);
-	}
-
-	private reconcileSweepRegistryStatus(updatedRecord: SceneReviewRecord): void {
-		for (const entry of Object.values(this.sweepRegistry)) {
-			if (entry.status !== "in_progress") {
-				continue;
-			}
-
-			const sweepPaths = entry.sceneOrder.length > 0 ? entry.sceneOrder : entry.importedNotePaths;
-			if (!sweepPaths.includes(updatedRecord.notePath)) {
-				continue;
-			}
-
-			if (this.areSweepPathsComplete(sweepPaths)) {
-				this.sweepRegistry[entry.batchId] = {
-					...entry,
-					status: "completed",
-					updatedAt: Date.now(),
-				};
-			}
-		}
+		return this.sweepManager.isComplete(this.sweepRegistry, batchId);
 	}
 
 	async recordImportedBatch(
@@ -751,20 +496,7 @@ export class ReviewRegistryService {
 		status: ReviewSweepStatus,
 		currentNotePath?: string,
 	): Promise<void> {
-		const now = Date.now();
-		this.sweepRegistry[batch.batchId] = {
-			activeBookLabel: this.activeBookScope.label ?? undefined,
-			activeBookSourceFolder: this.activeBookScope.sourceFolder ?? undefined,
-			batchId: batch.batchId,
-			contentHash: batch.contentHash,
-			importedAt: batch.createdAt,
-			importedNotePaths: importedGroups.map((group) => group.filePath),
-			currentNotePath: currentNotePath ?? importedGroups[0]?.filePath,
-			sceneOrder: importedGroups.map((group) => group.filePath),
-			status,
-			totalSuggestions: batch.summary.totalSuggestions,
-			updatedAt: now,
-		};
+		this.sweepManager.recordImportedBatch(this.sweepRegistry, batch, importedGroups, status, currentNotePath);
 		await this.syncSceneInventory();
 	}
 
@@ -773,21 +505,11 @@ export class ReviewRegistryService {
 		updates: Partial<ReviewSweepRegistryEntry>,
 		options?: { persist?: boolean },
 	): Promise<void> {
-		const existing = this.sweepRegistry[batchId];
-		if (!existing) {
+		const changed = this.sweepManager.updateEntry(this.sweepRegistry, batchId, updates);
+		if (!changed) {
 			return;
 		}
 
-		const hasMeaningfulChange = Object.entries(updates).some(([key, value]) => existing[key as keyof ReviewSweepRegistryEntry] !== value);
-		if (!hasMeaningfulChange) {
-			return;
-		}
-
-		this.sweepRegistry[batchId] = {
-			...existing,
-			...updates,
-			updatedAt: Date.now(),
-		};
 		if (options?.persist !== false) {
 			await this.persistData();
 		}
@@ -1104,216 +826,6 @@ export class ReviewRegistryService {
 		return undefined;
 	}
 
-	private createReviewerSignalKeys(notePath: string, suggestion: ReviewSuggestion): string[] {
-		return this.getNoteIdentityKeys(notePath).map((noteIdentity) =>
-			[
-				noteIdentity,
-				suggestion.source.blockIndex,
-				suggestion.source.entryIndex,
-				suggestion.operation,
-				suggestion.executionMode,
-				...getSuggestionSignatureParts(suggestion),
-			].join("::"),
-		);
-	}
-
-	private createReviewerSignalRecord(
-		key: string,
-		suggestion: ReviewSuggestion,
-		sessionId?: string,
-		sessionStartedAt?: number,
-	): ReviewerSignalRecord | null {
-		const reviewerId = suggestion.contributor.reviewerId;
-		if (!reviewerId) {
-			return null;
-		}
-
-		return {
-			key,
-			reviewerId,
-			status:
-				this.getEffectiveSuggestionStatus(suggestion) === "accepted"
-					? "accepted"
-					: this.getEffectiveSuggestionStatus(suggestion) === "pending"
-						? "pending"
-					: this.getEffectiveSuggestionStatus(suggestion) === "rejected"
-						? "rejected"
-						: this.getEffectiveSuggestionStatus(suggestion) === "rewritten"
-							? "rewritten"
-						: this.getEffectiveSuggestionStatus(suggestion) === "deferred"
-							? "deferred"
-							: "unresolved",
-			operation: suggestion.operation,
-			sessionId,
-			sessionStartedAt,
-		};
-	}
-
-	private sameReviewerSignalRecord(
-		left: ReviewerSignalRecord | undefined,
-		right: ReviewerSignalRecord | null,
-	): boolean {
-		if (!left && !right) {
-			return true;
-		}
-
-		if (!left || !right) {
-			return false;
-		}
-
-		return (
-			left.key === right.key &&
-			left.reviewerId === right.reviewerId &&
-			left.status === right.status &&
-			left.operation === right.operation &&
-			left.sessionId === right.sessionId &&
-			left.sessionStartedAt === right.sessionStartedAt
-		);
-	}
-
-	private applyReviewerSignalDelta(record: ReviewerSignalRecord, direction: 1 | -1): void {
-		const profile = this.reviewerDirectory.getProfileById(record.reviewerId);
-		if (!profile) {
-			return;
-		}
-
-		const stats = {
-			totalSuggestions: profile.stats?.totalSuggestions ?? 0,
-			accepted: profile.stats?.accepted ?? 0,
-			pending: profile.stats?.pending ?? 0,
-			deferred: profile.stats?.deferred ?? 0,
-			rejected: profile.stats?.rejected ?? 0,
-			rewritten: profile.stats?.rewritten ?? 0,
-			unresolved: profile.stats?.unresolved ?? 0,
-			acceptedEdits: profile.stats?.acceptedEdits ?? 0,
-			acceptedMoves: profile.stats?.acceptedMoves ?? 0,
-		};
-
-		stats.totalSuggestions = Math.max(0, stats.totalSuggestions + direction);
-		if (record.status === "accepted") {
-			stats.accepted = Math.max(0, stats.accepted + direction);
-			if (record.operation === "move") {
-				stats.acceptedMoves = Math.max(0, (stats.acceptedMoves ?? 0) + direction);
-			} else if (record.operation === "edit" || record.operation === "cut" || record.operation === "condense") {
-				stats.acceptedEdits = Math.max(0, (stats.acceptedEdits ?? 0) + direction);
-			}
-		} else if (record.status === "pending") {
-			stats.pending = Math.max(0, (stats.pending ?? 0) + direction);
-		} else if (record.status === "rejected") {
-			stats.rejected = Math.max(0, stats.rejected + direction);
-		} else if (record.status === "rewritten") {
-			stats.rewritten = Math.max(0, stats.rewritten + direction);
-		} else if (record.status === "deferred") {
-			stats.deferred = Math.max(0, stats.deferred + direction);
-		} else {
-			stats.unresolved = Math.max(0, stats.unresolved + direction);
-		}
-
-		this.reviewerDirectory.setStats(record.reviewerId, stats);
-	}
-
-	private buildSweepRegistryFromSceneInventory(
-		batchPresence: Map<string, Set<string>>,
-		sceneIndex: Record<string, SceneReviewRecord>,
-		now: number,
-	): Record<string, ReviewSweepRegistryEntry> {
-		const nextRegistry: Record<string, ReviewSweepRegistryEntry> = {};
-		for (const entry of Object.values(this.sweepRegistry)) {
-			const currentPaths = [...(batchPresence.get(entry.batchId) ?? new Set<string>())].sort();
-			const resolveCurrentPath = (previousPath: string | undefined): string | undefined => {
-				if (!previousPath) {
-					return undefined;
-				}
-				if (currentPaths.includes(previousPath)) {
-					return previousPath;
-				}
-
-				const previousSceneId = this.sceneReviewIndex[previousPath]?.sceneId?.trim();
-				if (!previousSceneId) {
-					return undefined;
-				}
-
-				return currentPaths.find((path) => sceneIndex[path]?.sceneId?.trim() === previousSceneId);
-			};
-
-			// Resolve renames where possible (scene moved to a new path) but keep
-			// historical paths whose blocks have been removed — `sceneOrder` is
-			// the display-side "scenes this batch touched" list and must survive
-			// cleanup so Recent Reviews can still show scene titles. Live
-			// presence is tracked separately via `importedNotePaths`.
-			const nextSceneOrder = entry.sceneOrder
-				.map((path) => resolveCurrentPath(path) ?? path)
-				.filter((path, index, paths) => paths.indexOf(path) === index);
-			for (const path of currentPaths) {
-				if (!nextSceneOrder.includes(path)) {
-					nextSceneOrder.push(path);
-				}
-			}
-
-			const currentNotePath = resolveCurrentPath(entry.currentNotePath) ?? nextSceneOrder[0];
-			const editorialRevisionUpdatedNotePaths = [...new Set(
-				(entry.editorialRevisionUpdatedNotePaths ?? [])
-					.map((path) => resolveCurrentPath(path))
-					.filter((path): path is string => Boolean(path)),
-			)];
-
-			// Recompute decision counts from the scenes currently carrying this
-			// batch's review block. Once the batch has no scenes left (cleaned /
-			// replaced), preserve the previously recorded counts so Recent Reviews
-			// keeps the historical stats instead of showing zeros.
-			let acceptedCount = entry.acceptedCount;
-			let rejectedCount = entry.rejectedCount;
-			let rewrittenCount = entry.rewrittenCount;
-			let deferredCount = entry.deferredCount;
-			if (currentPaths.length > 0) {
-				let accepted = 0;
-				let rejected = 0;
-				let rewritten = 0;
-				let deferred = 0;
-				for (const path of currentPaths) {
-					const record = sceneIndex[path];
-					if (!record) continue;
-					accepted += record.acceptedCount;
-					rejected += record.rejectedCount;
-					rewritten += record.rewrittenCount;
-					deferred += record.deferredCount;
-				}
-				acceptedCount = accepted;
-				rejectedCount = rejected;
-				rewrittenCount = rewritten;
-				deferredCount = deferred;
-			}
-
-			const candidate: ReviewSweepRegistryEntry = {
-				...entry,
-				activeBookLabel: entry.activeBookLabel ?? this.activeBookScope.label ?? undefined,
-				activeBookSourceFolder: entry.activeBookSourceFolder ?? this.activeBookScope.sourceFolder ?? undefined,
-				cleanedAt: currentPaths.length === 0 ? entry.cleanedAt ?? now : undefined,
-				editorialRevisionUpdatedNotePaths,
-				importedNotePaths: currentPaths,
-				currentNotePath,
-				sceneOrder: nextSceneOrder,
-				status: currentPaths.length === 0 ? "cleaned" : entry.status,
-				updatedAt: entry.updatedAt,
-				acceptedCount,
-				rejectedCount,
-				rewrittenCount,
-				deferredCount,
-			};
-
-			// Only stamp a fresh updatedAt when something material actually
-			// changed. Bumping it unconditionally made every syncSceneInventory
-			// rewrite + re-persist every entry and reorder Recent Reviews (which
-			// sorts by updatedAt) with no underlying activity.
-			const materiallyChanged =
-				!this.sameJsonValue({ ...entry, updatedAt: 0 }, { ...candidate, updatedAt: 0 });
-			candidate.updatedAt = materiallyChanged ? now : entry.updatedAt;
-			nextRegistry[entry.batchId] = candidate;
-		}
-
-		return nextRegistry;
-	}
-
 	private getSceneReviewStatusRank(status: SceneReviewRecord["status"]): number {
 		switch (status) {
 			case "in_progress":
@@ -1347,10 +859,6 @@ export class ReviewRegistryService {
 		return [`scene:${sceneId}`, notePath];
 	}
 
-	private getReviewerSignalKeyPrefixes(notePath: string): string[] {
-		return this.getNoteIdentityKeys(notePath).map((identity) => `${identity}::`);
-	}
-
 	private getSceneIdForNotePath(notePath: string): string | undefined {
 		const file = this.app.vault.getAbstractFileByPath(notePath);
 		if (!(file instanceof TFile)) {
@@ -1370,128 +878,6 @@ export class ReviewRegistryService {
 		const classValues = getFrontmatterStringValues(frontmatter, ["class", "Class", "classes", "Classes"]);
 
 		return classValues.some((value) => value.trim().toLowerCase() === "scene");
-	}
-
-	private normalizeReviewDecisionIndex(
-		index:
-			| Partial<
-					Record<
-						string,
-						Partial<PersistedReviewDecisionRecord> & {
-							status?: PersistedReviewDecisionRecord["status"] | "later";
-						}
-					>
-			  >
-			| undefined,
-	): Record<string, PersistedReviewDecisionRecord> {
-		if (!index || typeof index !== "object") {
-			return {};
-		}
-
-		return Object.fromEntries(
-			Object.entries(index).map(([key, record]) => {
-				return [
-					key,
-					{
-						key,
-						status: normalizeReviewDecisionStatus(record?.status),
-						updatedAt: record?.updatedAt ?? Date.now(),
-						sessionId: record?.sessionId,
-						sessionStartedAt: record?.sessionStartedAt,
-					},
-				];
-			}),
-		);
-	}
-
-	private normalizeSceneReviewIndex(
-		index:
-			| Partial<
-					Record<
-						string,
-						Partial<SceneReviewRecord> & {
-							resolvedCount?: number;
-							status?: SceneReviewRecord["status"] | "not_started";
-						}
-					>
-			  >
-			| undefined,
-	): Record<string, SceneReviewRecord> {
-		if (!index || typeof index !== "object") {
-			return {};
-		}
-
-		return Object.fromEntries(
-			Object.entries(index).map(([notePath, record]) => {
-				return [
-					notePath,
-					{
-						sceneId: record?.sceneId,
-						notePath: record?.notePath ?? notePath,
-						noteTitle: record?.noteTitle ?? notePath,
-						bookLabel: record?.bookLabel,
-						batchIds: [...(record?.batchIds ?? [])],
-						batchCount: record?.batchCount ?? (record?.batchIds?.length ?? 0),
-						pendingCount: record?.pendingCount ?? 0,
-						unresolvedCount: record?.unresolvedCount ?? 0,
-						deferredCount: record?.deferredCount ?? 0,
-						acceptedCount: record?.acceptedCount ?? record?.resolvedCount ?? 0,
-						rejectedCount: record?.rejectedCount ?? 0,
-						rewrittenCount: record?.rewrittenCount ?? 0,
-						status: normalizeSceneStatus(record?.status),
-						lastUpdated: record?.lastUpdated ?? Date.now(),
-						cleanedAt: record?.cleanedAt,
-					},
-				];
-			}),
-		);
-	}
-
-	private normalizeSweepRegistry(
-		registry:
-			| Partial<
-					Record<
-						string,
-						Partial<ReviewSweepRegistryEntry> & {
-							status?: ReviewSweepRegistryEntry["status"] | "cleaned_up" | "imported";
-						}
-					>
-			  >
-			| undefined,
-	): Record<string, ReviewSweepRegistryEntry> {
-		if (!registry || typeof registry !== "object") {
-			return {};
-		}
-
-		return Object.fromEntries(
-			Object.entries(registry).map(([batchId, entry]) => {
-				return [
-					batchId,
-					{
-						batchId,
-						contentHash: entry?.contentHash ?? "",
-						activeBookLabel: entry?.activeBookLabel,
-						activeBookSourceFolder: entry?.activeBookSourceFolder,
-						cleanedAt: entry?.cleanedAt,
-						editorialRevisionUpdatedNotePaths: [...(entry?.editorialRevisionUpdatedNotePaths ?? [])],
-						importedAt: entry?.importedAt ?? Date.now(),
-						importedNotePaths: [...(entry?.importedNotePaths ?? [])],
-						currentNotePath: entry?.currentNotePath,
-						sceneOrder: [...(entry?.sceneOrder ?? [])],
-						status: normalizeSweepStatus(entry?.status),
-						totalSuggestions: entry?.totalSuggestions ?? 0,
-						updatedAt: entry?.updatedAt ?? Date.now(),
-						// Frozen historical decision counts: preserve across reload.
-						// Dropping these reset every cleaned sweep's Recent Reviews
-						// stats to zero on each plugin restart.
-						acceptedCount: entry?.acceptedCount,
-						rejectedCount: entry?.rejectedCount,
-						rewrittenCount: entry?.rewrittenCount,
-						deferredCount: entry?.deferredCount,
-					},
-				];
-			}),
-		);
 	}
 
 	private sameJsonValue(left: unknown, right: unknown): boolean {

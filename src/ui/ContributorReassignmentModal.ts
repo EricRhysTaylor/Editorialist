@@ -1,7 +1,8 @@
-import { ButtonComponent, DropdownComponent, TextComponent, type App } from "obsidian";
+import { DropdownComponent, TextComponent, type App } from "obsidian";
 import { formatContributorIdentityLabel } from "../core/ContributorIdentity";
 import type { ContributorProfile } from "../models/ContributorProfile";
 import { PromiseModal } from "./modals/PromiseModal";
+import { buildModalFooter, type ModalFooter } from "./primitives/ModalFooter";
 
 export type ContributorReassignmentMode = "merge" | "reassign";
 
@@ -18,7 +19,7 @@ interface ContributorReassignmentModalOptions {
 
 class ContributorReassignmentModal extends PromiseModal<ContributorReassignmentResult> {
 	private createName = "";
-	private confirmButton: ButtonComponent | null = null;
+	private footer: ModalFooter | null = null;
 	private dropdown: DropdownComponent | null = null;
 	private targetValue = "";
 
@@ -74,7 +75,7 @@ class ContributorReassignmentModal extends PromiseModal<ContributorReassignmentR
 			this.targetValue = value;
 			this.renderCreateInput();
 			this.syncDropdownWidth();
-			this.syncConfirmState();
+			this.footer?.syncDisabled();
 		});
 		this.syncDropdownWidth();
 
@@ -90,7 +91,7 @@ class ContributorReassignmentModal extends PromiseModal<ContributorReassignmentR
 			input.setPlaceholder("Enter contributor name");
 			input.onChange((value) => {
 				this.createName = value;
-				this.syncConfirmState();
+				this.footer?.syncDisabled();
 			});
 			this.renderCreateInput = () => {
 				createRow.toggleClass("is-hidden", this.targetValue !== "__create__");
@@ -112,32 +113,34 @@ class ContributorReassignmentModal extends PromiseModal<ContributorReassignmentR
 			text: "All revision notes",
 		});
 
-		const actions = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__actions" });
-		this.confirmButton = new ButtonComponent(actions)
-			.setButtonText(this.options.mode === "merge" ? "Merge contributor" : "Reassign contributor")
-			.setCta();
-		this.confirmButton.onClick(() => {
-			if (this.targetValue === "__create__") {
-				this.finish({ createName: this.createName.trim() });
-				return;
-			}
+		this.footer = buildModalFooter(this.contentEl, {
+			className: "editorialist-contributor-modal__actions",
+			buttons: [
+				{
+					text: this.options.mode === "merge" ? "Merge contributor" : "Reassign contributor",
+					cta: true,
+					enableWhen: () =>
+						this.targetValue === "__create__"
+							? this.createName.trim().length > 0
+							: this.targetValue.trim().length > 0,
+					onClick: () => {
+						if (this.targetValue === "__create__") {
+							this.finish({ createName: this.createName.trim() });
+							return;
+						}
 
-			this.finish({ targetReviewerId: this.targetValue });
+						this.finish({ targetReviewerId: this.targetValue });
+					},
+				},
+				{
+					text: "Cancel",
+					onClick: () => this.finish(null),
+				},
+			],
 		});
-
-		const cancel = new ButtonComponent(actions).setButtonText("Cancel");
-		cancel.onClick(() => this.finish(null));
-		this.syncConfirmState();
 	}
 
 	private renderCreateInput = (): void => undefined;
-
-	private syncConfirmState(): void {
-		const isValid = this.targetValue === "__create__"
-			? this.createName.trim().length > 0
-			: this.targetValue.trim().length > 0;
-		this.confirmButton?.setDisabled(!isValid);
-	}
 
 	private syncDropdownWidth(): void {
 		const selectEl = this.dropdown?.selectEl;

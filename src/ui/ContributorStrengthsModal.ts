@@ -1,5 +1,6 @@
-import { ButtonComponent, TextComponent, setIcon, type App } from "obsidian";
+import { TextComponent, setIcon, type App } from "obsidian";
 import { PromiseModal } from "./modals/PromiseModal";
+import { buildModalFooter, type ModalFooter } from "./primitives/ModalFooter";
 import { formatReviewerTypeLabel } from "../core/ContributorIdentity";
 import {
 	CONTRIBUTOR_ROLE_DEFINITIONS,
@@ -30,7 +31,7 @@ class ContributorStrengthsModal extends PromiseModal<ContributorStrengthsModalRe
 	private nameTriggerEl: HTMLElement | null = null;
 	private selectedStrengths = new Set<ContributorStrength>();
 	private selectedRole: ReviewerType | null;
-	private saveButton: ButtonComponent | null = null;
+	private footer: ModalFooter | null = null;
 
 	constructor(
 		app: App,
@@ -90,7 +91,7 @@ class ContributorStrengthsModal extends PromiseModal<ContributorStrengthsModalRe
 		this.nameInput.onChange((value) => {
 			this.displayName = value;
 			this.syncIdentityPreview();
-			this.syncSaveState();
+			this.footer?.syncDisabled();
 		});
 		this.identityNameEl.addEventListener("click", () => this.openRenameEditor());
 		this.nameTriggerEl.addEventListener("click", () => this.openRenameEditor());
@@ -143,25 +144,32 @@ class ContributorStrengthsModal extends PromiseModal<ContributorStrengthsModalRe
 			detailToggle.toggleClass("is-open", detailOpen);
 		});
 
-		const actions = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__actions" });
-		this.saveButton = new ButtonComponent(actions)
-			.setButtonText("Save")
-			.setCta();
-		this.saveButton.onClick(() => {
-			if (!this.selectedRole) {
-				return;
-			}
-			this.finish({
-				displayName: this.displayName.trim(),
-				strengths: [...this.selectedStrengths],
-				reviewerType: this.selectedRole,
-			});
+		this.footer = buildModalFooter(this.contentEl, {
+			className: "editorialist-contributor-modal__actions",
+			buttons: [
+				{
+					text: "Save",
+					cta: true,
+					enableWhen: () => this.displayName.trim().length > 0 && Boolean(this.selectedRole),
+					onClick: () => {
+						if (!this.selectedRole) {
+							return;
+						}
+						this.finish({
+							displayName: this.displayName.trim(),
+							strengths: [...this.selectedStrengths],
+							reviewerType: this.selectedRole,
+						});
+					},
+				},
+				{
+					text: "Cancel",
+					onClick: () => this.finish(null),
+				},
+			],
 		});
-
-		const cancel = new ButtonComponent(actions).setButtonText("Cancel");
-		cancel.onClick(() => this.finish(null));
 		this.syncIdentityPreview();
-		this.syncSaveState();
+		this.footer.syncDisabled();
 	}
 
 	private createRoleTile(
@@ -191,7 +199,7 @@ class ContributorStrengthsModal extends PromiseModal<ContributorStrengthsModalRe
 			for (const sync of allSyncCallbacks) {
 				sync();
 			}
-			this.syncSaveState();
+			this.footer?.syncDisabled();
 		});
 
 		return syncState;
@@ -275,10 +283,6 @@ class ContributorStrengthsModal extends PromiseModal<ContributorStrengthsModalRe
 	private closeRenameEditor(): void {
 		this.nameEditorEl?.addClass("is-collapsed");
 		this.nameTriggerEl?.removeClass("is-collapsed");
-	}
-
-	private syncSaveState(): void {
-		this.saveButton?.setDisabled(this.displayName.trim().length === 0 || !this.selectedRole);
 	}
 }
 

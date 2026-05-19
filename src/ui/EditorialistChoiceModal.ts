@@ -1,5 +1,6 @@
-import { ButtonComponent, type App } from "obsidian";
+import { type App } from "obsidian";
 import { PromiseModal } from "./modals/PromiseModal";
+import { buildModalFooter } from "./primitives/ModalFooter";
 
 interface ChoiceOption<T extends string> {
 	label: string;
@@ -29,12 +30,14 @@ class EditorialistChoiceModal<T extends string> extends PromiseModal<T> {
 			text: this.options.description,
 		});
 
-		const actions = this.contentEl.createDiv({ cls: "editorialist-choice-modal__actions" });
-		for (const choice of this.options.choices) {
-			const button = new ButtonComponent(actions).setButtonText(choice.label);
-			button.buttonEl.addClass("editorialist-choice-modal__button");
-			button.onClick(() => this.finish(choice.value));
-		}
+		buildModalFooter(this.contentEl, {
+			className: "editorialist-choice-modal__actions",
+			buttons: this.options.choices.map((choice) => ({
+				text: choice.label,
+				className: "editorialist-choice-modal__button",
+				onClick: () => this.finish(choice.value),
+			})),
+		});
 	}
 }
 

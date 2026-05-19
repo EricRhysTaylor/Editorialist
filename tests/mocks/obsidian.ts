@@ -19,6 +19,37 @@ export class Notice {
 	hide(): void {}
 }
 
+// Minimal ButtonComponent stub mirroring the chained API the modal footer
+// primitive uses (setButtonText / setCta / onClick / setDisabled) plus a
+// buttonEl with addClass. Records state so tests can assert behavior.
+export class ButtonComponent {
+	text = "";
+	cta = false;
+	disabled = false;
+	clickHandler: (() => void) | null = null;
+	readonly classes = new Set<string>();
+	readonly buttonEl = { addClass: (cls: string): void => void this.classes.add(cls) };
+
+	constructor(_parent: unknown) {}
+
+	setButtonText(text: string): this {
+		this.text = text;
+		return this;
+	}
+	setCta(): this {
+		this.cta = true;
+		return this;
+	}
+	setDisabled(disabled: boolean): this {
+		this.disabled = disabled;
+		return this;
+	}
+	onClick(cb: () => void): this {
+		this.clickHandler = cb;
+		return this;
+	}
+}
+
 export class Plugin {
 	app: unknown = {};
 	manifest: unknown = {};
