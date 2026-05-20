@@ -107,6 +107,7 @@ export interface SceneReviewRecord {
 }
 
 export interface EditorialistPluginData {
+	version: number;
 	reviewerProfiles: ContributorProfile[];
 	reviewerSignalIndex: Record<string, ReviewerSignalRecord>;
 	reviewDecisionIndex: Record<string, PersistedReviewDecisionRecord>;

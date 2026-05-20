@@ -21,7 +21,7 @@ import type {
 	ReviewNoteContextLike,
 	ReviewSession,
 	ReviewStateMachineHost,
-} from "./ReviewStateMachineScaffold";
+} from "./ReviewStateMachineHost";
 
 // Ops a host (incl. its fake editor / mutable-field setters) can emit. Pure
 // ops in HOST_OPS (createSuggestionApplyPlan, getNoteTextFingerprint,

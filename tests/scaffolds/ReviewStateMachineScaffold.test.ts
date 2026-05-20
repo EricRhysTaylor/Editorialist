@@ -1,9 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { HOST_OPS, type HostOp } from "../../src/core/review/ReviewStateMachineHost";
 import {
-	HOST_OPS,
 	STATE_MACHINE_METHODS,
 	STATE_MACHINE_TRACES,
-	type HostOp,
 	type StateMachineMethod,
 	type StateMachineTrace,
 } from "./ReviewStateMachineScaffold";

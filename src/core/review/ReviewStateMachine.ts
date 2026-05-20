@@ -18,7 +18,7 @@ import type { ReviewSuggestion } from "../../models/ReviewSuggestion";
 import type {
 	ReviewSession,
 	ReviewStateMachineHost,
-} from "./ReviewStateMachineScaffold";
+} from "./ReviewStateMachineHost";
 
 export interface AppliedReviewChangeResult {
 	start: number;

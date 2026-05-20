@@ -2,6 +2,7 @@ import { ButtonComponent, setIcon } from "obsidian";
 import type EditorialistPlugin from "../main";
 import type { SupportedReviewOperationType } from "../models/ReviewSuggestion";
 import { bindImmediateAction } from "./util/bindImmediateAction";
+import type { ToolbarKeyTracker } from "./toolbar/ToolbarKeyTracker";
 
 const OPERATION_ICONS: Record<SupportedReviewOperationType, string> = {
 	edit: "file-pen-line",
@@ -9,14 +10,6 @@ const OPERATION_ICONS: Record<SupportedReviewOperationType, string> = {
 	condense: "minimize-2",
 	move: "arrow-right-left",
 };
-
-let shiftKeyPressed = false;
-let modKeyPressed = false;
-// Persisted across toolbar re-renders so the legend stays open while the
-// author navigates suggestions.
-let legendOpen = false;
-let shiftTrackingAbort: AbortController | null = null;
-const modifierSubscribers = new Set<(state: { modPressed: boolean; shiftPressed: boolean }) => void>();
 
 export interface ReviewToolbarState {
 	mode: "review";
@@ -126,6 +119,7 @@ export function createReviewToolbarElement(
 	plugin: EditorialistPlugin,
 	state: ToolbarState,
 ): HTMLElement {
+	const tracker = plugin.getToolbarKeyTracker();
 	const overlay = document.createElement("div");
 	overlay.classList.add("editorialist-toolbar-overlay");
 	markAsNonEditorSurface(overlay);
@@ -215,14 +209,14 @@ export function createReviewToolbarElement(
 		renderMetaSegment(meta, state.currentIndexLabel);
 
 		const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
-		buildButton(actions, "Previous", "arrow-left", () => {
+		buildButton(actions, tracker, "Previous", "arrow-left", () => {
 			void plugin.selectPreviousAppliedReviewChange();
 		}, false);
-		buildButton(actions, "Next", "arrow-right", () => {
+		buildButton(actions, tracker, "Next", "arrow-right", () => {
 			void plugin.selectNextAppliedReviewChange();
 		}, false);
 		if (state.canUndo) {
-			buildButton(actions, "Undo", "rotate-ccw", () => {
+			buildButton(actions, tracker, "Undo", "rotate-ccw", () => {
 				void plugin.undoLastAppliedSuggestion();
 			}, false);
 		}
@@ -243,14 +237,14 @@ export function createReviewToolbarElement(
 		renderMetaSegment(meta, state.currentIndexLabel);
 
 		const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
-		buildButton(actions, "Previous", "arrow-left", () => {
+		buildButton(actions, tracker, "Previous", "arrow-left", () => {
 			void plugin.selectPreviousAcceptedSuggestion();
 		}, !state.canPrevious);
-		buildButton(actions, "Next", "arrow-right", () => {
+		buildButton(actions, tracker, "Next", "arrow-right", () => {
 			void plugin.selectNextAcceptedSuggestion();
 		}, !state.canNext);
 		if (state.canUndo) {
-			buildButton(actions, "Undo", "rotate-ccw", () => {
+			buildButton(actions, tracker, "Undo", "rotate-ccw", () => {
 				void plugin.undoLastAppliedSuggestion();
 			}, false);
 		}
@@ -317,11 +311,12 @@ export function createReviewToolbarElement(
 		markAsNonEditorSurface(action);
 
 		const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
-		buildButton(actions, "Previous", "arrow-left", () => {
+		buildButton(actions, tracker, "Previous", "arrow-left", () => {
 			void plugin.selectPreviousPendingEditSegment();
 		}, !state.canPrevious);
 		buildButton(
 			actions,
+			tracker,
 			"Next (leave item in pending edits)",
 			"arrow-right",
 			() => {
@@ -334,6 +329,7 @@ export function createReviewToolbarElement(
 		);
 		buildButton(
 			actions,
+			tracker,
 			"Complete and remove from pending edits",
 			"list-x",
 			() => {
@@ -360,21 +356,21 @@ export function createReviewToolbarElement(
 		}
 
 		const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
-		buildButton(actions, "Previous", "arrow-left", () => {
+		buildButton(actions, tracker, "Previous", "arrow-left", () => {
 			void plugin.selectPreviousCompletedReviewSuggestion();
 		}, !state.canPrevious);
-		buildButton(actions, "Next", "arrow-right", () => {
+		buildButton(actions, tracker, "Next", "arrow-right", () => {
 			void plugin.selectNextCompletedReviewSuggestion();
 		}, !state.canNext);
 		if (state.canUndo) {
-			buildButton(actions, "Undo", "rotate-ccw", () => {
+			buildButton(actions, tracker, "Undo", "rotate-ccw", () => {
 				void plugin.undoLastAppliedSuggestion();
 			}, false);
 		}
 		return overlay;
 	}
 
-	if (legendOpen) {
+	if (tracker.isLegendOpen()) {
 		overlay.classList.add("editorialist-toolbar--legend-open");
 	}
 
@@ -385,11 +381,11 @@ export function createReviewToolbarElement(
 		});
 		buildFlatIconButton(
 			leading,
-			legendOpen ? "Hide shortcut legend" : "Show shortcut legend",
+			tracker.isLegendOpen() ? "Hide shortcut legend" : "Show shortcut legend",
 			"asterisk",
 			() => {
-				legendOpen = !legendOpen;
-				overlay.classList.toggle("editorialist-toolbar--legend-open", legendOpen);
+				const nextOpen = tracker.toggleLegendOpen();
+				overlay.classList.toggle("editorialist-toolbar--legend-open", nextOpen);
 			},
 		);
 		if (state.mode === "review" && state.anchorDirection) {
@@ -457,14 +453,15 @@ export function createReviewToolbarElement(
 
 	const actions = toolbar.createDiv({ cls: "editorialist-toolbar__actions" });
 	const applyOperationLabel = state.operationLabel.toLowerCase();
-	buildButton(actions, "Previous", "arrow-left", () => {
+	buildButton(actions, tracker, "Previous", "arrow-left", () => {
 		void plugin.selectPreviousSuggestion();
 	}, !state.canPrevious);
-	buildButton(actions, "Next", "arrow-right", () => {
+	buildButton(actions, tracker, "Next", "arrow-right", () => {
 		void plugin.selectNextSuggestion();
 	}, !state.canNext);
 	buildButton(
 		actions,
+		tracker,
 		`Apply ${applyOperationLabel}`,
 		"check",
 		() => {
@@ -493,18 +490,18 @@ export function createReviewToolbarElement(
 			},
 		],
 	);
-	buildButton(actions, "Defer", "clock", () => {
+	buildButton(actions, tracker, "Defer", "clock", () => {
 		plugin.deferSelectedSuggestion();
 	}, !state.canDefer);
-	buildButton(actions, "Rewrite myself", "pen-line", () => {
+	buildButton(actions, tracker, "Rewrite myself", "pen-line", () => {
 		void plugin.rewriteSelectedSuggestion();
 	}, !state.canRewrite);
 	if (state.canUndoLastAccept) {
-		buildButton(actions, "Undo", "rotate-ccw", () => {
+		buildButton(actions, tracker, "Undo", "rotate-ccw", () => {
 			void plugin.undoLastAppliedSuggestion();
 		}, false);
 	} else {
-		buildButton(actions, "Reject", "circle-off", () => {
+		buildButton(actions, tracker, "Reject", "circle-off", () => {
 			void plugin.rejectSelectedSuggestion();
 		}, !state.canReject);
 	}
@@ -574,8 +571,8 @@ function buildFlatIconButton(
 	});
 }
 
-function buildButton(
-	parent: HTMLElement,
+function buildButton(	parent: HTMLElement,
+	tracker: ToolbarKeyTracker,
 	label: string,
 	icon: string,
 	onClick: () => void,
@@ -631,14 +628,14 @@ function buildButton(
 	};
 
 	if (alternateActions && alternateActions.length > 0) {
-		unsubscribeShiftTracking = subscribeToModifierKeys(applyPresentation);
+		unsubscribeShiftTracking = tracker.subscribe(applyPresentation);
 	}
 	removalObserver?.observe(document.body, {
 		childList: true,
 		subtree: true,
 	});
 
-	applyPresentation({ modPressed: modKeyPressed, shiftPressed: shiftKeyPressed });
+	applyPresentation(tracker.getModifierState());
 	bindImmediateAction(button.buttonEl, (event) => {
 		const activeAlternateAction = getActiveAlternateAction({
 			modPressed: event.metaKey || event.ctrlKey,
@@ -713,58 +710,13 @@ function renderMetaSeparator(parent: HTMLElement): void {
 }
 
 
-function subscribeToModifierKeys(callback: (state: { modPressed: boolean; shiftPressed: boolean }) => void): () => void {
-	ensureShiftTracking();
-	modifierSubscribers.add(callback);
-	callback({ modPressed: modKeyPressed, shiftPressed: shiftKeyPressed });
-	return () => {
-		modifierSubscribers.delete(callback);
-		if (modifierSubscribers.size === 0) {
-			teardownShiftTracking();
-		}
-	};
-}
-
-function ensureShiftTracking(): void {
-	if (shiftTrackingAbort) {
-		return;
-	}
-
-	shiftTrackingAbort = new AbortController();
-	const { signal } = shiftTrackingAbort;
-	window.addEventListener("keydown", (event) => {
-		updateModifierKeyState({ modPressed: event.metaKey || event.ctrlKey, shiftPressed: event.shiftKey });
-	}, { signal });
-	window.addEventListener("keyup", (event) => {
-		updateModifierKeyState({ modPressed: event.metaKey || event.ctrlKey, shiftPressed: event.shiftKey });
-	}, { signal });
-	window.addEventListener("blur", () => {
-		updateModifierKeyState({ modPressed: false, shiftPressed: false });
-	}, { signal });
-}
-
-function teardownShiftTracking(): void {
-	shiftTrackingAbort?.abort();
-	shiftTrackingAbort = null;
-	updateModifierKeyState({ modPressed: false, shiftPressed: false });
-}
-
-// Safety net for plugin unload: force-teardown even if subscribers remain.
-// Normal teardown happens via refcount in subscribeToModifierKeys().
-export function forceTeardownToolbarSubscriptions(): void {
-	modifierSubscribers.clear();
-	teardownShiftTracking();
-}
-
-function updateModifierKeyState(nextValue: { modPressed: boolean; shiftPressed: boolean }): void {
-	if (shiftKeyPressed === nextValue.shiftPressed && modKeyPressed === nextValue.modPressed) {
-		return;
-	}
-
-	shiftKeyPressed = nextValue.shiftPressed;
-	modKeyPressed = nextValue.modPressed;
-	modifierSubscribers.forEach((subscriber) => subscriber({ modPressed: modKeyPressed, shiftPressed: shiftKeyPressed }));
-}
+// Modifier-key tracking, the legend-open flag, and the corresponding window
+// listener lifecycle now live on ToolbarKeyTracker (see
+// src/ui/toolbar/ToolbarKeyTracker.ts). One tracker is owned per plugin
+// instance and disposed in onunload. The previous module-level
+// shiftKeyPressed / modKeyPressed / legendOpen / shiftTrackingAbort /
+// modifierSubscribers and the exported forceTeardownToolbarSubscriptions()
+// helper are gone.
 
 function markAsNonEditorSurface(element: HTMLElement): void {
 	element.setAttribute("contenteditable", "false");

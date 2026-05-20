@@ -171,6 +171,87 @@ describe("PendingEditsCoordinator — inquiry brief map", () => {
 		expect(resolveMock).toHaveBeenCalledTimes(2);
 	});
 
+	it("startPendingEditsReview clears stale cached brief context from a prior session (no close in between)", async () => {
+		const { host } = makeHost();
+		collectResult = { ok: true, session: session([inquirySegment("seg1")]) };
+		const c = new PendingEditsCoordinator(host);
+		c.initialize();
+
+		// Session 1: resolve and cache the brief.
+		await c.startPendingEditsReview();
+		c.getPendingEditsToolbarState(); // request #1
+		deferredResolves[0]?.({ noteTitle: "Stale", notePath: "Stale.md", summary: "old" });
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(c.getPendingEditsToolbarState()?.briefContext).toEqual({
+			noteTitle: "Stale",
+			notePath: "Stale.md",
+			summary: "old",
+		});
+		expect(resolveMock).toHaveBeenCalledTimes(1);
+
+		// Session 2 starts without an explicit close — clear-on-start must
+		// drop the cached entry so the same segment id refetches.
+		await c.startPendingEditsReview();
+		c.getPendingEditsToolbarState();
+		expect(resolveMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("startPendingEditsReview clears stale maps even when the collect fails", async () => {
+		const { host } = makeHost();
+		collectResult = { ok: true, session: session([inquirySegment("seg1")]) };
+		const c = new PendingEditsCoordinator(host);
+		c.initialize();
+
+		// Cache something in session 1.
+		await c.startPendingEditsReview();
+		c.getPendingEditsToolbarState();
+		deferredResolves[0]?.({ noteTitle: "B", notePath: "B.md", summary: "s" });
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(resolveMock).toHaveBeenCalledTimes(1);
+
+		// Start a new session that will fail to collect. The clear must still
+		// have run — proven by re-starting a successful session and observing
+		// a fresh fetch (rather than a cached hit).
+		collectResult = { ok: false, reason: "no_active_book" };
+		await c.startPendingEditsReview();
+		expect(c.getPendingEditsSession()).toBeNull();
+
+		collectResult = { ok: true, session: session([inquirySegment("seg1")]) };
+		await c.startPendingEditsReview();
+		c.getPendingEditsToolbarState();
+		expect(resolveMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("PRESERVED BEHAVIOR: a late in-flight resolution from a prior session still writes to the (cleared) map after a new session starts", async () => {
+		const { host, calls } = makeHost();
+		collectResult = { ok: true, session: session([inquirySegment("seg1")]) };
+		const c = new PendingEditsCoordinator(host);
+		c.initialize();
+
+		// Session 1: kick off a request and leave it in-flight.
+		await c.startPendingEditsReview();
+		c.getPendingEditsToolbarState();
+		expect(resolveMock).toHaveBeenCalledTimes(1);
+
+		// Session 2 starts before session 1's request resolves. clear-on-start
+		// drops the in-flight set entry, but the underlying promise from
+		// session 1 is NOT cancelled.
+		await c.startPendingEditsReview();
+		const syncsBefore = calls.filter((x) => x === "syncDecorations").length;
+
+		// The session-1 request resolves late. Per existing contract, the
+		// late callback still writes into the context map and triggers a
+		// decoration sync — cancellation was never wired and is out of scope
+		// for this pass.
+		deferredResolves[0]?.({ noteTitle: "Late", notePath: "Late.md", summary: "x" });
+		await Promise.resolve();
+		await Promise.resolve();
+		const syncsAfter = calls.filter((x) => x === "syncDecorations").length;
+		expect(syncsAfter).toBe(syncsBefore + 1);
+	});
+
 	it("PRESERVED BEHAVIOR: a request in-flight at close still resolves into the (cleared) map, not cancelled", async () => {
 		const { host, calls } = makeHost();
 		collectResult = { ok: true, session: session([inquirySegment("seg1")]) };

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { HOST_OPS, STATE_MACHINE_TRACES, type HostOp } from "./ReviewStateMachineScaffold";
+import { HOST_OPS, type HostOp } from "./ReviewStateMachineHost";
+import { STATE_MACHINE_TRACES } from "../../../tests/scaffolds/ReviewStateMachineScaffold";
 import {
 	PURE_OR_MARKER_OPS,
 	RecordingReviewStateMachineHost,

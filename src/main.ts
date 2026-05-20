@@ -19,14 +19,13 @@ import {
 import { isSweepComplete as isSweepCompleteShared } from "./core/review/SweepCompletion";
 import {
 	canRevealSuggestionInManuscript as canRevealSuggestionInManuscriptShared,
-	findPreferredSuggestionId as findPreferredSuggestionIdShared,
 	getAdjacentRevealableSuggestionId as getAdjacentRevealableSuggestionIdShared,
 	hasLiveActionableSuggestions as hasLiveActionableSuggestionsShared,
 } from "./core/review/SuggestionTraversal";
 import { ReviewStateMachine } from "./core/review/ReviewStateMachine";
-import type { ReviewStateMachineHost } from "./core/review/ReviewStateMachineScaffold";
+import type { ReviewStateMachineHost } from "./core/review/ReviewStateMachineHost";
+import { computeNoteTextFingerprint } from "./core/review/SessionAxis";
 import {
-	getReviewBlockFenceLabel,
 	noteContainsReviewBlock,
 	removeImportedReviewBlocks,
 } from "./core/ReviewBlockFormat";
@@ -40,16 +39,17 @@ import type {
 } from "./models/ReviewImport";
 import type { ReviewSession, ReviewSuggestion, ReviewTargetRef } from "./models/ReviewSuggestion";
 import type {
-	EditorialistPluginData,
 	ParsedContributorReference,
 	ContributorProfile,
 	ReviewerResolutionStatus,
 	SceneReviewRecord,
 	ReviewerStats,
 } from "./models/ContributorProfile";
-import { ReviewStore, type AppliedReviewChange, type AppliedReviewState, type CompletedSweepState, type GuidedSweepState } from "./state/ReviewStore";
+import { ReviewStore, type AppliedReviewState, type CompletedSweepState, type GuidedSweepState } from "./state/ReviewStore";
+import { DebouncedSaver } from "./state/DebouncedSaver";
 import { ContributorDirectory } from "./state/ContributorDirectory";
 import { EditorialismService } from "./services/EditorialismService";
+import { migratePluginData } from "./services/PluginDataMigration";
 import { ReviewRegistryService } from "./services/ReviewRegistryService";
 import { ReviewWorkflowService } from "./services/ReviewWorkflowService";
 import { EditorialistModal } from "./ui/EditorialistModal";
@@ -60,18 +60,20 @@ import { EDITORIALISM_PANEL_VIEW_TYPE, EditorialismPanel } from "./ui/Editoriali
 import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
 import { EditorialistSettingTab } from "./ui/EditorialistSettingTab";
 import { createReviewDecorationsExtension, syncReviewDecorations } from "./ui/Decorations";
-import { createReviewToolbarElement, forceTeardownToolbarSubscriptions, type ToolbarState } from "./ui/Toolbar";
+import { createReviewToolbarElement, type ToolbarState } from "./ui/Toolbar";
+import { ToolbarKeyTracker } from "./ui/toolbar/ToolbarKeyTracker";
 import { ToolbarOverlayController } from "./controllers/ToolbarOverlayController";
 import { ReviewBatchProcessor } from "./controllers/ReviewBatchProcessor";
 import { PendingEditsCoordinator, type PendingEditsSummary } from "./controllers/PendingEditsCoordinator";
 import { buildToolbarState } from "./ui/viewmodels/ToolbarViewModel";
 import type { ReviewBranchInputs, ToolbarStateInputs } from "./ui/viewmodels/ToolbarStateInputs";
-
-interface ActiveNoteContext {
-	filePath: string;
-	text: string;
-	view: MarkdownView;
-}
+import {
+	SessionOrchestrator,
+	type ActiveNoteContext,
+	type BulkApplyConfirmState,
+	type LastAppliedChange,
+} from "./orchestrators/SessionOrchestrator";
+import { ReviewActionsController } from "./orchestrators/ReviewActionsController";
 
 interface OffsetRange {
 	end: number;
@@ -79,14 +81,6 @@ interface OffsetRange {
 }
 
 type HighlightTone = "active" | "muted" | "anchor";
-
-interface LastAppliedChange {
-	end: number;
-	notePath: string;
-	start: number;
-	suggestionId: string;
-	textFingerprint: string;
-}
 
 interface GuidedSweepHandoffState {
 	currentLabel: string;
@@ -162,10 +156,6 @@ export interface ReviewStateOverview {
 	processed: ReviewStateIndexEntry[];
 }
 
-interface BulkApplyConfirmState {
-	notePath: string;
-}
-
 interface ReviewLaunchTarget {
 	intent: "active" | "next";
 	label: string;
@@ -218,6 +208,10 @@ export default class EditorialistPlugin extends Plugin {
 	private activeAnchorHighlightRange: OffsetRange | null = null;
 	private bulkApplyConfirmState: BulkApplyConfirmState | null = null;
 	private lastAppliedChange: LastAppliedChange | null = null;
+	private readonly toolbarKeyTracker = new ToolbarKeyTracker();
+	getToolbarKeyTracker(): ToolbarKeyTracker {
+		return this.toolbarKeyTracker;
+	}
 	private readonly toolbarOverlay = new ToolbarOverlayController({
 		getActiveHighlightRange: () => this.activeHighlightRange,
 		getSelectedSuggestionId: () => this.store.getState().selectedSuggestionId ?? null,
@@ -256,6 +250,75 @@ export default class EditorialistPlugin extends Plugin {
 		syncActiveEditorDecorations: () => this.syncActiveEditorDecorations(),
 		openReviewPanel: () => this.openReviewPanel(),
 		closeSettingsModal: () => this.closeSettingsModal(),
+	});
+
+	private readonly sessionOrchestrator = new SessionOrchestrator({
+		store: this.store,
+		reviewEngine: this.reviewEngine,
+		registry: this.registry,
+		workflow: this.workflow,
+		getActiveNoteContext: () => this.getActiveNoteContext(),
+		getReviewNoteContext: () => this.getReviewNoteContext(),
+		getReviewSession: () => this.getReviewSession(),
+		getLastAppliedChange: () => this.lastAppliedChange,
+		setLastAppliedChange: (value) => {
+			this.lastAppliedChange = value;
+		},
+		getBulkApplyConfirmState: () => this.bulkApplyConfirmState,
+		setBulkApplyConfirmState: (value) => {
+			this.bulkApplyConfirmState = value;
+		},
+		clearActiveHighlights: () => this.clearActiveHighlights(),
+		setDefaultHighlightForSelection: () => this.setDefaultHighlightForSelection(),
+		getResolvedCompletedSweepState: () => this.getResolvedCompletedSweepState(),
+		isCompletedReviewSuggestion: (suggestion) => this.isCompletedReviewSuggestion(suggestion),
+		getSceneReviewRecordByPath: (notePath) => this.getSceneReviewRecordByPath(notePath),
+		shouldShowGuidedSweepHandoff: (session) => this.shouldShowGuidedSweepHandoff(session),
+		getCurrentSessionTrackingContext: () => this.getCurrentSessionTrackingContext(),
+		openReviewPanel: () => this.openReviewPanel(),
+		revealSelectedSuggestion: () => this.revealSelectedSuggestion(),
+		startOrResumeReviewForNote: (notePath) => this.startOrResumeReviewForNote(notePath),
+		persistContributorProfilesIfNeeded: () => this.persistContributorProfilesIfNeeded(),
+	});
+
+	private readonly reviewActions = new ReviewActionsController({
+		store: this.store,
+		registry: this.registry,
+		workflow: this.workflow,
+		getReviewStateMachine: () => this.getReviewStateMachine(),
+		getReviewSession: () => this.getReviewSession(),
+		getReviewNoteContext: () => this.getReviewNoteContext(),
+		hasActiveReviewSession: () => this.hasActiveReviewSession(),
+		hasReviewSessionContext: () => this.hasReviewSessionContext(),
+		getSuggestionById: (id) => this.getSuggestionById(id),
+		canApplyAndReviewSceneSuggestions: () => this.canApplyAndReviewSceneSuggestions(),
+		canApplySuggestionInReviewAllMode: (s) => this.canApplySuggestionInReviewAllMode(s),
+		isSweepComplete: (suggestions) => this.isSweepComplete(suggestions),
+		getAdjacentRevealableSuggestionId: (dir) => this.getAdjacentRevealableSuggestionId(dir),
+		getAdjacentAcceptedSuggestionId: (dir) => this.getAdjacentAcceptedSuggestionId(dir),
+		getAdjacentCompletedReviewSuggestionId: (dir) => this.getAdjacentCompletedReviewSuggestionId(dir),
+		getResolvedCompletedSweepState: () => this.getResolvedCompletedSweepState(),
+		enterCompletedSweepAudit: () => this.enterCompletedSweepAudit(),
+		getBulkApplyConfirmState: () => this.bulkApplyConfirmState,
+		setBulkApplyConfirmState: (value) => {
+			this.bulkApplyConfirmState = value;
+		},
+		setLastAppliedChange: (value) => {
+			this.lastAppliedChange = value;
+		},
+		clearActiveHighlights: () => this.clearActiveHighlights(),
+		setDefaultHighlightForSelection: () => this.setDefaultHighlightForSelection(),
+		syncActiveEditorDecorations: () => this.syncActiveEditorDecorations(),
+		refreshReviewPanel: () => this.refreshReviewPanel(),
+		revealSelectedSuggestion: () => this.revealSelectedSuggestion(),
+		revealSuggestionContext: (id) => this.revealSuggestionContext(id),
+		focusResolvedTarget: (target) => this.focusResolvedTarget(target),
+		focusEditorRange: (start, end) => this.focusEditorRange(start, end),
+		closeReviewPanelLeaf: () => {
+			this.app.workspace.detachLeavesOfType(REVIEW_PANEL_VIEW_TYPE);
+		},
+		dismissToolbar: () => this.toolbarOverlay.dismiss(),
+		clearToolbarDismissedSignature: () => this.toolbarOverlay.clearDismissedSignature(),
 	});
 
 	async onload(): Promise<void> {
@@ -320,63 +383,22 @@ export default class EditorialistPlugin extends Plugin {
 		// Obsidian submission guideline: do NOT detach leaves of your own view type here —
 		// Obsidian restores workspace state on reload, and registerView() already handles cleanup.
 		this.toolbarOverlay.destroy();
-		forceTeardownToolbarSubscriptions();
+		this.toolbarKeyTracker.dispose();
 		this.pendingEdits.clearInquiryMaps();
+		// Flush any debounced plugin-data save so pending changes (e.g. a star
+		// toggle right before the user disables the plugin) are not lost.
+		try {
+			await this.flushPluginDataSave();
+		} catch (err) {
+			// console.error is the only diagnostic surface during unload — a
+			// Notice would not be seen because the plugin is shutting down.
+			// eslint-disable-next-line no-console
+			console.error("Editorialist: failed to flush plugin data on unload", err);
+		}
 	}
 
 	async parseCurrentNote(options?: { suppressNotice?: boolean }): Promise<void> {
-		const suppressNotice = options?.suppressNotice ?? false;
-		const context = this.getActiveNoteContext();
-		if (!context) {
-			if (!suppressNotice) {
-				new Notice("No active markdown note to review.");
-			}
-			return;
-		}
-
-		await this.parseReviewContext(context, suppressNotice);
-	}
-
-	private async parseReviewContext(
-		context: ActiveNoteContext,
-		suppressNotice: boolean,
-	): Promise<void> {
-		const previousSession = this.store.getSession();
-		const preferredSelectionId =
-			previousSession?.notePath === context.filePath ? this.store.getState().selectedSuggestionId : null;
-		const session = this.reviewEngine.buildSession(
-			context.filePath,
-			context.text,
-			previousSession?.notePath === context.filePath ? previousSession : null,
-		);
-		const hydratedSession = this.registry.applyPersistedReviewState(session);
-		await this.persistContributorProfilesIfNeeded();
-
-		if (!hydratedSession.hasReviewBlock) {
-			this.clearActiveHighlights();
-			this.lastAppliedChange = null;
-			this.store.clearSession();
-			if (!suppressNotice) {
-				new Notice(`No ${getReviewBlockFenceLabel()} found in this note.`);
-			}
-			return;
-		}
-
-		this.store.setSession(hydratedSession, preferredSelectionId);
-		this.syncSelectionForSession(hydratedSession, preferredSelectionId);
-		await this.workflow.syncCurrentNote(context.filePath);
-		await this.registry.syncReviewerSignalsForSession(hydratedSession, {
-			...this.getCurrentSessionTrackingContext(),
-		});
-		await this.openReviewPanel();
-		await this.revealSelectedSuggestion();
-		if (!suppressNotice) {
-			new Notice(
-				hydratedSession.suggestions.length > 0
-					? `Parsed ${hydratedSession.suggestions.length} review suggestion${hydratedSession.suggestions.length === 1 ? "" : "s"}.`
-					: "Review block found, but no valid review entries were parsed.",
-			);
-		}
+		await this.sessionOrchestrator.parseCurrentNote(options);
 	}
 
 	async openPrepareReviewFormatModal(): Promise<void> {
@@ -574,247 +596,87 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async selectSuggestion(id: string): Promise<void> {
-		if (!this.hasReviewSessionContext()) {
-			return;
-		}
-
-		this.bulkApplyConfirmState = null;
-		this.syncAppliedReviewSelection(id);
-		this.store.selectSuggestion(id);
-		await this.revealSuggestionContext(id);
+		await this.reviewActions.selectSuggestion(id);
 	}
 
 	async selectNextSuggestion(): Promise<void> {
-		if (!this.hasActiveReviewSession()) {
-			return;
-		}
-
-		const nextSuggestionId = this.getAdjacentRevealableSuggestionId("next");
-		if (!nextSuggestionId) {
-			await this.workflow.advanceGuidedSweep();
-			return;
-		}
-
-		this.store.selectSuggestion(nextSuggestionId);
-		await this.revealSelectedSuggestion();
+		await this.reviewActions.selectNextSuggestion();
 	}
 
 	async selectPreviousSuggestion(): Promise<void> {
-		if (!this.hasActiveReviewSession()) {
-			return;
-		}
-
-		const previousSuggestionId = this.getAdjacentRevealableSuggestionId("previous");
-		if (!previousSuggestionId) {
-			return;
-		}
-
-		this.store.selectSuggestion(previousSuggestionId);
-		await this.revealSelectedSuggestion();
+		await this.reviewActions.selectPreviousSuggestion();
 	}
 
 	async selectNextAcceptedSuggestion(): Promise<void> {
-		if (!this.hasActiveReviewSession()) {
-			return;
-		}
-
-		const nextSuggestionId = this.getAdjacentAcceptedSuggestionId("next");
-		if (!nextSuggestionId) {
-			return;
-		}
-
-		this.store.selectSuggestion(nextSuggestionId);
-		await this.revealSelectedSuggestion();
+		await this.reviewActions.selectNextAcceptedSuggestion();
 	}
 
 	async selectPreviousAcceptedSuggestion(): Promise<void> {
-		if (!this.hasActiveReviewSession()) {
-			return;
-		}
-
-		const previousSuggestionId = this.getAdjacentAcceptedSuggestionId("previous");
-		if (!previousSuggestionId) {
-			return;
-		}
-
-		this.store.selectSuggestion(previousSuggestionId);
-		await this.revealSelectedSuggestion();
+		await this.reviewActions.selectPreviousAcceptedSuggestion();
 	}
 
 	async exitAcceptedReviewMode(): Promise<void> {
-		const session = this.getReviewSession();
-		if (!session) {
-			return;
-		}
-
-		const nextSuggestionId = this.findPreferredSuggestionId(session.suggestions);
-		this.store.selectSuggestion(nextSuggestionId);
-		await this.revealSelectedSuggestion();
+		await this.reviewActions.exitAcceptedReviewMode();
 	}
 
 	async acceptSelectedSuggestion(): Promise<boolean> {
-		if (!this.hasActiveReviewSession()) {
-			return false;
-		}
-
-		const selectedSuggestion = this.store.getSelectedSuggestion();
-		if (!selectedSuggestion) {
-			return false;
-		}
-
-		return this.acceptSuggestion(selectedSuggestion.id);
+		return this.reviewActions.acceptSelectedSuggestion();
 	}
 
 	async acceptSelectedSuggestionAndAdvance(): Promise<void> {
-		if (!(await this.acceptSelectedSuggestion())) {
-			return;
-		}
-
-		await this.selectNextSuggestion();
+		await this.reviewActions.acceptSelectedSuggestionAndAdvance();
 	}
 
 	async enterApplyAndReviewConfirmMode(): Promise<void> {
-		const session = this.getReviewSession();
-		if (!session) {
-			return;
-		}
-
-		if (!this.canApplyAndReviewSceneSuggestions()) {
-			new Notice("No eligible suggestions are ready to apply and review in this scene.");
-			return;
-		}
-
-		this.bulkApplyConfirmState = { notePath: session.notePath };
-		this.syncActiveEditorDecorations();
+		await this.reviewActions.enterApplyAndReviewConfirmMode();
 	}
 
 	cancelApplyAndReviewConfirmMode(): void {
-		if (!this.bulkApplyConfirmState) {
-			return;
-		}
-
-		this.bulkApplyConfirmState = null;
-		this.syncActiveEditorDecorations();
+		this.reviewActions.cancelApplyAndReviewConfirmMode();
 	}
 
 	async confirmApplyAndReviewSceneSuggestions(): Promise<void> {
-		this.bulkApplyConfirmState = null;
-		await this.applyAndReviewSceneSuggestions();
+		await this.reviewActions.confirmApplyAndReviewSceneSuggestions();
 	}
 
 	async applyAndReviewSceneSuggestions(): Promise<void> {
-		const context = this.getReviewNoteContext();
-		const session = this.getReviewSession();
-		if (!context || !session || session.notePath !== context.filePath) {
-			new Notice("The active note does not match the current review session.");
-			return;
-		}
-
-		const candidateIds = session.suggestions
-			.filter((suggestion) => this.canApplySuggestionInReviewAllMode(suggestion))
-			.map((suggestion) => suggestion.id);
-		if (candidateIds.length === 0) {
-			new Notice("No eligible suggestions are ready to apply and review in this scene.");
-			return;
-		}
-
-		const appliedChanges: AppliedReviewChange[] = [];
-		for (const suggestionId of candidateIds) {
-			const appliedChange = await this.applySuggestionById(suggestionId, {
-				highlightMode: "none",
-				preserveSelection: true,
-				syncSceneInventory: false,
-			});
-			if (appliedChange) {
-				appliedChanges.push(appliedChange);
-			}
-		}
-
-		if (appliedChanges.length === 0) {
-			new Notice("No eligible suggestions could be safely applied.");
-			return;
-		}
-
-		await this.registry.syncSceneInventory();
-		await this.enterAppliedReviewMode(appliedChanges);
-		new Notice(
-			`Applied and queued ${appliedChanges.length} change${appliedChanges.length === 1 ? "" : "s"} for review.`,
-		);
+		await this.reviewActions.applyAndReviewSceneSuggestions();
 	}
 
 	async selectNextAppliedReviewChange(): Promise<void> {
-		const appliedReview = this.store.getAppliedReview();
-		if (!appliedReview || appliedReview.entries.length === 0) {
-			return;
-		}
-
-		const nextIndex = (appliedReview.currentIndex + 1) % appliedReview.entries.length;
-		await this.focusAppliedReviewEntry(nextIndex);
+		await this.reviewActions.selectNextAppliedReviewChange();
 	}
 
 	async selectPreviousAppliedReviewChange(): Promise<void> {
-		const appliedReview = this.store.getAppliedReview();
-		if (!appliedReview || appliedReview.entries.length === 0) {
-			return;
-		}
-
-		const previousIndex =
-			(appliedReview.currentIndex - 1 + appliedReview.entries.length) % appliedReview.entries.length;
-		await this.focusAppliedReviewEntry(previousIndex);
+		await this.reviewActions.selectPreviousAppliedReviewChange();
 	}
 
 	async exitAppliedReviewMode(): Promise<void> {
-		if (!this.store.getAppliedReview()) {
-			return;
-		}
-
-		this.bulkApplyConfirmState = null;
-		this.store.setAppliedReview(null);
-		this.setDefaultHighlightForSelection();
-		this.syncActiveEditorDecorations();
+		await this.reviewActions.exitAppliedReviewMode();
 	}
 
 	async closeActiveReviewContext(): Promise<void> {
-		const completedSweep = this.getResolvedCompletedSweepState();
-		this.bulkApplyConfirmState = null;
-		this.store.batch(() => {
-			this.store.setAppliedReview(null);
-			this.store.setCompletedSweep(null);
-			this.store.clearSession();
-			this.store.acknowledgeCompletedSweep(completedSweep?.batchId ?? this.store.getAcknowledgedCompletedSweepBatchId());
-		});
-		this.clearActiveHighlights();
-		this.lastAppliedChange = null;
-		this.toolbarOverlay.clearDismissedSignature();
-		this.syncActiveEditorDecorations();
+		await this.reviewActions.closeActiveReviewContext();
 	}
 
 	async closeReviewPanel(): Promise<void> {
-		await this.closeActiveReviewContext();
-		this.app.workspace.detachLeavesOfType(REVIEW_PANEL_VIEW_TYPE);
+		await this.reviewActions.closeReviewPanel();
 	}
 
-	// Terminal/audit toolbar exit. Unlike dismissReviewToolbar() (a transient
-	// overlay hide used mid-review), this cleanly ends the review: clears the
-	// session/sweep state and acknowledges completion, so the side panel
-	// re-renders to its passive "no active review" state and the toolbar does
-	// not rebuild. The side panel leaf itself stays open.
 	async finishActiveReview(): Promise<void> {
-		await this.closeActiveReviewContext();
-		this.dismissReviewToolbar();
-		this.refreshReviewPanel();
+		await this.reviewActions.finishActiveReview();
 	}
 
 	dismissReviewToolbar(): void {
-		this.toolbarOverlay.dismiss();
+		this.reviewActions.dismissReviewToolbar();
 	}
 
 	async continueGuidedSweep(): Promise<void> {
-		await this.workflow.advanceGuidedSweep();
+		await this.reviewActions.continueGuidedSweep();
 	}
 
 	async finishGuidedSweep(): Promise<void> {
-		await this.workflow.finishGuidedSweep();
+		await this.reviewActions.finishGuidedSweep();
 	}
 
 	// Bridges the guided-sweep workflow to the per-scene polish counter
@@ -835,58 +697,23 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async resumeCompletedReviewMode(): Promise<void> {
-		const completedSweep = this.getResolvedCompletedSweepState();
-		if (!completedSweep) {
-			return;
-		}
-
-		if (!this.store.getCompletedSweep()) {
-			this.store.setCompletedSweep(completedSweep);
-		}
-
-		await this.enterCompletedSweepAudit();
+		await this.reviewActions.resumeCompletedReviewMode();
 	}
 
 	async selectNextCompletedReviewSuggestion(): Promise<void> {
-		const nextId = this.getAdjacentCompletedReviewSuggestionId("next");
-		if (!nextId) {
-			return;
-		}
-
-		this.store.selectSuggestion(nextId);
-		await this.revealSelectedSuggestion();
+		await this.reviewActions.selectNextCompletedReviewSuggestion();
 	}
 
 	async selectPreviousCompletedReviewSuggestion(): Promise<void> {
-		const previousId = this.getAdjacentCompletedReviewSuggestionId("previous");
-		if (!previousId) {
-			return;
-		}
-
-		this.store.selectSuggestion(previousId);
-		await this.revealSelectedSuggestion();
+		await this.reviewActions.selectPreviousCompletedReviewSuggestion();
 	}
 
 	async exitCompletedReviewMode(): Promise<void> {
-		this.store.batch(() => {
-			this.store.setCompletedSweep(null);
-			this.store.clearSession();
-		});
-		this.clearActiveHighlights();
-		this.syncActiveEditorDecorations();
+		await this.reviewActions.exitCompletedReviewMode();
 	}
 
 	async rejectSelectedSuggestion(): Promise<void> {
-		if (!this.hasActiveReviewSession()) {
-			return;
-		}
-
-		const selectedSuggestion = this.store.getSelectedSuggestion();
-		if (!selectedSuggestion) {
-			return;
-		}
-
-		await this.rejectSuggestion(selectedSuggestion.id);
+		await this.reviewActions.rejectSelectedSuggestion();
 	}
 
 	// TODO (RC follow-up — deferred this pass): rewrite capture. Today this
@@ -897,68 +724,23 @@ export default class EditorialistPlugin extends Plugin {
 	// flow. Also deferred: RT scene-inventory glyphs, contributor-management
 	// redesign, advanced analytics/history.
 	async rewriteSelectedSuggestion(): Promise<void> {
-		if (!this.hasActiveReviewSession()) {
-			return;
-		}
-
-		const selectedSuggestion = this.store.getSelectedSuggestion();
-		if (!selectedSuggestion) {
-			return;
-		}
-
-		await this.markSuggestionRewritten(selectedSuggestion.id);
+		await this.reviewActions.rewriteSelectedSuggestion();
 	}
 
 	deferSelectedSuggestion(): void {
-		if (!this.hasActiveReviewSession()) {
-			return;
-		}
-
-		const selectedSuggestion = this.store.getSelectedSuggestion();
-		if (!selectedSuggestion) {
-			return;
-		}
-
-		void this.deferSuggestion(selectedSuggestion.id);
+		this.reviewActions.deferSelectedSuggestion();
 	}
 
 	async jumpToSelectedSuggestionTarget(): Promise<void> {
-		if (!this.hasActiveReviewSession()) {
-			return;
-		}
-
-		const selectedSuggestion = this.store.getSelectedSuggestion();
-		if (!selectedSuggestion) {
-			return;
-		}
-
-		await this.jumpToSuggestionTarget(selectedSuggestion.id);
+		await this.reviewActions.jumpToSelectedSuggestionTarget();
 	}
 
 	async jumpToSelectedSuggestionAnchor(): Promise<void> {
-		if (!this.hasActiveReviewSession()) {
-			return;
-		}
-
-		const selectedSuggestion = this.store.getSelectedSuggestion();
-		if (!selectedSuggestion) {
-			return;
-		}
-
-		await this.jumpToSuggestionAnchor(selectedSuggestion.id);
+		await this.reviewActions.jumpToSelectedSuggestionAnchor();
 	}
 
 	async jumpToSelectedSuggestionSource(): Promise<void> {
-		if (!this.hasActiveReviewSession()) {
-			return;
-		}
-
-		const selectedSuggestion = this.store.getSelectedSuggestion();
-		if (!selectedSuggestion) {
-			return;
-		}
-
-		await this.jumpToSuggestionSource(selectedSuggestion.id);
+		await this.reviewActions.jumpToSelectedSuggestionSource();
 	}
 
 	private reviewStateMachineInstance: ReviewStateMachine | null = null;
@@ -1038,69 +820,35 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async acceptSuggestion(id: string): Promise<boolean> {
-		return this.getReviewStateMachine().acceptSuggestion(id);
+		return this.reviewActions.acceptSuggestion(id);
 	}
 
 	async rejectSuggestion(id: string): Promise<void> {
-		await this.getReviewStateMachine().rejectSuggestion(id);
+		await this.reviewActions.rejectSuggestion(id);
 	}
 
 	async markSuggestionRewritten(id: string): Promise<void> {
-		await this.getReviewStateMachine().markSuggestionRewritten(id);
-	}
-
-	private async applySuggestionById(
-		id: string,
-		options?: {
-			highlightMode?: "muted" | "none";
-			preserveSelection?: boolean;
-			syncSceneInventory?: boolean;
-		},
-	): Promise<AppliedReviewChange | null> {
-		return this.getReviewStateMachine().applySuggestionById(id, options);
+		await this.reviewActions.markSuggestionRewritten(id);
 	}
 
 	async deferSuggestion(id: string): Promise<void> {
-		await this.getReviewStateMachine().deferSuggestion(id);
+		await this.reviewActions.deferSuggestion(id);
 	}
 
 	async undoLastAppliedSuggestion(): Promise<void> {
-		await this.getReviewStateMachine().undoLastAppliedSuggestion();
+		await this.reviewActions.undoLastAppliedSuggestion();
 	}
 
 	async jumpToSuggestionTarget(id: string): Promise<void> {
-		await this.getReviewStateMachine().jumpToSuggestionTarget(id);
+		await this.reviewActions.jumpToSuggestionTarget(id);
 	}
 
 	async jumpToSuggestionAnchor(id: string): Promise<void> {
-		if (!this.hasReviewSessionContext()) {
-			return;
-		}
-
-		const suggestion = this.getSuggestionById(id);
-		const anchor = suggestion ? getSuggestionAnchorTarget(suggestion) : undefined;
-		if (!suggestion || !anchor) {
-			return;
-		}
-
-		this.store.selectSuggestion(id);
-		await this.focusResolvedTarget(anchor);
+		await this.reviewActions.jumpToSuggestionAnchor(id);
 	}
 
 	async jumpToSuggestionSource(id: string): Promise<void> {
-		if (!this.hasReviewSessionContext()) {
-			return;
-		}
-
-		const suggestion = this.getSuggestionById(id);
-		const start = suggestion?.source.startOffset;
-		const end = suggestion?.source.endOffset;
-		if (!suggestion || start === undefined || end === undefined) {
-			return;
-		}
-
-		this.store.selectSuggestion(id);
-		await this.focusEditorRange(start, end);
+		await this.reviewActions.jumpToSuggestionSource(id);
 	}
 
 	getReviewerProfiles(): ContributorProfile[] {
@@ -1800,7 +1548,7 @@ export default class EditorialistPlugin extends Plugin {
 
 	canUndoLastAppliedSuggestion(): boolean {
 		const context = this.getReviewNoteContext();
-		return this.hasCurrentLastAppliedChangeForContext(context);
+		return this.sessionOrchestrator.hasCurrentLastAppliedChangeForContext(context);
 	}
 
 	canApplyAndReviewSceneSuggestions(): boolean {
@@ -1813,7 +1561,7 @@ export default class EditorialistPlugin extends Plugin {
 		const change = this.lastAppliedChange;
 		return Boolean(
 			change &&
-			this.hasCurrentLastAppliedChangeForContext(context) &&
+			this.sessionOrchestrator.hasCurrentLastAppliedChangeForContext(context) &&
 			change.suggestionId === selectedId,
 		);
 	}
@@ -2109,79 +1857,11 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private resyncSessionForActiveNote(): void {
-		const context = this.getReviewNoteContext() ?? this.getActiveNoteContext();
-		const session = this.store.getSession();
-		if (!context) {
-			this.bulkApplyConfirmState = null;
-			this.store.batch(() => {
-				this.store.setAppliedReview(null);
-				if (session) {
-					this.store.clearSession();
-				}
-			});
-			this.clearActiveHighlights();
-			this.lastAppliedChange = null;
-			return;
-		}
-
-		if (!session || session.notePath !== context.filePath) {
-			this.bulkApplyConfirmState = null;
-			this.store.setAppliedReview(null);
-			this.clearActiveHighlights();
-			this.lastAppliedChange = null;
-			return;
-		}
-
-		if (!this.hasCurrentLastAppliedChangeForContext(context)) {
-			this.lastAppliedChange = null;
-		}
-
-		const refreshedSession = this.reviewEngine.buildSession(context.filePath, context.text, session);
-		const hydratedSession = this.registry.applyPersistedReviewState(refreshedSession);
-		void this.persistContributorProfilesIfNeeded();
-		if (!hydratedSession.hasReviewBlock) {
-			this.bulkApplyConfirmState = null;
-			this.store.batch(() => {
-				this.store.setAppliedReview(null);
-				this.store.clearSession();
-			});
-			this.clearActiveHighlights();
-			this.lastAppliedChange = null;
-			return;
-		}
-
-		const preferredSelectionId = this.store.getState().selectedSuggestionId;
-		if (this.bulkApplyConfirmState?.notePath !== hydratedSession.notePath) {
-			this.bulkApplyConfirmState = null;
-		}
-		this.store.setSession(hydratedSession, preferredSelectionId);
-		this.syncSelectionForSession(hydratedSession, preferredSelectionId);
-		void this.workflow.syncCurrentNote(context.filePath);
-		void this.registry.syncReviewerSignalsForSession(hydratedSession, {
-			...this.getCurrentSessionTrackingContext(),
-		});
-		this.setDefaultHighlightForSelection();
+		this.sessionOrchestrator.resyncSessionForActiveNote();
 	}
 
 	private refreshSessionAfterAcceptedEdit(session: ReviewSession, acceptedSuggestionId: string): void {
-		const context = this.getReviewNoteContext();
-		if (!context) {
-			return;
-		}
-
-		const refreshedSuggestions = this.reviewEngine.refreshSuggestions(
-			context.view.editor.getValue(),
-			session.suggestions.map((item) =>
-				item.id === acceptedSuggestionId
-					? {
-							...item,
-							status: "accepted",
-						}
-					: item,
-			),
-		);
-
-		this.store.replaceSuggestions(refreshedSuggestions);
+		this.sessionOrchestrator.refreshSessionAfterAcceptedEdit(session, acceptedSuggestionId);
 	}
 
 	private getSuggestionById(id: string): ReviewSuggestion | null {
@@ -2521,27 +2201,6 @@ export default class EditorialistPlugin extends Plugin {
 		);
 	}
 
-	private selectPreferredSuggestionForSession(preferredSelectionId?: string | null): void {
-		const session = this.store.getSession();
-		if (!session) {
-			return;
-		}
-
-		if (
-			preferredSelectionId &&
-			session.suggestions.some((suggestion) => suggestion.id === preferredSelectionId)
-		) {
-			this.store.selectSuggestion(preferredSelectionId);
-			return;
-		}
-
-		this.store.selectSuggestion(this.findPreferredSuggestionId(session.suggestions));
-	}
-
-	private findPreferredSuggestionId(suggestions: ReviewSuggestion[]): string | null {
-		return findPreferredSuggestionIdShared(suggestions);
-	}
-
 	private shouldShowGuidedSweepHandoff(session?: ReviewSession | null): boolean {
 		const targetSession = session ?? this.getReviewSession();
 		return Boolean(this.getGuidedSweep() && targetSession && !this.hasLiveActionableSuggestions(targetSession.suggestions));
@@ -2732,21 +2391,9 @@ export default class EditorialistPlugin extends Plugin {
 		return suggestion.status === "accepted" && this.hasRevealableAcceptedRange(suggestion);
 	}
 
-	private hasCurrentLastAppliedChangeForContext(context?: ActiveNoteContext | null): boolean {
-		if (!this.lastAppliedChange || !context || context.filePath !== this.lastAppliedChange.notePath) {
-			return false;
-		}
-
-		return this.getNoteTextFingerprint(context.text) === this.lastAppliedChange.textFingerprint;
-	}
 
 	private getNoteTextFingerprint(text: string): string {
-		let hash = 5381;
-		for (let index = 0; index < text.length; index += 1) {
-			hash = ((hash << 5) + hash) ^ text.charCodeAt(index);
-		}
-
-		return `${text.length}:${hash >>> 0}`;
+		return computeNoteTextFingerprint(text);
 	}
 
 	private isCompletedReviewSuggestion(suggestion: ReviewSuggestion): boolean {
@@ -2826,21 +2473,6 @@ export default class EditorialistPlugin extends Plugin {
 		this.activeHighlightTone = this.getSuggestionHighlightTone(selectedSuggestion);
 	}
 
-	private syncSelectionForSession(session: ReviewSession, preferredSelectionId?: string | null): void {
-		const appliedReview = this.store.getAppliedReview();
-		if (appliedReview && appliedReview.notePath !== session.notePath) {
-			this.store.setAppliedReview(null);
-		}
-
-		if (this.shouldShowGuidedSweepHandoff(session)) {
-			this.store.selectSuggestion(null);
-			this.clearActiveHighlights();
-			return;
-		}
-
-		this.selectPreferredSuggestionForSession(preferredSelectionId);
-	}
-
 	private async enterGuidedSweepHandoff(): Promise<void> {
 		this.store.batch(() => {
 			this.store.setAppliedReview(null);
@@ -2856,38 +2488,11 @@ export default class EditorialistPlugin extends Plugin {
 			this.store.setCompletedSweep(completedSweep);
 		}
 
-		await this.ensureCompletedSweepAuditSession();
+		await this.sessionOrchestrator.ensureCompletedSweepAuditSession();
 		this.store.setAppliedReview(null);
 		const suggestionId = this.getAdjacentCompletedReviewSuggestionId("next");
 		this.store.selectSuggestion(suggestionId);
 		await this.revealSelectedSuggestion();
-	}
-
-	private async ensureCompletedSweepAuditSession(): Promise<void> {
-		const completedSweep = this.getResolvedCompletedSweepState();
-		if (!completedSweep) {
-			return;
-		}
-
-		const currentSession = this.getReviewSession();
-		if (
-			currentSession &&
-			completedSweep.notePaths.includes(currentSession.notePath) &&
-			currentSession.suggestions.some((suggestion) => this.isCompletedReviewSuggestion(suggestion))
-		) {
-			return;
-		}
-
-		const targetNotePath =
-			completedSweep.notePaths.find((notePath) => {
-				const record = this.getSceneReviewRecordByPath(notePath);
-				return Boolean(record && record.acceptedCount + record.rewrittenCount + record.rejectedCount > 0);
-			}) ?? completedSweep.notePaths[completedSweep.currentNoteIndex] ?? completedSweep.notePaths[0];
-		if (!targetNotePath) {
-			return;
-		}
-
-		await this.startOrResumeReviewForNote(targetNotePath);
 	}
 
 	private getResolvedCompletedSweepState(): CompletedSweepState | null {
@@ -2969,58 +2574,6 @@ export default class EditorialistPlugin extends Plugin {
 		return minutes > 0 ? `Completed in ${hours}h ${minutes}m` : `Completed in ${hours}h`;
 	}
 
-	private async enterAppliedReviewMode(entries: AppliedReviewChange[]): Promise<void> {
-		const session = this.getReviewSession();
-		if (!session || entries.length === 0) {
-			return;
-		}
-
-		this.store.setAppliedReview({
-			currentIndex: 0,
-			entries,
-			notePath: session.notePath,
-		});
-		await this.focusAppliedReviewEntry(0);
-	}
-
-	private async focusAppliedReviewEntry(index: number): Promise<void> {
-		const appliedReview = this.store.getAppliedReview();
-		if (!appliedReview || appliedReview.entries.length === 0) {
-			return;
-		}
-
-		const safeIndex = Math.max(0, Math.min(index, appliedReview.entries.length - 1));
-		const entry = appliedReview.entries[safeIndex];
-		if (!entry) {
-			return;
-		}
-
-		this.store.batch(() => {
-			this.store.updateAppliedReviewCurrentIndex(safeIndex);
-			this.store.selectSuggestion(entry.suggestionId);
-		});
-		await this.focusEditorRange(entry.start, entry.end);
-	}
-
-	private syncAppliedReviewSelection(suggestionId: string | null): void {
-		const appliedReview = this.store.getAppliedReview();
-		if (!appliedReview) {
-			return;
-		}
-
-		if (!suggestionId) {
-			this.store.setAppliedReview(null);
-			return;
-		}
-
-		const nextIndex = appliedReview.entries.findIndex((entry) => entry.suggestionId === suggestionId);
-		if (nextIndex === -1) {
-			this.store.setAppliedReview(null);
-			return;
-		}
-
-		this.store.updateAppliedReviewCurrentIndex(nextIndex);
-	}
 
 	private getReviewDecorationSnapshot(highlight: OffsetRange | null): Parameters<typeof syncReviewDecorations>[1] {
 		const appliedReview = this.store.getAppliedReview();
@@ -3129,15 +2682,28 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private async loadPluginData(): Promise<void> {
-		const savedData = (await this.loadData()) as Partial<EditorialistPluginData> | null;
-		const reviewerProfiles = Array.isArray(savedData?.reviewerProfiles) ? savedData.reviewerProfiles : [];
+		const rawSavedData = (await this.loadData()) as unknown;
+		const savedData = migratePluginData(rawSavedData);
 		this.registry.load(savedData);
-		this.reviewerDirectory.setProfiles(reviewerProfiles);
+		this.reviewerDirectory.setProfiles(savedData.reviewerProfiles);
 		this.registry.rebuildReviewerStatsFromSignals();
 	}
 
+	// Trailing-debounce around saveData() so bursty workflows (batch import,
+	// bulk reviewer reassignment, rapid star toggles) coalesce into a single
+	// JSON write. Callers still await savePluginData() and get a promise that
+	// resolves only after the write that covers their request completes.
+	private readonly pluginDataSaver = new DebouncedSaver(
+		() => this.saveData(this.registry.buildPluginData(this.reviewerDirectory.getProfiles())),
+		300,
+	);
+
 	private async savePluginData(): Promise<void> {
-		await this.saveData(this.registry.buildPluginData(this.reviewerDirectory.getProfiles()));
+		await this.pluginDataSaver.request();
+	}
+
+	async flushPluginDataSave(): Promise<void> {
+		await this.pluginDataSaver.flush();
 	}
 
 	private async syncSceneReviewIndex(): Promise<void> {
@@ -3164,7 +2730,7 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		await this.parseReviewContext(context, true);
+		await this.sessionOrchestrator.parseReviewContext(context, true);
 	}
 
 	async cleanSceneReviewNote(notePath: string): Promise<void> {

@@ -18,7 +18,7 @@ import type {
 	ReviewNoteContextLike,
 	ReviewSession,
 	ReviewStateMachineHost,
-} from "./ReviewStateMachineScaffold";
+} from "./ReviewStateMachineHost";
 import type { ReviewSuggestion } from "../../models/ReviewSuggestion";
 
 type FailOp =

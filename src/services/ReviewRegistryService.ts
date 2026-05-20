@@ -36,6 +36,7 @@ import {
 import { SweepRegistryManager } from "./registry/SweepRegistryManager";
 import { SceneInventoryBuilder } from "./registry/SceneInventoryBuilder";
 import { tallyReviewStatuses } from "../core/review/SweepCompletion";
+import { EDITORIALIST_PLUGIN_DATA_VERSION } from "./PluginDataMigration";
 
 interface ReviewActivitySummary {
 	accepted: number;
@@ -117,6 +118,7 @@ export class ReviewRegistryService {
 
 	buildPluginData(reviewerProfiles: ContributorProfile[]): EditorialistPluginData {
 		return {
+			version: EDITORIALIST_PLUGIN_DATA_VERSION,
 			reviewerProfiles,
 			reviewerSignalIndex: this.reviewerSignalIndex,
 			reviewDecisionIndex: this.reviewDecisionIndex,

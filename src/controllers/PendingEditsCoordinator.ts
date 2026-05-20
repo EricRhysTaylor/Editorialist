@@ -2,11 +2,19 @@
 // debounced summary, segment navigation/complete/skip, the pending-edits
 // toolbar projection, and the inquiry-brief context cache (including the
 // in-flight request set and the Pass-1 leak fix that clears both maps on
-// session close AND on plugin teardown). Extracted verbatim from
-// EditorialistPlugin (main.ts) — notices, ordering, async behavior and the
-// late-resolving in-flight request behavior are byte-identical; main.ts is
-// now only the composition root that instantiates this coordinator and
-// delegates.
+// session START, on session close, AND on plugin teardown). Extracted
+// verbatim from EditorialistPlugin (main.ts) — notices, ordering, async
+// behavior and the documented late-resolving in-flight request behavior are
+// byte-identical; main.ts is now only the composition root that instantiates
+// this coordinator and delegates.
+//
+// Late in-flight resolutions are NOT cancelled: a request kicked off in one
+// session that resolves after that session ends still writes into the
+// (potentially cleared) context map and triggers a decoration sync. This is
+// intentional — cancellation would require either propagating an
+// AbortController through InquiryBriefResolver or generation-counting every
+// request, and the existing harm (one extra sync per orphaned request) is
+// strictly bounded by the number of segments that were ever rendered.
 //
 // The coordinator knows nothing about the plugin internals: the few
 // collaborators it needs (panel refresh, decoration sync, opening the review
@@ -140,6 +148,13 @@ export class PendingEditsCoordinator {
 	}
 
 	async startPendingEditsReview(): Promise<void> {
+		// Drop any stale brief cache from a prior session BEFORE we touch the
+		// new one. Without this, segment ids re-used across sessions would
+		// see ghost context entries from the previous review. Runs even when
+		// the collect below fails — entering "start a review" mode is itself
+		// the signal that the previous session is over.
+		this.clearInquiryMaps();
+
 		const result = await collectPendingEdits(this.host.app);
 		if (!result.ok) {
 			new Notice(describeCollectFailure(result.reason));
