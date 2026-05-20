@@ -18,7 +18,10 @@ import { REVIEW_PANEL_FIXTURES, makeInputs } from "./ReviewPanelViewModel.fixtur
 function selectBranch(i: ReviewPanelStateInputs): ReviewPanelBranch {
 	if (i.hasCompletedSweep) return "completed_sweep";
 	if (!i.hasSession) {
-		return i.hasPostCompletionIdle ? "idle:post-completion" : "idle:workspace";
+		if (i.hasPostCompletionIdle && !i.hasReviewActivityHistory) {
+			return "idle:post-completion";
+		}
+		return "idle:workspace";
 	}
 	if (i.suggestionsLength === 0) return "session:no-suggestions";
 	if (i.hasHandoff) return "session:handoff";
@@ -80,6 +83,44 @@ describe("selectReviewPanelBranch — precedence invariants", () => {
 				makeInputs({ hasSession: true, hasPostCompletionIdle: true, suggestionsLength: 1, hasFilteredSuggestions: true }),
 			),
 		).toBe("session:list");
+	});
+
+	it("compact onboarding card requires BOTH post-completion idle AND no activity history", () => {
+		// New-user / empty-vault path: this is the only combination that
+		// reaches the compact "No active review" card.
+		expect(
+			selectReviewPanelBranch(
+				makeInputs({ hasPostCompletionIdle: true, hasReviewActivityHistory: false }),
+			),
+		).toBe("idle:post-completion");
+	});
+
+	it("any prior activity preempts the compact onboarding card", () => {
+		// Same post-completion gate firing, but the user has prior activity
+		// (sweep history, pending edits, profiles, or review-state overview
+		// — represented here by the single boolean). Routes to the richer
+		// workspace view instead.
+		expect(
+			selectReviewPanelBranch(
+				makeInputs({ hasPostCompletionIdle: true, hasReviewActivityHistory: true }),
+			),
+		).toBe("idle:workspace");
+	});
+
+	it("workspace view also fires when there is no post-completion gate", () => {
+		// The richer workspace view is the default whenever there's no
+		// session, no completed sweep, and no truly-empty signal — activity
+		// history is irrelevant to that branch.
+		expect(
+			selectReviewPanelBranch(
+				makeInputs({ hasPostCompletionIdle: false, hasReviewActivityHistory: true }),
+			),
+		).toBe("idle:workspace");
+		expect(
+			selectReviewPanelBranch(
+				makeInputs({ hasPostCompletionIdle: false, hasReviewActivityHistory: false }),
+			),
+		).toBe("idle:workspace");
 	});
 
 	it("handoff preempts filtered-empty even when filter would remove everything", () => {

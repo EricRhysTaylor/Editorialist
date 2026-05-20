@@ -15,6 +15,7 @@ export function makeInputs(
 		hasCompletedSweep: false,
 		hasSession: false,
 		hasPostCompletionIdle: false,
+		hasReviewActivityHistory: false,
 		suggestionsLength: 0,
 		hasHandoff: false,
 		hasFilteredSuggestions: false,
@@ -42,9 +43,20 @@ export const REVIEW_PANEL_FIXTURES: ReviewPanelFixture[] = [
 		}),
 	},
 	{
-		name: "post-completion idle card after the latest sweep finished",
+		name: "compact onboarding card: brand-new vault, no prior activity",
 		branch: "idle:post-completion",
-		inputs: makeInputs({ hasPostCompletionIdle: true }),
+		// Genuinely empty workspace: plugin reports post-completion idle
+		// (because there are zero scene records) AND no activity history of
+		// any kind. Only this combination shows the compact onboarding card.
+		inputs: makeInputs({ hasPostCompletionIdle: true, hasReviewActivityHistory: false }),
+	},
+	{
+		name: "post-completion + prior history routes to richer workspace view",
+		branch: "idle:workspace",
+		// Sweep completed (post-completion gate fires) but the user has
+		// prior review activity to anchor a history view on. The richer
+		// workspace composition wins — no compact card.
+		inputs: makeInputs({ hasPostCompletionIdle: true, hasReviewActivityHistory: true }),
 	},
 	{
 		name: "workspace idle: no session, no completed sweep, no post-completion idle",
@@ -53,6 +65,13 @@ export const REVIEW_PANEL_FIXTURES: ReviewPanelFixture[] = [
 		// the panel composes the workspace card stack (continue review, recent
 		// activity, contributors, workflows disclosure).
 		inputs: makeInputs({}),
+	},
+	{
+		name: "workspace idle: prior activity, no post-completion idle gate firing",
+		branch: "idle:workspace",
+		// Active session resolved off-panel; plugin no longer reports
+		// post-completion idle, history is present.
+		inputs: makeInputs({ hasReviewActivityHistory: true }),
 	},
 	{
 		name: "session with no parsed suggestions",

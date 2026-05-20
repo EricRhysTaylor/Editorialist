@@ -47,6 +47,7 @@ import type {
 } from "./models/ContributorProfile";
 import { ReviewStore, type AppliedReviewState, type CompletedSweepState, type GuidedSweepState } from "./state/ReviewStore";
 import { DebouncedSaver } from "./state/DebouncedSaver";
+import { TrailingDebouncer } from "./state/TrailingDebouncer";
 import { ContributorDirectory } from "./state/ContributorDirectory";
 import { EditorialismService } from "./services/EditorialismService";
 import { migratePluginData } from "./services/PluginDataMigration";
@@ -372,7 +373,12 @@ export default class EditorialistPlugin extends Plugin {
 
 		this.registerEvent(
 			this.app.workspace.on("editor-change", () => {
-				this.resyncSessionForActiveNote();
+				// Trailing-debounce because editor-change fires per-keystroke on
+				// large manuscripts; the resync is idempotent so coalescing
+				// bursts into a single trailing call preserves correctness while
+				// removing the per-key cost. active-leaf-change and file-open
+				// stay immediate — those are user-driven and rare.
+				this.editorChangeResyncDebouncer.schedule();
 			}),
 		);
 
@@ -385,6 +391,7 @@ export default class EditorialistPlugin extends Plugin {
 		// Obsidian restores workspace state on reload, and registerView() already handles cleanup.
 		this.toolbarOverlay.destroy();
 		this.toolbarKeyTracker.dispose();
+		this.editorChangeResyncDebouncer.cancel();
 		this.pendingEdits.clearInquiryMaps();
 		// Flush any debounced plugin-data save so pending changes (e.g. a star
 		// toggle right before the user disables the plugin) are not lost.
@@ -2714,6 +2721,15 @@ export default class EditorialistPlugin extends Plugin {
 	private readonly pluginDataSaver = new DebouncedSaver(
 		() => this.saveData(this.registry.buildPluginData(this.reviewerDirectory.getProfiles())),
 		300,
+	);
+
+	// Coalesces per-keystroke editor-change events into a single trailing
+	// resync. 120ms keeps the response feeling immediate while folding even
+	// fast typing into one batch. Cancelled in onunload — running a resync
+	// against torn-down state is pointless and risks stale references.
+	private readonly editorChangeResyncDebouncer = new TrailingDebouncer(
+		() => this.resyncSessionForActiveNote(),
+		120,
 	);
 
 	private async savePluginData(): Promise<void> {

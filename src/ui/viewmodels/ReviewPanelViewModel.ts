@@ -18,16 +18,23 @@ import type { ReviewSuggestion } from "../../models/ReviewSuggestion";
 // Ordered exactly as ReviewPanel.render() evaluates. The first matching
 // branch wins; later branches require all earlier guards to be falsy.
 //
-// Source ladder (ReviewPanel.render() at the time of this extraction):
-//   1. completedSweep present                                  -> completed_sweep
-//   2. !session && postCompletionIdle                          -> idle:post-completion
-//   3. !session && !postCompletionIdle                         -> idle:workspace
-//   4. session && suggestions.length === 0                     -> session:no-suggestions
-//   5. session && suggestions.length > 0 && handoff            -> session:handoff
+// Source ladder (ReviewPanel.render()):
+//   1. completedSweep present                                          -> completed_sweep
+//   2. !session && postCompletionIdle && !hasReviewActivityHistory     -> idle:post-completion
+//   3. !session && (otherwise)                                         -> idle:workspace
+//   4. session && suggestions.length === 0                             -> session:no-suggestions
+//   5. session && suggestions.length > 0 && handoff                    -> session:handoff
 //   6. session && suggestions.length > 0 && !handoff
-//        && getFilteredSuggestions(...).length === 0           -> session:filtered-empty
+//        && getFilteredSuggestions(...).length === 0                   -> session:filtered-empty
 //   7. session && suggestions.length > 0 && !handoff
-//        && getFilteredSuggestions(...).length > 0             -> session:list
+//        && getFilteredSuggestions(...).length > 0                     -> session:list
+//
+// Branch 2 (the compact "No active review" onboarding card) now requires
+// BOTH a post-completion idle signal AND the absence of any prior review
+// activity — it is reserved for a genuinely new / empty workspace. Any
+// existing review history, recent sweep, pending edit, or contributor
+// history routes to the richer idle:workspace view instead, even when the
+// plugin's post-completion gate would otherwise fire.
 export const REVIEW_PANEL_BRANCH_ORDER = [
 	"completed_sweep",
 	"idle:post-completion",
@@ -47,6 +54,12 @@ export interface ReviewPanelStateInputs {
 	hasCompletedSweep: boolean; // Boolean(plugin.getCompletedSweepPanelState())
 	hasSession: boolean; // plugin.getCurrentReviewSession() != null
 	hasPostCompletionIdle: boolean; // !session && !completedSweep && plugin.getPostCompletionIdleState() != null
+	// True when ANY of the following indicates prior review activity or
+	// pending work: sweep registry entries, pending-edits segments, stored
+	// reviewer profiles, or a non-empty review-state overview. Used to gate
+	// the compact "No active review" onboarding card so it appears only for
+	// genuinely empty workspaces.
+	hasReviewActivityHistory: boolean;
 	suggestionsLength: number; // session?.suggestions.length ?? 0
 	hasHandoff: boolean; // session && plugin.getGuidedSweepHandoffState() != null
 	hasFilteredSuggestions: boolean; // session && getFilteredSuggestions(session.suggestions).length > 0
@@ -59,6 +72,8 @@ export const REVIEW_PANEL_INPUT_GATHERERS: Record<keyof ReviewPanelStateInputs, 
 	hasSession: "plugin.getCurrentReviewSession() != null",
 	hasPostCompletionIdle:
 		"!session && !completedSweep ? Boolean(plugin.getPostCompletionIdleState()) : false",
+	hasReviewActivityHistory:
+		"plugin.getSweepRegistryEntries().length > 0 || (plugin.getPendingEditsSummary()?.segmentCount ?? 0) > 0 || plugin.getSortedReviewerProfiles().length > 0 || plugin.getReviewStateOverview() != null",
 	suggestionsLength: "session?.suggestions.length ?? 0",
 	hasHandoff: "session ? Boolean(plugin.getGuidedSweepHandoffState()) : false",
 	hasFilteredSuggestions:
@@ -71,7 +86,14 @@ export function selectReviewPanelBranch(inputs: ReviewPanelStateInputs): ReviewP
 	}
 
 	if (!inputs.hasSession) {
-		return inputs.hasPostCompletionIdle ? "idle:post-completion" : "idle:workspace";
+		// Compact onboarding card is reserved for a genuinely empty workspace:
+		// the post-completion idle gate must fire AND there must be no prior
+		// review activity to anchor a history view on. Every other idle case
+		// falls through to the richer workspace composition.
+		if (inputs.hasPostCompletionIdle && !inputs.hasReviewActivityHistory) {
+			return "idle:post-completion";
+		}
+		return "idle:workspace";
 	}
 
 	if (inputs.suggestionsLength === 0) {

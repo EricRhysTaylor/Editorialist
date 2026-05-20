@@ -78,6 +78,20 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 
 		const completedSweep = this.plugin.getCompletedSweepPanelState();
 		const postCompletionIdle = !session && !completedSweep ? this.plugin.getPostCompletionIdleState() : null;
+		// The plugin's getPostCompletionIdleState() fires for BOTH a brand-new
+		// vault (zero scene records) and a vault where every imported sweep
+		// has been resolved. Only the first case is a true "empty workspace"
+		// — the second has prior activity to surface. hasReviewActivityHistory
+		// captures every signal that distinguishes them so the compact
+		// onboarding card stays reserved for genuinely new users.
+		const hasReviewActivityHistory =
+			this.plugin.getSweepRegistryEntries().length > 0
+			|| (this.plugin.getPendingEditsSummary()?.segmentCount ?? 0) > 0
+			|| this.plugin.getSortedReviewerProfiles().length > 0
+			|| this.plugin.getReviewStateOverview() !== null;
+		const showCompactOnboardingCard = !session && !completedSweep
+			&& Boolean(postCompletionIdle)
+			&& !hasReviewActivityHistory;
 		const launchTarget = !session && !completedSweep && !postCompletionIdle
 			? this.plugin.getNextLogicalReviewLaunchTarget()
 			: null;
@@ -108,7 +122,11 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		}
 
 		if (!session) {
-			if (postCompletionIdle) {
+			// Compact "No active review" onboarding card fires only for a
+			// genuinely empty workspace. Any prior activity (sweep history,
+			// pending edits, contributors, review-state overview) preempts
+			// it and falls through to the richer workspace composition.
+			if (showCompactOnboardingCard && postCompletionIdle) {
 				renderIdleStateCard(this, this.plugin, this.contentEl, postCompletionIdle);
 				return;
 			}
