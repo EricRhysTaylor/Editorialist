@@ -15,13 +15,27 @@
 //    (matching the trailing sync call the modals made at end of render).
 // No appearance or interaction change.
 
-import { ButtonComponent } from "obsidian";
+import { ButtonComponent, setIcon } from "obsidian";
 
 export interface ModalFooterButtonSpec {
 	text: string;
 	cta?: boolean;
-	className?: string;
+	// Single class or list of classes. Each is addClass'd individually so
+	// callers that need a base class + modifier (e.g. "...__button" plus
+	// "...__button--subtle") get both applied cleanly.
+	className?: string | readonly string[];
+	// Optional Lucide icon name prepended into the button. The icon span is
+	// styled by `iconClassName` (or unclassed if omitted) so callers can
+	// preserve their existing modal-specific icon CSS without forcing a
+	// generic class on the primitive.
+	icon?: string;
+	iconClassName?: string;
 	onClick: () => void;
+	// Static, resolved-at-build-time disabled state. Useful when the caller
+	// re-renders the modal on state changes (the next render rebuilds the
+	// footer with a fresh `disabled` value). For reactive disable inside the
+	// same render, prefer `enableWhen` + `syncDisabled()`.
+	disabled?: boolean;
 	// When provided, the button's disabled state is (re)derived from
 	// `!enableWhen()` whenever syncDisabled() runs (and once at build time).
 	enableWhen?: () => boolean;
@@ -51,8 +65,16 @@ export function buildModalFooter(parent: ModalFooterParent, spec: ModalFooterSpe
 		if (buttonSpec.cta) {
 			button.setCta();
 		}
-		if (buttonSpec.className) {
-			button.buttonEl.addClass(buttonSpec.className);
+		applyClassNames(button, buttonSpec.className);
+		if (buttonSpec.icon) {
+			const iconSpan = buttonSpec.iconClassName
+				? button.buttonEl.createSpan({ cls: buttonSpec.iconClassName })
+				: button.buttonEl.createSpan();
+			button.buttonEl.prepend(iconSpan);
+			setIcon(iconSpan, buttonSpec.icon);
+		}
+		if (buttonSpec.disabled !== undefined) {
+			button.setDisabled(buttonSpec.disabled);
 		}
 		button.onClick(() => buttonSpec.onClick());
 		return button;
@@ -68,4 +90,20 @@ export function buildModalFooter(parent: ModalFooterParent, spec: ModalFooterSpe
 	syncDisabled();
 
 	return { buttons, syncDisabled };
+}
+
+function applyClassNames(
+	button: ButtonComponent,
+	className: ModalFooterButtonSpec["className"],
+): void {
+	if (!className) {
+		return;
+	}
+	if (typeof className === "string") {
+		button.buttonEl.addClass(className);
+		return;
+	}
+	for (const cls of className) {
+		button.buttonEl.addClass(cls);
+	}
 }

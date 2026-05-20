@@ -188,6 +188,10 @@ function makeService(options?: {
 		async () => {
 			persistCalls += 1;
 		},
+		// Tests do not exercise the "live editor buffer" branch — every read
+		// falls through to vault.cachedRead. Inject a constant null resolver
+		// to keep the invariants suite decoupled from workspace state.
+		() => null,
 	);
 	return { service, directory, persistCalls: () => persistCalls };
 }

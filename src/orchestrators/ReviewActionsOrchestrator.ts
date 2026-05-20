@@ -9,7 +9,7 @@
 //
 // The controller knows nothing about Obsidian beyond `Notice` for user
 // messages. Every other dependency — including the state machine — is
-// reached through the narrow ReviewActionsControllerHost it is constructed
+// reached through the narrow ReviewActionsOrchestratorHost it is constructed
 // with. The state machine itself is exposed as a typed
 // ReviewActionsStateMachine accessor so the controller does not depend on
 // the concrete ReviewStateMachine class.
@@ -54,7 +54,7 @@ export interface ReviewActionsStateMachine {
 	): Promise<AppliedReviewChange | null>;
 }
 
-export interface ReviewActionsControllerHost {
+export interface ReviewActionsOrchestratorHost {
 	readonly store: ReviewStore;
 	readonly registry: ReviewRegistryService;
 	readonly workflow: ReviewWorkflowService;
@@ -105,8 +105,8 @@ export interface ReviewActionsControllerHost {
 	clearToolbarDismissedSignature(): void;
 }
 
-export class ReviewActionsController {
-	constructor(private readonly host: ReviewActionsControllerHost) {}
+export class ReviewActionsOrchestrator {
+	constructor(private readonly host: ReviewActionsOrchestratorHost) {}
 
 	// ─── Selection ────────────────────────────────────────────────────────
 

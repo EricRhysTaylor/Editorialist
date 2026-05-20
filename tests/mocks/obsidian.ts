@@ -21,14 +21,32 @@ export class Notice {
 
 // Minimal ButtonComponent stub mirroring the chained API the modal footer
 // primitive uses (setButtonText / setCta / onClick / setDisabled) plus a
-// buttonEl with addClass. Records state so tests can assert behavior.
+// buttonEl with addClass / createSpan / prepend. Records state so tests can
+// assert behavior — including the optional prepended icon span produced when
+// the footer spec carries `icon`.
+export interface FakeSpan {
+	cls: string;
+	icon: string | null;
+}
+
 export class ButtonComponent {
 	text = "";
 	cta = false;
 	disabled = false;
 	clickHandler: (() => void) | null = null;
 	readonly classes = new Set<string>();
-	readonly buttonEl = { addClass: (cls: string): void => void this.classes.add(cls) };
+	readonly prependedSpans: FakeSpan[] = [];
+	readonly buttonEl = {
+		addClass: (cls: string): void => void this.classes.add(cls),
+		createSpan: (options?: { cls?: string }): FakeSpan => {
+			const span: FakeSpan = { cls: options?.cls ?? "", icon: null };
+			// The ModalFooter contract is createSpan -> prepend -> setIcon, so the
+			// span is owned by the caller until prepend lands. Returning a fresh
+			// object each time matches the production HTMLElement.createSpan shape.
+			return span;
+		},
+		prepend: (node: FakeSpan): void => void this.prependedSpans.push(node),
+	};
 
 	constructor(_parent: unknown) {}
 
@@ -48,6 +66,13 @@ export class ButtonComponent {
 		this.clickHandler = cb;
 		return this;
 	}
+}
+
+// Lightweight setIcon stub: records the icon name on the target span so the
+// footer primitive's "setIcon(span, icon)" call is observable from tests
+// without pulling Lucide.
+export function setIcon(target: { icon?: string | null }, icon: string): void {
+	target.icon = icon;
 }
 
 export class Plugin {

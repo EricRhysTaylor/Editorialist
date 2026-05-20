@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import {
-	ReviewActionsController,
-	type ReviewActionsControllerHost,
+	ReviewActionsOrchestrator,
+	type ReviewActionsOrchestratorHost,
 	type ReviewActionsStateMachine,
-} from "./ReviewActionsController";
+} from "./ReviewActionsOrchestrator";
 import { ReviewStore } from "../state/ReviewStore";
 import type { ReviewSession, ReviewSuggestion, ReviewTargetRef } from "../models/ReviewSuggestion";
 import type {
@@ -116,7 +116,7 @@ function makeFakeHost(config: FakeConfig = {}) {
 		}),
 	} as unknown as ReviewWorkflowService;
 
-	const host: ReviewActionsControllerHost = {
+	const host: ReviewActionsOrchestratorHost = {
 		store,
 		registry,
 		workflow,
@@ -187,12 +187,12 @@ function makeFakeHost(config: FakeConfig = {}) {
 	return { host, store, calls, stateMachine, registry, workflow, getLastApplied: () => lastApplied };
 }
 
-describe("ReviewActionsController", () => {
+describe("ReviewActionsOrchestrator", () => {
 	describe("accept/reject selected", () => {
 		it("acceptSelectedSuggestion calls state machine with the selected id", async () => {
 			const session = makeSession("a.md", [makeSuggestion("s1"), makeSuggestion("s2")]);
 			const { host, calls } = makeFakeHost({ priorSession: session, selectedId: "s2", hasActive: true });
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			const result = await controller.acceptSelectedSuggestion();
 
@@ -202,7 +202,7 @@ describe("ReviewActionsController", () => {
 
 		it("acceptSelectedSuggestion returns false when there is no active session", async () => {
 			const { host, calls } = makeFakeHost({ priorSession: null, hasActive: false });
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			const result = await controller.acceptSelectedSuggestion();
 
@@ -213,7 +213,7 @@ describe("ReviewActionsController", () => {
 		it("rejectSelectedSuggestion calls state machine with the selected id", async () => {
 			const session = makeSession("a.md", [makeSuggestion("s1")]);
 			const { host, calls } = makeFakeHost({ priorSession: session, selectedId: "s1", hasActive: true });
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.rejectSelectedSuggestion();
 
@@ -223,7 +223,7 @@ describe("ReviewActionsController", () => {
 		it("rewriteSelectedSuggestion routes to markSuggestionRewritten with the selected id", async () => {
 			const session = makeSession("a.md", [makeSuggestion("s1")]);
 			const { host, calls } = makeFakeHost({ priorSession: session, selectedId: "s1", hasActive: true });
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.rewriteSelectedSuggestion();
 
@@ -238,7 +238,7 @@ describe("ReviewActionsController", () => {
 				hasActive: true,
 				adjacentNextId: "s2",
 			});
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.acceptSelectedSuggestionAndAdvance();
 
@@ -259,7 +259,7 @@ describe("ReviewActionsController", () => {
 				hasActive: true,
 				adjacentNextId: "s2",
 			});
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.selectNextSuggestion();
 
@@ -276,7 +276,7 @@ describe("ReviewActionsController", () => {
 				hasActive: true,
 				adjacentNextId: null,
 			});
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.selectNextSuggestion();
 
@@ -292,7 +292,7 @@ describe("ReviewActionsController", () => {
 				hasContext: true,
 				bulkApplyConfirm: { notePath: "a.md" },
 			});
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.selectSuggestion("s2");
 
@@ -311,7 +311,7 @@ describe("ReviewActionsController", () => {
 				hasActive: true,
 				hasContext: true,
 			});
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.jumpToSelectedSuggestionTarget();
 
@@ -335,7 +335,7 @@ describe("ReviewActionsController", () => {
 				hasActive: true,
 				hasContext: true,
 			});
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.jumpToSelectedSuggestionAnchor();
 
@@ -352,7 +352,7 @@ describe("ReviewActionsController", () => {
 				hasActive: true,
 				hasContext: true,
 			});
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.jumpToSelectedSuggestionSource();
 
@@ -377,7 +377,7 @@ describe("ReviewActionsController", () => {
 			const listener = vi.fn();
 			store.subscribe(listener);
 			listener.mockClear();
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.selectNextAppliedReviewChange();
 
@@ -395,7 +395,7 @@ describe("ReviewActionsController", () => {
 				entries: [{ end: 5, start: 0, suggestionId: "s1" }],
 				notePath: "a.md",
 			});
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.exitAppliedReviewMode();
 
@@ -412,7 +412,7 @@ describe("ReviewActionsController", () => {
 				priorSession: session,
 				adjacentCompletedNextId: "s2",
 			});
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.selectNextCompletedReviewSuggestion();
 
@@ -434,7 +434,7 @@ describe("ReviewActionsController", () => {
 			const listener = vi.fn();
 			store.subscribe(listener);
 			listener.mockClear();
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.exitCompletedReviewMode();
 
@@ -452,7 +452,7 @@ describe("ReviewActionsController", () => {
 				priorSession: session,
 				canApplyAndReviewScene: true,
 			});
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.enterApplyAndReviewConfirmMode();
 
@@ -466,7 +466,7 @@ describe("ReviewActionsController", () => {
 				priorSession: session,
 				canApplyAndReviewScene: false,
 			});
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.enterApplyAndReviewConfirmMode();
 
@@ -479,7 +479,7 @@ describe("ReviewActionsController", () => {
 				priorSession: session,
 				bulkApplyConfirm: { notePath: "a.md" },
 			});
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			controller.cancelApplyAndReviewConfirmMode();
 
@@ -493,7 +493,7 @@ describe("ReviewActionsController", () => {
 				priorSession: session,
 				bulkApplyConfirm: null,
 			});
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			controller.cancelApplyAndReviewConfirmMode();
 
@@ -514,7 +514,7 @@ describe("ReviewActionsController", () => {
 			const listener = vi.fn();
 			store.subscribe(listener);
 			listener.mockClear();
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.closeActiveReviewContext();
 
@@ -531,7 +531,7 @@ describe("ReviewActionsController", () => {
 		it("closeReviewPanel calls closeReviewPanelLeaf after closing context", async () => {
 			const session = makeSession("a.md");
 			const { host, calls } = makeFakeHost({ priorSession: session });
-			const controller = new ReviewActionsController(host);
+			const controller = new ReviewActionsOrchestrator(host);
 
 			await controller.closeReviewPanel();
 

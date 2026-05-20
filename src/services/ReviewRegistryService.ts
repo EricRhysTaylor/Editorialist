@@ -81,6 +81,12 @@ export class ReviewRegistryService {
 		private readonly reviewEngine: ReviewEngine,
 		private readonly reviewerDirectory: ContributorDirectory,
 		private readonly persistData: () => Promise<void>,
+		// Returns the live editor buffer for `notePath` when that note is open
+		// in a markdown leaf, or null when no such leaf exists. Injected so the
+		// service does not reach `app.workspace` directly — main.ts owns the
+		// workspace traversal, the service stays at the vault / persistence
+		// layer.
+		private readonly openNoteTextResolver: (notePath: string) => string | null,
 	) {
 		this.statsProjector = new ReviewerStatsProjector(this.reviewerDirectory);
 		this.sweepManager = new SweepRegistryManager({
@@ -93,7 +99,7 @@ export class ReviewRegistryService {
 		this.inventoryBuilder = new SceneInventoryBuilder({
 			getMarkdownFiles: () => this.app.vault.getMarkdownFiles(),
 			resolveNoteText: async (file) =>
-				this.getOpenNoteText(file.path) ?? (await this.app.vault.cachedRead(file)),
+				this.openNoteTextResolver(file.path) ?? (await this.app.vault.cachedRead(file)),
 			buildEngineSession: (notePath, noteText) =>
 				this.reviewEngine.buildSession(notePath, noteText, null),
 			applyPersistedReviewState: (session) => this.applyPersistedReviewState(session),
@@ -737,19 +743,6 @@ export class ReviewRegistryService {
 			case "cleaned":
 				return 2;
 		}
-	}
-
-	private getOpenNoteText(notePath: string): string | null {
-		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
-			const view = leaf.view as { file?: { path?: string }; editor?: { getValue: () => string } };
-			if (view.file?.path !== notePath || !view.editor) {
-				continue;
-			}
-
-			return view.editor.getValue();
-		}
-
-		return null;
 	}
 
 	private getNoteIdentityKeys(notePath: string): string[] {

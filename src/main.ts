@@ -62,9 +62,9 @@ import { EditorialistSettingTab } from "./ui/EditorialistSettingTab";
 import { createReviewDecorationsExtension, syncReviewDecorations } from "./ui/Decorations";
 import { createReviewToolbarElement, type ToolbarState } from "./ui/Toolbar";
 import { ToolbarKeyTracker } from "./ui/toolbar/ToolbarKeyTracker";
-import { ToolbarOverlayController } from "./controllers/ToolbarOverlayController";
-import { ReviewBatchProcessor } from "./controllers/ReviewBatchProcessor";
-import { PendingEditsCoordinator, type PendingEditsSummary } from "./controllers/PendingEditsCoordinator";
+import { ToolbarOverlayController } from "./orchestrators/ToolbarOverlayController";
+import { ReviewBatchProcessor } from "./orchestrators/ReviewBatchProcessor";
+import { PendingEditsCoordinator, type PendingEditsSummary } from "./orchestrators/PendingEditsCoordinator";
 import { buildToolbarState } from "./ui/viewmodels/ToolbarViewModel";
 import type { ReviewBranchInputs, ToolbarStateInputs } from "./ui/viewmodels/ToolbarStateInputs";
 import {
@@ -73,7 +73,7 @@ import {
 	type BulkApplyConfirmState,
 	type LastAppliedChange,
 } from "./orchestrators/SessionOrchestrator";
-import { ReviewActionsController } from "./orchestrators/ReviewActionsController";
+import { ReviewActionsOrchestrator } from "./orchestrators/ReviewActionsOrchestrator";
 
 interface OffsetRange {
 	end: number;
@@ -177,6 +177,7 @@ export default class EditorialistPlugin extends Plugin {
 		this.reviewEngine,
 		this.reviewerDirectory,
 		() => this.savePluginData(),
+		(notePath) => this.resolveOpenNoteText(notePath),
 	);
 	private readonly editorialismService = new EditorialismService(this.app);
 	private readonly workflow = new ReviewWorkflowService(this.store, this.registry, {
@@ -281,7 +282,7 @@ export default class EditorialistPlugin extends Plugin {
 		persistContributorProfilesIfNeeded: () => this.persistContributorProfilesIfNeeded(),
 	});
 
-	private readonly reviewActions = new ReviewActionsController({
+	private readonly reviewActions = new ReviewActionsOrchestrator({
 		store: this.store,
 		registry: this.registry,
 		workflow: this.workflow,
@@ -1656,6 +1657,23 @@ export default class EditorialistPlugin extends Plugin {
 				text: view.editor.getValue(),
 				view,
 			};
+		}
+
+		return null;
+	}
+
+	// Workspace-aware open-note text resolver injected into
+	// ReviewRegistryService so the service stays at the vault/persistence
+	// layer and never reaches `app.workspace` directly. Mirrors the original
+	// private helper that lived inside the service; the search is unchanged.
+	private resolveOpenNoteText(notePath: string): string | null {
+		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+			const view = leaf.view as { file?: { path?: string }; editor?: { getValue: () => string } };
+			if (view.file?.path !== notePath || !view.editor) {
+				continue;
+			}
+
+			return view.editor.getValue();
 		}
 
 		return null;

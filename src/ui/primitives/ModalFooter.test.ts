@@ -123,4 +123,68 @@ describe("buildModalFooter", () => {
 		(footer.buttons as RecordedButton[]).forEach((b) => b.clickHandler?.());
 		expect(picks).toEqual(["open", "import", "cancel"]);
 	});
+
+	it("accepts an array of class names and addClass'es each (base + modifier)", () => {
+		const { parent } = fakeParent();
+		const footer = buildModalFooter(parent, {
+			className: "editorialist-control-modal__actions",
+			buttons: [
+				{
+					text: "Cancel",
+					className: [
+						"editorialist-control-modal__button",
+						"editorialist-control-modal__button--subtle",
+					],
+					onClick: () => {},
+				},
+			],
+		});
+		const [cancel] = footer.buttons as RecordedButton[];
+		expect(cancel?.classes.has("editorialist-control-modal__button")).toBe(true);
+		expect(cancel?.classes.has("editorialist-control-modal__button--subtle")).toBe(true);
+	});
+
+	it("prepends an icon span when `icon` is set, using the supplied iconClassName", () => {
+		const { parent } = fakeParent();
+		const footer = buildModalFooter(parent, {
+			className: "x",
+			buttons: [
+				{
+					text: "Import",
+					icon: "download",
+					iconClassName: "editorialist-control-modal__button-icon",
+					onClick: () => {},
+				},
+			],
+		});
+		const [importBtn] = footer.buttons as RecordedButton[];
+		expect(importBtn?.prependedSpans).toHaveLength(1);
+		const span = importBtn?.prependedSpans[0];
+		expect(span?.cls).toBe("editorialist-control-modal__button-icon");
+		expect(span?.icon).toBe("download");
+	});
+
+	it("does not prepend a span when no icon is set", () => {
+		const { parent } = fakeParent();
+		const footer = buildModalFooter(parent, {
+			className: "x",
+			buttons: [{ text: "Plain", onClick: () => {} }],
+		});
+		const [plain] = footer.buttons as RecordedButton[];
+		expect(plain?.prependedSpans).toHaveLength(0);
+	});
+
+	it("honors a build-time `disabled: true` flag (EditorialistModal isWorking path)", () => {
+		const { parent } = fakeParent();
+		const footer = buildModalFooter(parent, {
+			className: "x",
+			buttons: [
+				{ text: "Working", disabled: true, onClick: () => {} },
+				{ text: "Idle", disabled: false, onClick: () => {} },
+			],
+		});
+		const [working, idle] = footer.buttons as RecordedButton[];
+		expect(working?.disabled).toBe(true);
+		expect(idle?.disabled).toBe(false);
+	});
 });

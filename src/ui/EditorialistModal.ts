@@ -1,4 +1,5 @@
 import { ButtonComponent, Modal, Notice, TextAreaComponent, setIcon, type App } from "obsidian";
+import { buildModalFooter, type ModalFooterButtonSpec } from "./primitives/ModalFooter";
 import { getReviewBlockFenceLabel } from "../core/ReviewBlockFormat";
 import {
 	ADVANCED_REVIEW_TEMPLATE_TITLE,
@@ -261,33 +262,41 @@ export class EditorialistModal extends Modal {
 			|| this.manualValidationState === "error";
 		const importLabel = this.getImportButtonLabel();
 
-		const actions = section.createDiv({ cls: "editorialist-control-modal__actions" });
-		this.buildButton(actions, importLabel, async () => {
-			const batch = await this.ensureManualBatch();
-			if (!batch) {
-				return;
-			}
+		buildModalFooter(section, {
+			className: "editorialist-control-modal__actions",
+			buttons: [
+				this.makeActionButtonSpec({
+					text: importLabel,
+					cta: true,
+					disabled: importDisabled,
+					icon: this.manualValidationState === "error" ? "alert-triangle" : "download",
+					onClick: async () => {
+						const batch = await this.ensureManualBatch();
+						if (!batch) {
+							return;
+						}
 
-			await this.options.onImportBatch(batch, true);
-			this.close();
-		}, {
-			cta: true,
-			disabled: importDisabled,
-			icon: this.manualValidationState === "error" ? "alert-triangle" : "download",
-		});
-		this.buildButton(actions, "Preview destinations", async () => {
-			const batch = await this.ensureManualBatch();
-			if (!batch) {
-				return;
-			}
+						await this.options.onImportBatch(batch, true);
+						this.close();
+					},
+				}),
+				this.makeActionButtonSpec({
+					text: "Preview destinations",
+					disabled: !hasText || this.manualValidationState === "pending",
+					icon: "navigation",
+					subtle: true,
+					onClick: async () => {
+						const batch = await this.ensureManualBatch();
+						if (!batch) {
+							return;
+						}
 
-			this.manualBatch = batch;
-			this.showAssignments = true;
-			this.render();
-		}, {
-			disabled: !hasText || this.manualValidationState === "pending",
-			icon: "navigation",
-			subtle: true,
+						this.manualBatch = batch;
+						this.showAssignments = true;
+						this.render();
+					},
+				}),
+			],
 		});
 	}
 
@@ -355,50 +364,54 @@ export class EditorialistModal extends Modal {
 			});
 		}
 
-		const actions = panel.createDiv({ cls: "editorialist-control-modal__actions" });
-		this.buildButton(
-			actions,
-			`Re-target ${corrections.length} and import`,
-			async () => {
-				const overrides = new Map<string, string>();
-				for (const result of corrections) {
-					if (result.proposedCorrection) {
-						overrides.set(result.suggestion.id, result.proposedCorrection.targetPath);
-					}
-				}
-				const rawText = this.manualText.trim();
-				if (!rawText) {
-					return;
-				}
-				let corrected: ReviewImportBatch;
-				try {
-					corrected = await this.options.onInspectBatch(rawText, overrides);
-				} catch {
-					this.setManualImportError({
-						headline: "Could not re-target the entries",
-						details: ["Editorialist failed to re-inspect the batch with the corrected scene targets."],
-						hint: "Cancel and fix the SceneId values in the pasted text, then paste again.",
-					});
-					return;
-				}
-				const diagnostic = this.diagnoseManualBatch(corrected);
-				if (diagnostic) {
-					this.setManualImportError(diagnostic);
-					return;
-				}
-				await this.options.onImportBatch(corrected, true);
-				this.close();
-			},
-			{ cta: true, icon: "wand-2" },
-		);
-		this.buildButton(
-			actions,
-			"Cancel import",
-			async () => {
-				this.close();
-			},
-			{ icon: "x", subtle: true },
-		);
+		buildModalFooter(panel, {
+			className: "editorialist-control-modal__actions",
+			buttons: [
+				this.makeActionButtonSpec({
+					text: `Re-target ${corrections.length} and import`,
+					cta: true,
+					icon: "wand-2",
+					onClick: async () => {
+						const overrides = new Map<string, string>();
+						for (const result of corrections) {
+							if (result.proposedCorrection) {
+								overrides.set(result.suggestion.id, result.proposedCorrection.targetPath);
+							}
+						}
+						const rawText = this.manualText.trim();
+						if (!rawText) {
+							return;
+						}
+						let corrected: ReviewImportBatch;
+						try {
+							corrected = await this.options.onInspectBatch(rawText, overrides);
+						} catch {
+							this.setManualImportError({
+								headline: "Could not re-target the entries",
+								details: ["Editorialist failed to re-inspect the batch with the corrected scene targets."],
+								hint: "Cancel and fix the SceneId values in the pasted text, then paste again.",
+							});
+							return;
+						}
+						const diagnostic = this.diagnoseManualBatch(corrected);
+						if (diagnostic) {
+							this.setManualImportError(diagnostic);
+							return;
+						}
+						await this.options.onImportBatch(corrected, true);
+						this.close();
+					},
+				}),
+				this.makeActionButtonSpec({
+					text: "Cancel import",
+					icon: "x",
+					subtle: true,
+					onClick: async () => {
+						this.close();
+					},
+				}),
+			],
+		});
 	}
 
 	private renderAssignments(parent: HTMLElement, batch: ReviewImportBatch): void {
@@ -568,12 +581,16 @@ export class EditorialistModal extends Modal {
 		}
 
 		parent.createEl("hr", { cls: "editorialist-control-modal__divider" });
-		const actions = parent.createDiv({ cls: "editorialist-control-modal__secondary-actions" });
-		actionsConfig.forEach((action) => {
-			this.buildButton(actions, action.label, action.onClick, {
-				icon: action.icon,
-				subtle: true,
-			});
+		buildModalFooter(parent, {
+			className: "editorialist-control-modal__secondary-actions",
+			buttons: actionsConfig.map((action) =>
+				this.makeActionButtonSpec({
+					text: action.label,
+					icon: action.icon,
+					subtle: true,
+					onClick: action.onClick,
+				}),
+			),
 		});
 	}
 
@@ -1084,34 +1101,41 @@ export class EditorialistModal extends Modal {
 		}
 	}
 
-	private buildButton(
-		parent: HTMLElement,
-		label: string,
-		onClick: () => Promise<void>,
-		options?: {
-			cta?: boolean;
-			disabled?: boolean;
-			icon?: string;
-			subtle?: boolean;
-		},
-	): void {
-		const button = new ButtonComponent(parent).setButtonText(label);
-		button.setDisabled(Boolean(options?.disabled || this.isWorking));
-		if (options?.cta) {
-			button.setCta();
+	// Adapter that maps EditorialistModal's per-action button shape (cta /
+	// disabled / icon / subtle / async onClick) onto a ModalFooterButtonSpec.
+	// Behavior matches the prior inline `buildButton`:
+	//   • base class `editorialist-control-modal__button` is always applied
+	//   • `subtle: true` adds the `--subtle` modifier
+	//   • the icon span uses the modal-specific `__button-icon` class so the
+	//     existing CSS for that selector keeps applying byte-identically
+	//   • disabled resolves at build time as `options.disabled || this.isWorking`
+	//     — re-renders (triggered by runAction) rebuild the footer with the
+	//     refreshed value, preserving the loading-state lockout
+	//   • onClick is wrapped in `runAction` so the async work toggles isWorking
+	//     and re-renders exactly as before
+	private makeActionButtonSpec(spec: {
+		text: string;
+		cta?: boolean;
+		disabled?: boolean;
+		icon?: string;
+		subtle?: boolean;
+		onClick: () => Promise<void>;
+	}): ModalFooterButtonSpec {
+		const classNames: string[] = ["editorialist-control-modal__button"];
+		if (spec.subtle) {
+			classNames.push("editorialist-control-modal__button--subtle");
 		}
-		button.buttonEl.addClass("editorialist-control-modal__button");
-		if (options?.subtle) {
-			button.buttonEl.addClass("editorialist-control-modal__button--subtle");
-		}
-		if (options?.icon) {
-			const icon = button.buttonEl.createSpan({ cls: "editorialist-control-modal__button-icon" });
-			button.buttonEl.prepend(icon);
-			setIcon(icon, options.icon);
-		}
-		button.onClick(() => {
-			void this.runAction(onClick);
-		});
+		return {
+			text: spec.text,
+			cta: spec.cta,
+			className: classNames,
+			disabled: Boolean(spec.disabled || this.isWorking),
+			icon: spec.icon,
+			iconClassName: spec.icon ? "editorialist-control-modal__button-icon" : undefined,
+			onClick: () => {
+				void this.runAction(spec.onClick);
+			},
+		};
 	}
 
 	private renderMessageCard(parent: HTMLElement, title: string, copy: string): void {
