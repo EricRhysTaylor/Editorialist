@@ -36,6 +36,9 @@ export interface MigrationLogger {
 }
 
 const defaultLogger: MigrationLogger = {
+	// Intentional: this is the migrator's diagnostic surface for unknown
+	// future schema versions. Loud, not silent.
+	// eslint-disable-next-line no-console
 	warn: (message) => console.warn(message),
 };
 
