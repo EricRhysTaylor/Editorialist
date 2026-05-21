@@ -314,6 +314,24 @@ export class ReviewBatchProcessor {
 			return;
 		}
 
+		// Cleanup deletes the review-block fences from the notes. After that
+		// the audit view ("Review changes") has no data to render, since
+		// suggestion prose only lives inside those fences (the persisted
+		// decision index stores status only). Warn the user before destroying
+		// that affordance.
+		const choice = await openEditorialistChoiceModal(this.host.app, {
+			title: "Clean review blocks?",
+			description:
+				"This removes the imported review blocks from your notes. After cleanup you will no longer be able to walk through this pass with \"Review changes\" — the audit data only lives inside those blocks.",
+			choices: [
+				{ label: "Clean review blocks", value: "confirm" },
+				{ label: "Cancel", value: "cancel" },
+			],
+		});
+		if (choice !== "confirm") {
+			return;
+		}
+
 		await this.cleanupReviewBatch(completedSweep.batchId);
 	}
 

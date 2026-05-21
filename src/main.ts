@@ -1098,11 +1098,17 @@ export default class EditorialistPlugin extends Plugin {
 			completedSweep.notePaths.length,
 			completedSweep.notePaths[0],
 		);
-		const nextSteps: CompletedSweepPanelState["nextSteps"] = [
-			{ action: "start", label: "Review changes" },
-			{ action: "import", label: "Import new revision notes" },
-		];
-		if ((entry?.importedNotePaths.length ?? 0) > 0) {
+		// Once a sweep is cleaned, the review blocks are gone from the notes —
+		// "Review changes" cannot re-enter audit mode (no live data), and
+		// "Clean review blocks" has nothing left to remove. Show only the
+		// forward-looking action (import) and the close link.
+		const isCleaned = entry?.status === "cleaned";
+		const nextSteps: CompletedSweepPanelState["nextSteps"] = [];
+		if (!isCleaned) {
+			nextSteps.push({ action: "start", label: "Review changes" });
+		}
+		nextSteps.push({ action: "import", label: "Import new revision notes" });
+		if (!isCleaned && (entry?.importedNotePaths.length ?? 0) > 0) {
 			nextSteps.push({ action: "clean", label: "Clean review blocks" });
 		}
 
@@ -1110,7 +1116,9 @@ export default class EditorialistPlugin extends Plugin {
 			closeLabel: "Close review",
 			title: "All revisions complete",
 			editsReviewedLabel: `${completedSweep.totalSuggestions} edit${completedSweep.totalSuggestions === 1 ? "" : "s"} reviewed across ${completedSweep.notePaths.length} ${unitLabel}`,
-			description: "You've finished this revision pass.",
+			description: isCleaned
+				? "Review blocks have been removed from your notes. Import a new revision pass when you're ready."
+				: "You've finished this revision pass.",
 			durationLabel: this.getCompletedSweepDurationLabel(completedSweep),
 			nextSteps,
 		};
