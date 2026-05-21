@@ -1,5 +1,5 @@
 // Instance-owned modifier-key tracker for the review toolbar. Replaces the
-// module-level shift/mod/legend state that previously lived in Toolbar.ts.
+// module-level shift/mod state that previously lived in Toolbar.ts.
 // One tracker is owned per plugin instance; disposal is explicit and
 // idempotent, so plugin unload (and hot-reload in dev) cannot leave window
 // event listeners behind.
@@ -23,22 +23,12 @@ export type ToolbarModifierSubscriber = (state: ToolbarModifierState) => void;
 export class ToolbarKeyTracker {
 	private shiftPressed = false;
 	private modPressed = false;
-	private legendOpen = false;
 	private abort: AbortController | null = null;
 	private readonly subscribers = new Set<ToolbarModifierSubscriber>();
 	private disposed = false;
 
 	getModifierState(): ToolbarModifierState {
 		return { modPressed: this.modPressed, shiftPressed: this.shiftPressed };
-	}
-
-	isLegendOpen(): boolean {
-		return this.legendOpen;
-	}
-
-	toggleLegendOpen(): boolean {
-		this.legendOpen = !this.legendOpen;
-		return this.legendOpen;
 	}
 
 	subscribe(callback: ToolbarModifierSubscriber): () => void {

@@ -370,24 +370,12 @@ export function createReviewToolbarElement(
 		return overlay;
 	}
 
-	if (tracker.isLegendOpen()) {
-		overlay.classList.add("editorialist-toolbar--legend-open");
-	}
-
 	{
 		const leading = toolbar.createDiv({ cls: "editorialist-toolbar__leading" });
 		buildFlatIconButton(leading, "Hide toolbar", "x", () => {
 			plugin.dismissReviewToolbar();
 		});
-		buildFlatIconButton(
-			leading,
-			tracker.isLegendOpen() ? "Hide shortcut legend" : "Show shortcut legend",
-			"asterisk",
-			() => {
-				const nextOpen = tracker.toggleLegendOpen();
-				overlay.classList.toggle("editorialist-toolbar--legend-open", nextOpen);
-			},
-		);
+		buildLegendTrigger(leading);
 		if (state.mode === "review" && state.anchorDirection) {
 			const indicator = leading.createSpan({
 				cls: "editorialist-toolbar__anchor-indicator",
@@ -539,6 +527,18 @@ function renderToolbarLegend(parent: HTMLElement, applyOperationLabel: string): 
 		const labelEl = item.createSpan({ cls: "editorialist-toolbar__legend-label", text: row.label });
 		markAsNonEditorSurface(labelEl);
 	}
+}
+
+// Inline asterisk that reveals the shortcut legend on hover or keyboard focus.
+// Pure CSS handles the visibility (see styles.css `:has(...)` rules), so this
+// element is just an unstyled, focusable icon — no button chrome.
+function buildLegendTrigger(parent: HTMLElement): void {
+	const trigger = parent.createSpan({ cls: "editorialist-toolbar__legend-trigger" });
+	trigger.setAttribute("tabindex", "0");
+	trigger.setAttribute("role", "img");
+	trigger.setAttribute("aria-label", "Shortcut legend (hover or focus to show)");
+	markAsNonEditorSurface(trigger);
+	setIcon(trigger, "asterisk");
 }
 
 function buildFlatIconButton(
@@ -710,11 +710,10 @@ function renderMetaSeparator(parent: HTMLElement): void {
 }
 
 
-// Modifier-key tracking, the legend-open flag, and the corresponding window
-// listener lifecycle now live on ToolbarKeyTracker (see
-// src/ui/toolbar/ToolbarKeyTracker.ts). One tracker is owned per plugin
-// instance and disposed in onunload. The previous module-level
-// shiftKeyPressed / modKeyPressed / legendOpen / shiftTrackingAbort /
+// Modifier-key tracking and the corresponding window listener lifecycle now
+// live on ToolbarKeyTracker (see src/ui/toolbar/ToolbarKeyTracker.ts). One
+// tracker is owned per plugin instance and disposed in onunload. The previous
+// module-level shiftKeyPressed / modKeyPressed / shiftTrackingAbort /
 // modifierSubscribers and the exported forceTeardownToolbarSubscriptions()
 // helper are gone.
 

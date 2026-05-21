@@ -977,7 +977,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 			if (suggestion.operation === "cut") {
 				return "Already removed";
 			}
-			return "Applies elsewhere";
+			return "Passage not located";
 		}
 
 		switch (suggestion.operation) {

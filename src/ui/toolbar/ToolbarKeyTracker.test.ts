@@ -35,10 +35,9 @@ afterEach(() => {
 });
 
 describe("ToolbarKeyTracker", () => {
-	it("starts with no modifier pressed and legend closed", () => {
+	it("starts with no modifier pressed", () => {
 		const tracker = new ToolbarKeyTracker();
 		expect(tracker.getModifierState()).toEqual({ modPressed: false, shiftPressed: false });
-		expect(tracker.isLegendOpen()).toBe(false);
 	});
 
 	it("keydown updates shift + mod state and notifies subscribers", () => {
@@ -127,15 +126,6 @@ describe("ToolbarKeyTracker", () => {
 		expect(b).toHaveBeenCalledTimes(1);
 	});
 
-	it("toggleLegendOpen flips and reports the new value", () => {
-		const tracker = new ToolbarKeyTracker();
-		expect(tracker.isLegendOpen()).toBe(false);
-		expect(tracker.toggleLegendOpen()).toBe(true);
-		expect(tracker.isLegendOpen()).toBe(true);
-		expect(tracker.toggleLegendOpen()).toBe(false);
-		expect(tracker.isLegendOpen()).toBe(false);
-	});
-
 	describe("dispose lifecycle", () => {
 		it("dispose removes window listeners so subsequent events do not update state or notify", () => {
 			const tracker = new ToolbarKeyTracker();
@@ -189,7 +179,6 @@ describe("ToolbarKeyTracker", () => {
 
 			const second = new ToolbarKeyTracker();
 			expect(second.getModifierState()).toEqual({ modPressed: false, shiftPressed: false });
-			expect(second.isLegendOpen()).toBe(false);
 		});
 
 		it("after disposing the previous instance, a new instance receives fresh window events", () => {

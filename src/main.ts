@@ -2380,7 +2380,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		return {
 			contextLabel,
-			description: `The remaining revision notes apply elsewhere in ${unitLabel === "scene" ? "this scene" : "this note"}.`,
+			description: `More notes further down ${unitLabel === "scene" ? "this scene" : "this note"}.`,
 			progressLabel,
 			remainingCount: openSuggestions.length,
 			title: contextLabel ? `Continue review in ${contextLabel}` : `Continue review in this ${unitLabel}`,
