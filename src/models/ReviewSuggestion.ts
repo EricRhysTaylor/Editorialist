@@ -107,9 +107,20 @@ export interface CutSuggestionPayload {
 	target: string;
 }
 
+export interface CondenseTargetAnchorPair {
+	start: string;
+	end: string;
+}
+
 export interface CondenseSuggestionPayload {
 	target: string;
 	suggestion?: string;
+	// When set, the AI emitted anchor fragments instead of the full verbatim
+	// passage. The matcher locates each anchor independently and resolves the
+	// span [start anchor's startOffset, end anchor's endOffset], then writes
+	// the verbatim slice back into `target` so downstream consumers stay
+	// unchanged. Parser leaves `target` empty when anchors are present.
+	targetAnchors?: CondenseTargetAnchorPair;
 }
 
 export type EditSuggestion = ReviewSuggestionBase<"edit", EditSuggestionPayload>;

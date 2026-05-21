@@ -83,6 +83,55 @@ Why: tightening
     expect(matched.location.target?.matchType).toBe("already_applied");
   });
 
+  it("resolves a condense anchor pair to the verbatim slice between the anchors", () => {
+    const passage = "She wonders, briefly, why she hasn't been rescued. The forest answers nothing. Whatever is happening, it isn't reaching her.";
+    const noteText = `Prelude unrelated.\n\n${passage}\n\nPostlude unrelated.`;
+
+    const parser = new SuggestionParser(new ContributorDirectory());
+    const note = `\`\`\`editorialist-review
+Reviewer: GPT-5.4
+ReviewerType: ai-editor
+
+=== CONDENSE ===
+SceneId: scn_test
+Target: "She wonders, briefly" → "isn't reaching her."
+Suggestion: tighter beat
+Why: drag
+\`\`\``;
+    const suggestion = parser.parse(note).suggestions[0];
+    if (!suggestion || suggestion.operation !== "condense") throw new Error("expected condense suggestion");
+
+    const matched = new MatchEngine().matchSuggestion(noteText, suggestion);
+    expect(matched.location.target?.matchType).toBe("exact");
+    expect(matched.location.target?.startOffset).toBe(noteText.indexOf("She wonders"));
+    expect(matched.location.target?.endOffset).toBe(noteText.indexOf(passage) + passage.length);
+    if (matched.operation === "condense") {
+      expect(matched.payload.target).toBe(passage);
+    }
+  });
+
+  it("marks condense unresolved when one anchor is missing", () => {
+    const noteText = "She wonders, briefly, why she hasn't been rescued. The forest answers nothing.";
+
+    const parser = new SuggestionParser(new ContributorDirectory());
+    const note = `\`\`\`editorialist-review
+Reviewer: GPT-5.4
+ReviewerType: ai-editor
+
+=== CONDENSE ===
+SceneId: scn_test
+Target: "She wonders, briefly" → "isn't reaching her."
+Suggestion: tighter beat
+Why: drag
+\`\`\``;
+    const suggestion = parser.parse(note).suggestions[0];
+    if (!suggestion || suggestion.operation !== "condense") throw new Error("expected condense suggestion");
+
+    const matched = new MatchEngine().matchSuggestion(noteText, suggestion);
+    expect(matched.location.target?.matchType).toBe("none");
+    expect(matched.status).toBe("unresolved");
+  });
+
   it("detects condense already-applied across smart-vs-straight quote drift", () => {
     const afterCurly = "She nods. “I know,” she says.";
     const afterStraight = "She nods. \"I know,\" she says.";

@@ -46,6 +46,7 @@
 }
 
 .editorialist-toolbar {
+	position: relative; /* anchor for the absolutely-positioned legend popover */
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -263,26 +264,37 @@
 	flex: 0 0 auto;
 }
 
+/* Legend is an out-of-flow popover anchored to the bottom-left of the toolbar.
+ * Out-of-flow on purpose: keeping it in flow caused two bugs — (1) toggling
+ * flex-wrap on hover reflowed the trigger out from under the cursor, creating
+ * a hover/un-hover flicker loop, and (2) the legend's content widened the
+ * toolbar, which looked like a duplicate, wider toolbar appearing beneath.
+ * The toolbar rule above provides the position: relative anchor. */
 .editorialist-toolbar__legend {
 	display: none;
-}
-
-.editorialist-toolbar:has(.editorialist-toolbar__legend-trigger:hover),
-.editorialist-toolbar:has(.editorialist-toolbar__legend-trigger:focus-visible) {
-	flex-wrap: wrap;
-}
-
-.editorialist-toolbar:has(.editorialist-toolbar__legend-trigger:hover) .editorialist-toolbar__legend,
-.editorialist-toolbar:has(.editorialist-toolbar__legend-trigger:focus-visible) .editorialist-toolbar__legend {
-	display: flex;
-	flex: 1 0 100%;
+	position: absolute;
+	top: calc(100% - 1px); /* slight overlap so the cursor can cross without losing hover */
+	left: 0;
+	z-index: 1;
 	flex-direction: column;
 	gap: 0.3rem;
-	margin-top: 0.35rem;
-	padding-top: 0.45rem;
-	border-top: 1px solid color-mix(in srgb, var(--background-modifier-border) 64%, transparent);
+	min-width: 100%;
+	padding: 0.45rem 0.55rem;
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 64%, transparent);
+	border-radius: var(--editorialist-radius-card);
+	background: color-mix(in srgb, var(--background-secondary) 88%, var(--background-primary));
+	backdrop-filter: blur(10px);
 	text-transform: none;
 	letter-spacing: normal;
+	white-space: nowrap;
+}
+
+/* Show when trigger is hovered/focused, or when the legend itself is hovered
+ * (so the popover stays open while the user reads it). */
+.editorialist-toolbar:has(.editorialist-toolbar__legend-trigger:hover) .editorialist-toolbar__legend,
+.editorialist-toolbar:has(.editorialist-toolbar__legend-trigger:focus-visible) .editorialist-toolbar__legend,
+.editorialist-toolbar:has(.editorialist-toolbar__legend:hover) .editorialist-toolbar__legend {
+	display: flex;
 }
 
 .editorialist-toolbar__legend-trigger {

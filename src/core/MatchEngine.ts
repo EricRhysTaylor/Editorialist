@@ -153,6 +153,11 @@ export class MatchEngine {
 	}
 
 	private resolveCondenseSuggestion(noteText: string, suggestion: CondenseSuggestion): CondenseSuggestion {
+		const anchors = suggestion.payload.targetAnchors;
+		if (anchors) {
+			return this.resolveCondenseAnchorPair(noteText, suggestion, anchors);
+		}
+
 		const resolution = this.resolveTextTarget(
 			noteText,
 			suggestion.payload.target,
@@ -165,6 +170,96 @@ export class MatchEngine {
 			location: {
 				target: resolution.target,
 			},
+		};
+	}
+
+	// Anchor-pair condense: the AI emitted "<start>" → "<end>" instead of the
+	// full verbatim passage. We resolve each anchor independently. If both land
+	// unambiguously and the start precedes the end, the resolved span runs from
+	// the start anchor's startOffset to the end anchor's endOffset, and we
+	// rewrite payload.target to that slice so the apply path matches against
+	// the actual manuscript text rather than the anchor expression.
+	private resolveCondenseAnchorPair(
+		noteText: string,
+		suggestion: CondenseSuggestion,
+		anchors: { start: string; end: string },
+	): CondenseSuggestion {
+		const startResolution = this.resolveTextTarget(noteText, anchors.start);
+		const endResolution = this.resolveTextTarget(noteText, anchors.end);
+
+		const failureTarget = this.buildAnchorFailureTarget(
+			suggestion.payload.target,
+			startResolution.target,
+			endResolution.target,
+		);
+		if (failureTarget) {
+			return {
+				...suggestion,
+				status: this.preserveTerminalStatus(suggestion.status, "unresolved"),
+				location: { target: failureTarget },
+			};
+		}
+
+		const startOffset = startResolution.target.startOffset;
+		const endOffset = endResolution.target.endOffset;
+		if (startOffset === undefined || endOffset === undefined || startOffset >= endOffset) {
+			return {
+				...suggestion,
+				status: this.preserveTerminalStatus(suggestion.status, "unresolved"),
+				location: {
+					target: {
+						text: suggestion.payload.target,
+						matchType: "none",
+						reason: "Closing anchor does not follow opening anchor in the manuscript.",
+					},
+				},
+			};
+		}
+
+		const resolvedText = noteText.slice(startOffset, endOffset);
+
+		return {
+			...suggestion,
+			status: this.preserveTerminalStatus(suggestion.status, "pending"),
+			payload: {
+				...suggestion.payload,
+				target: resolvedText,
+			},
+			location: {
+				target: {
+					text: resolvedText,
+					startOffset,
+					endOffset,
+					matchType: "exact",
+					reason: "Resolved from opening and closing anchors.",
+				},
+			},
+		};
+	}
+
+	private buildAnchorFailureTarget(
+		rawTarget: string,
+		startTarget: ReviewTargetRef,
+		endTarget: ReviewTargetRef,
+	): ReviewTargetRef | null {
+		const startBad = startTarget.matchType !== "exact" || startTarget.startOffset === undefined;
+		const endBad = endTarget.matchType !== "exact" || endTarget.endOffset === undefined;
+		if (!startBad && !endBad) {
+			return null;
+		}
+
+		const reasons: string[] = [];
+		if (startBad) {
+			reasons.push(`Opening anchor: ${startTarget.reason ?? "not found"}`);
+		}
+		if (endBad) {
+			reasons.push(`Closing anchor: ${endTarget.reason ?? "not found"}`);
+		}
+
+		return {
+			text: rawTarget,
+			matchType: "none",
+			reason: reasons.join(" "),
 		};
 	}
 

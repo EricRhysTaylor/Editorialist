@@ -138,3 +138,55 @@ describe("SuggestionParser — MEMO section", () => {
 		expect(parsed.memos[1].contributor.displayName).toBe("Maria");
 	});
 });
+
+describe("SuggestionParser — CONDENSE anchors", () => {
+	function condenseNote(targetLine: string): string {
+		return fenced([
+			"Reviewer: Caroline",
+			"ReviewerType: ai",
+			"",
+			"=== CONDENSE ===",
+			"SceneId: scn_test",
+			`Target: ${targetLine}`,
+			"Suggestion: tighter beat",
+			"Why: drag",
+		].join("\n"));
+	}
+
+	it("parses a quoted opening → closing anchor pair", () => {
+		const parsed = makeParser().parse(condenseNote("\"She wonders, briefly\" → \"isn't reaching her.\""));
+		expect(parsed.suggestions).toHaveLength(1);
+		const s = parsed.suggestions[0];
+		expect(s.operation).toBe("condense");
+		if (s.operation !== "condense") return;
+		expect(s.payload.targetAnchors).toEqual({
+			start: "She wonders, briefly",
+			end: "isn't reaching her.",
+		});
+	});
+
+	it("accepts ASCII -> as the arrow", () => {
+		const parsed = makeParser().parse(condenseNote("\"opening fragment\" -> \"closing fragment\""));
+		const s = parsed.suggestions[0];
+		expect(s.operation).toBe("condense");
+		if (s.operation !== "condense") return;
+		expect(s.payload.targetAnchors).toEqual({ start: "opening fragment", end: "closing fragment" });
+	});
+
+	it("accepts single-quoted anchors", () => {
+		const parsed = makeParser().parse(condenseNote("'opening' → 'closing'"));
+		const s = parsed.suggestions[0];
+		expect(s.operation).toBe("condense");
+		if (s.operation !== "condense") return;
+		expect(s.payload.targetAnchors).toEqual({ start: "opening", end: "closing" });
+	});
+
+	it("leaves targetAnchors undefined for legacy descriptive Target text", () => {
+		const parsed = makeParser().parse(condenseNote("The two paragraphs where she wonders why she hasn't been rescued."));
+		const s = parsed.suggestions[0];
+		expect(s.operation).toBe("condense");
+		if (s.operation !== "condense") return;
+		expect(s.payload.targetAnchors).toBeUndefined();
+		expect(s.payload.target).toContain("she wonders");
+	});
+});

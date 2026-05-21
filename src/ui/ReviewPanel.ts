@@ -28,6 +28,35 @@ import {
 
 export const REVIEW_PANEL_VIEW_TYPE = "editorialist-review-panel";
 
+// Pulls the leading integer out of a scene/note title like "36 Stage 2 Part 2".
+// Returns null when the title doesn't start with a number, so the comparator
+// can sort numbered scenes (in story order) ahead of unnumbered ones.
+function leadingSceneNumber(title: string): number | null {
+	const match = title.match(/^\s*(\d+)\b/);
+	if (!match) {
+		return null;
+	}
+	const value = Number.parseInt(match[1]!, 10);
+	return Number.isFinite(value) ? value : null;
+}
+
+function compareReviewStateEntriesByNarrativeOrder(
+	a: ReviewStateIndexEntry,
+	b: ReviewStateIndexEntry,
+): number {
+	const aNum = leadingSceneNumber(a.noteTitle);
+	const bNum = leadingSceneNumber(b.noteTitle);
+	if (aNum !== null && bNum !== null) {
+		if (aNum !== bNum) {
+			return aNum - bNum;
+		}
+		return a.noteTitle.localeCompare(b.noteTitle);
+	}
+	if (aNum !== null) return -1;
+	if (bNum !== null) return 1;
+	return a.noteTitle.localeCompare(b.noteTitle);
+}
+
 type ReviewerMenuAction = "assign" | "create" | "unresolved" | "save_alias";
 
 export class ReviewPanel extends ItemView implements IdleSectionsHost {
@@ -336,7 +365,10 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 
 		const list = group.createDiv({ cls: "editorialist-panel__review-state-list" });
 
-		const sorted = [...entries].sort((a, b) => b.lastUpdated - a.lastUpdated);
+		// Narrative order: ascending scene number so the author works the
+		// batches in story order. Notes without a leading number sort after
+		// numbered ones, alphabetically by title.
+		const sorted = [...entries].sort(compareReviewStateEntriesByNarrativeOrder);
 		for (const entry of sorted) {
 			this.renderReviewStateRow(list, entry, showCleanAction);
 		}

@@ -1,5 +1,6 @@
 import type {
 	CondenseSuggestion,
+	CondenseTargetAnchorPair,
 	CutSuggestion,
 	EditSuggestion,
 	MoveSuggestion,
@@ -42,6 +43,30 @@ type SectionParser = (
 	source: ReviewSourceRef,
 	metadata: BlockMetadata,
 ) => ReviewSuggestion | null;
+
+// CONDENSE `Target:` accepts an anchor-pair shape — two quoted verbatim
+// fragments separated by an arrow — so the matcher can locate the passage even
+// when the model elides the middle prose. Examples we accept:
+//   "She wonders, briefly" → "isn't reaching her."
+//   "She wonders, briefly" -> "isn't reaching her."
+//   'She wonders, briefly' → 'isn't reaching her.'
+// Unicode → (U+2192) and ASCII -> are both treated as the arrow. Surrounding
+// quotes are required so we don't false-match descriptive prose that happens
+// to contain "->".
+const CONDENSE_ANCHOR_PATTERN = /^\s*(["'])([\s\S]+?)\1\s*(?:→|->)\s*(["'])([\s\S]+?)\3\s*$/;
+
+export function parseCondenseTargetAnchors(rawTarget: string): CondenseTargetAnchorPair | undefined {
+	const match = rawTarget.match(CONDENSE_ANCHOR_PATTERN);
+	if (!match) {
+		return undefined;
+	}
+	const start = match[2]?.trim();
+	const end = match[4]?.trim();
+	if (!start || !end) {
+		return undefined;
+	}
+	return { start, end };
+}
 
 const OPERATION_HEADERS: Record<string, SupportedReviewOperationType> = {
 	EDIT: "edit",
@@ -356,11 +381,13 @@ export class SuggestionParser {
 		source: ReviewSourceRef,
 		metadata: BlockMetadata,
 	): CondenseSuggestion | null {
-		const target = this.cleanField(fields.get("target")) ?? this.cleanField(fields.get("original"));
+		const rawTarget = this.cleanField(fields.get("target")) ?? this.cleanField(fields.get("original"));
 		const suggestion = this.cleanField(fields.get("suggestion")) ?? this.cleanField(fields.get("revised"));
-		if (!target) {
+		if (!rawTarget) {
 			return null;
 		}
+
+		const anchors = parseCondenseTargetAnchors(rawTarget);
 
 		return {
 			id: suggestionId,
@@ -373,8 +400,14 @@ export class SuggestionParser {
 			why: this.cleanField(fields.get("why")),
 			executionMode: suggestion ? "direct" : "advisory",
 			payload: {
-				target,
+				// Raw `Target:` text. When `targetAnchors` is also set, the matcher
+				// rewrites this to the resolved verbatim slice between the anchors
+				// so downstream apply/copy paths see a normal verbatim passage.
+				// On match failure the raw anchor expression remains here as a
+				// fallback so the author can still read what the AI pointed at.
+				target: rawTarget,
 				suggestion,
+				...(anchors ? { targetAnchors: anchors } : {}),
 			},
 		};
 	}
