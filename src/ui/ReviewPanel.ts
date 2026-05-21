@@ -20,6 +20,7 @@ import {
 	renderContinueReviewCard,
 	renderContributorsBlock,
 	renderIdleStateCard,
+	renderPendingEditsWorkspaceBlock,
 	renderRecentActivityBlock,
 	renderWorkflowsDisclosure,
 	type IdleSectionsHost,
@@ -139,6 +140,18 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 			// 1. Continue Review — the dominant resumable workspace card.
 			if (launchTarget) {
 				renderContinueReviewCard(this, this.plugin, this.contentEl, launchTarget, overview);
+			}
+
+			// 1b. Pending-edits CTA — only appears when there are actual
+			// pending edit segments. Reuses the compact onboarding card's
+			// chip-style step verbatim so the visual treatment is identical
+			// to what users see in the new-vault state, just shaped as a
+			// workspace block. This preserves the side-panel CTA for users
+			// who previously relied on the compact card to reach pending
+			// edits but now route to the workspace view per Pass 22.
+			const pendingSummary = this.plugin.getPendingEditsSummary();
+			if (pendingSummary && pendingSummary.segmentCount > 0) {
+				renderPendingEditsWorkspaceBlock(this, this.plugin, this.contentEl, pendingSummary);
 			}
 
 			// 2. Recent review sessions.

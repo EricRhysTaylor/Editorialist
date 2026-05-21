@@ -205,27 +205,7 @@ export function renderIdleStateCard(
 
 	const pendingSummary = plugin.getPendingEditsSummary();
 	if (pendingSummary && pendingSummary.segmentCount > 0) {
-		const pendingStep = steps.createDiv({
-			cls: "editorialist-panel__completion-step editorialist-panel__completion-step--active",
-		});
-		const pendingBullet = pendingStep.createSpan({ cls: "editorialist-panel__completion-step-bullet" });
-		setIcon(pendingBullet, "clipboard-list");
-		const pendingLink = pendingStep.createEl("a", {
-			cls: "editorialist-panel__completion-step-link",
-			attr: {
-				href: "#",
-				title: "Start pending-edits review in active book",
-			},
-		});
-		const itemNoun = pendingSummary.segmentCount === 1 ? "item" : "items";
-		const sceneNoun = pendingSummary.sceneCount === 1 ? "scene" : "scenes";
-		pendingLink.createSpan({
-			cls: "editorialist-panel__completion-link-text",
-			text: `Review ${pendingSummary.segmentCount} pending edit ${itemNoun} across ${pendingSummary.sceneCount} ${sceneNoun}`,
-		});
-		host.bindAction(pendingLink, () => {
-			void plugin.startPendingEditsReview();
-		});
+		renderPendingEditsStep(host, plugin, steps, pendingSummary);
 	}
 
 	const operationsStep = steps.createDiv({ cls: "editorialist-panel__completion-step" });
@@ -259,6 +239,67 @@ export function renderIdleStateDescription(parent: HTMLElement, description: str
 	if (after.length > 0) {
 		parent.createSpan({ text: after });
 	}
+}
+
+// ── pending-edits CTA ────────────────────────────────────────────────────
+
+// Slim workspace card surfacing the pending-edits CTA when the user has
+// pending edit segments but no active session. Visually mirrors the compact
+// onboarding card's pending-edits step verbatim — same icon, link text,
+// click action — wrapped in a minimal `__completion --neutral` shell so the
+// styling is byte-identical to the chip the compact card shows. Rendered
+// from ReviewPanel.render()'s workspace path; the compact card itself still
+// includes the same step internally via renderPendingEditsStep below.
+export function renderPendingEditsWorkspaceBlock(
+	host: IdleSectionsHost,
+	plugin: EditorialistPlugin,
+	parent: HTMLElement,
+	summary: NonNullable<ReturnType<EditorialistPlugin["getPendingEditsSummary"]>>,
+): void {
+	if (summary.segmentCount <= 0) {
+		return;
+	}
+
+	const card = parent.createDiv({
+		cls: "editorialist-panel__completion editorialist-panel__completion--neutral",
+	});
+	const bgIcon = card.createSpan({ cls: "editorialist-panel__completion-bg-icon" });
+	setIcon(bgIcon, "clipboard-list");
+
+	const steps = card.createDiv({ cls: "editorialist-panel__completion-steps" });
+	renderPendingEditsStep(host, plugin, steps, summary);
+}
+
+// Shared pending-edits step renderer used by BOTH the compact onboarding
+// card and the workspace CTA block. Emits the existing chip-style DOM
+// (bullet icon + link + link-text) so the two surfaces stay byte-identical.
+export function renderPendingEditsStep(
+	host: IdleSectionsHost,
+	plugin: EditorialistPlugin,
+	steps: HTMLElement,
+	summary: NonNullable<ReturnType<EditorialistPlugin["getPendingEditsSummary"]>>,
+): void {
+	const pendingStep = steps.createDiv({
+		cls: "editorialist-panel__completion-step editorialist-panel__completion-step--active",
+	});
+	const pendingBullet = pendingStep.createSpan({ cls: "editorialist-panel__completion-step-bullet" });
+	setIcon(pendingBullet, "clipboard-list");
+	const pendingLink = pendingStep.createEl("a", {
+		cls: "editorialist-panel__completion-step-link",
+		attr: {
+			href: "#",
+			title: "Start pending-edits review in active book",
+		},
+	});
+	const itemNoun = summary.segmentCount === 1 ? "item" : "items";
+	const sceneNoun = summary.sceneCount === 1 ? "scene" : "scenes";
+	pendingLink.createSpan({
+		cls: "editorialist-panel__completion-link-text",
+		text: `Review ${summary.segmentCount} pending edit ${itemNoun} across ${summary.sceneCount} ${sceneNoun}`,
+	});
+	host.bindAction(pendingLink, () => {
+		void plugin.startPendingEditsReview();
+	});
 }
 
 // ── header launcher chip (workflows disclosure helper) ───────────────────

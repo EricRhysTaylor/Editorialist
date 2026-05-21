@@ -16,6 +16,7 @@ export function makeInputs(
 		hasSession: false,
 		hasPostCompletionIdle: false,
 		hasReviewActivityHistory: false,
+		pendingEditSegmentCount: 0,
 		suggestionsLength: 0,
 		hasHandoff: false,
 		hasFilteredSuggestions: false,
@@ -72,6 +73,19 @@ export const REVIEW_PANEL_FIXTURES: ReviewPanelFixture[] = [
 		// Active session resolved off-panel; plugin no longer reports
 		// post-completion idle, history is present.
 		inputs: makeInputs({ hasReviewActivityHistory: true }),
+	},
+	{
+		name: "pending-edits-only routes to workspace (post-completion gate fires, history boolean set)",
+		branch: "idle:workspace",
+		// User with only pending edits and no other activity: the activity
+		// boolean is true (pendingEditSegmentCount > 0 implies it), so even
+		// with the post-completion idle gate firing, branch routing lands
+		// on idle:workspace. The pending-edits CTA renders inside it.
+		inputs: makeInputs({
+			hasPostCompletionIdle: true,
+			hasReviewActivityHistory: true,
+			pendingEditSegmentCount: 7,
+		}),
 	},
 	{
 		name: "session with no parsed suggestions",

@@ -5,6 +5,7 @@ import {
 	selectPanelPrimarySuggestionId,
 	selectReviewPanelBranch,
 	shouldShowReviewerFilters,
+	shouldShowWorkspacePendingEditsCTA,
 	type ReviewPanelBranch,
 	type ReviewPanelStateInputs,
 } from "./ReviewPanelViewModel";
@@ -142,6 +143,71 @@ describe("selectReviewPanelBranch — precedence invariants", () => {
 				makeInputs({ hasSession: true, suggestionsLength: 1, hasFilteredSuggestions: true }),
 			),
 		).toBe("session:list");
+	});
+});
+
+// ── shouldShowWorkspacePendingEditsCTA ───────────────────────────────────
+
+describe("shouldShowWorkspacePendingEditsCTA", () => {
+	it("fires when the workspace branch is selected AND there are pending segments", () => {
+		const inputs = makeInputs({
+			hasReviewActivityHistory: true,
+			pendingEditSegmentCount: 3,
+		});
+		expect(selectReviewPanelBranch(inputs)).toBe("idle:workspace");
+		expect(shouldShowWorkspacePendingEditsCTA(inputs)).toBe(true);
+	});
+
+	it("does not fire when pendingEditSegmentCount is zero", () => {
+		const inputs = makeInputs({
+			hasReviewActivityHistory: true,
+			pendingEditSegmentCount: 0,
+		});
+		expect(selectReviewPanelBranch(inputs)).toBe("idle:workspace");
+		expect(shouldShowWorkspacePendingEditsCTA(inputs)).toBe(false);
+	});
+
+	it("does not fire inside the compact onboarding branch (no preempting the new-user card)", () => {
+		const inputs = makeInputs({
+			hasPostCompletionIdle: true,
+			hasReviewActivityHistory: false,
+			pendingEditSegmentCount: 0,
+		});
+		expect(selectReviewPanelBranch(inputs)).toBe("idle:post-completion");
+		expect(shouldShowWorkspacePendingEditsCTA(inputs)).toBe(false);
+	});
+
+	it("does not fire while a session is active (workspace branch is not selected)", () => {
+		const inputs = makeInputs({
+			hasSession: true,
+			suggestionsLength: 5,
+			hasFilteredSuggestions: true,
+			pendingEditSegmentCount: 9,
+		});
+		expect(selectReviewPanelBranch(inputs)).toBe("session:list");
+		expect(shouldShowWorkspacePendingEditsCTA(inputs)).toBe(false);
+	});
+
+	it("does not fire when a completed sweep card preempts the workspace view", () => {
+		const inputs = makeInputs({
+			hasCompletedSweep: true,
+			pendingEditSegmentCount: 12,
+		});
+		expect(selectReviewPanelBranch(inputs)).toBe("completed_sweep");
+		expect(shouldShowWorkspacePendingEditsCTA(inputs)).toBe(false);
+	});
+
+	it("pending-edits-only post-completion lands in workspace with the CTA on", () => {
+		// Reproduces the gap left by Pass 22: pending-edits-only users used
+		// to see the compact card; they now land in the workspace path AND
+		// must see the CTA there.
+		const inputs = makeInputs({
+			hasPostCompletionIdle: true,
+			hasReviewActivityHistory: true,
+			pendingEditSegmentCount: 4,
+		});
+		expect(selectReviewPanelBranch(inputs)).toBe("idle:workspace");
+		expect(shouldShowWorkspacePendingEditsCTA(inputs)).toBe(true);
 	});
 });
 

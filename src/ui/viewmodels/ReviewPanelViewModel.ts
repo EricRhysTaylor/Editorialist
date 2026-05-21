@@ -60,6 +60,12 @@ export interface ReviewPanelStateInputs {
 	// the compact "No active review" onboarding card so it appears only for
 	// genuinely empty workspaces.
 	hasReviewActivityHistory: boolean;
+	// Count of pending-edit segments across the active book. Drives the
+	// workspace-level pending-edits CTA (rendered inside the idle:workspace
+	// branch). The branch decision itself is independent of this count —
+	// branch routing uses hasReviewActivityHistory, which already includes
+	// "any pending edits at all" as one of its OR terms.
+	pendingEditSegmentCount: number;
 	suggestionsLength: number; // session?.suggestions.length ?? 0
 	hasHandoff: boolean; // session && plugin.getGuidedSweepHandoffState() != null
 	hasFilteredSuggestions: boolean; // session && getFilteredSuggestions(session.suggestions).length > 0
@@ -74,6 +80,7 @@ export const REVIEW_PANEL_INPUT_GATHERERS: Record<keyof ReviewPanelStateInputs, 
 		"!session && !completedSweep ? Boolean(plugin.getPostCompletionIdleState()) : false",
 	hasReviewActivityHistory:
 		"plugin.getSweepRegistryEntries().length > 0 || (plugin.getPendingEditsSummary()?.segmentCount ?? 0) > 0 || plugin.getSortedReviewerProfiles().length > 0 || plugin.getReviewStateOverview() != null",
+	pendingEditSegmentCount: "plugin.getPendingEditsSummary()?.segmentCount ?? 0",
 	suggestionsLength: "session?.suggestions.length ?? 0",
 	hasHandoff: "session ? Boolean(plugin.getGuidedSweepHandoffState()) : false",
 	hasFilteredSuggestions:
@@ -109,6 +116,15 @@ export function selectReviewPanelBranch(inputs: ReviewPanelStateInputs): ReviewP
 	}
 
 	return "session:list";
+}
+
+// True iff the workspace idle branch should render the pending-edits CTA
+// block. The CTA only makes sense in the idle:workspace branch — completed
+// sweep, an active session, or the compact onboarding card all preempt it.
+// This predicate exists so the rendering decision in ReviewPanel.render()
+// is pinned by fixtures and trivially testable.
+export function shouldShowWorkspacePendingEditsCTA(inputs: ReviewPanelStateInputs): boolean {
+	return selectReviewPanelBranch(inputs) === "idle:workspace" && inputs.pendingEditSegmentCount > 0;
 }
 
 // ── Pure helpers extracted from ReviewPanel ──────────────────────────────
