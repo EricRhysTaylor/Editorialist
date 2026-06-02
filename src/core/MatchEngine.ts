@@ -282,7 +282,7 @@ export class MatchEngine {
 				anchorEnd: anchor.endOffset,
 				placement,
 				canApply: false,
-				reason: target.reason ?? "Target text not found.",
+				reason: this.describeMoveSideFailure("source", target),
 			};
 		}
 
@@ -294,7 +294,7 @@ export class MatchEngine {
 				targetEnd: target.endOffset,
 				placement,
 				canApply: false,
-				reason: anchor.reason ?? "Anchor text not found.",
+				reason: this.describeMoveSideFailure("destination", anchor),
 			};
 		}
 
@@ -362,6 +362,18 @@ export class MatchEngine {
 			canApply: true,
 			reason: placement ? `Ready to move target ${placement} anchor.` : "Ready to move target.",
 		};
+	}
+
+	// A move has two distinct sides — the "source" (text to move) and the
+	// "destination" (the anchor it lands next to). When one fails to resolve the
+	// reviewer needs to know WHICH side is the problem; the bare per-target reason
+	// ("Text not found in the manuscript.") is identical for both and hid that.
+	private describeMoveSideFailure(side: "source" | "destination", ref: ReviewTargetRef): string {
+		const what = side === "source" ? "the text to move" : "the destination text";
+		if (ref.matchType === "multiple") {
+			return `Found ${what} more than once in the manuscript, so it can't be located unambiguously.`;
+		}
+		return `Couldn't find ${what} in the manuscript.`;
 	}
 
 	private isRelocationAlreadyApplied(

@@ -180,6 +180,45 @@ export class PendingEditsCoordinator {
 		}
 	}
 
+	// Scene-scoped variant of startPendingEditsReview: collects the active book
+	// but narrows the session to a single scene so the reviewer can clear the
+	// scene in front of them without iterating the whole book. The session shape
+	// is identical (a `scenes` array), so navigation, the toolbar projection, and
+	// complete/skip all work unchanged — there is just one scene to walk.
+	async startPendingEditsReviewForScene(scenePath: string): Promise<void> {
+		this.clearInquiryMaps();
+
+		const result = await collectPendingEdits(this.host.app);
+		if (!result.ok) {
+			new Notice(describeCollectFailure(result.reason));
+			this.pendingEditsSession = null;
+			return;
+		}
+
+		const scene = result.session.scenes.find((candidate) => candidate.scenePath === scenePath);
+		if (!scene || scene.segments.length === 0) {
+			new Notice("No pending edits in this scene.");
+			return;
+		}
+
+		this.pendingEditsSession = {
+			...result.session,
+			scenes: [scene],
+			selectedSegmentId: scene.segments[0]?.id ?? null,
+		};
+
+		const count = scene.segments.length;
+		new Notice(`Pending edits: ${count} item${count === 1 ? "" : "s"} in ${scene.sceneTitle}.`);
+
+		this.host.closeSettingsModal();
+		await this.host.openReviewPanel();
+
+		const firstSegment = scene.segments[0] ?? null;
+		if (firstSegment) {
+			await this.openPendingEditSegment(firstSegment);
+		}
+	}
+
 	async openPendingEditSegment(segment: PendingEditSegment): Promise<void> {
 		const session = this.pendingEditsSession;
 		if (!session) {

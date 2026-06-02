@@ -535,7 +535,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		}
 	}
 
-	private renderPendingEditsEntry(parent: HTMLElement, count: number, _notePath: string): void {
+	private renderPendingEditsEntry(parent: HTMLElement, count: number, notePath: string): void {
 		const entry = parent.createDiv({ cls: "editorialist-panel__comment-entry editorialist-panel__comment-entry--pending" });
 
 		const header = entry.createDiv({ cls: "editorialist-panel__comment-entry-header" });
@@ -549,11 +549,11 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		const actionRow = entry.createDiv({ cls: "editorialist-panel__comment-entry-action" });
 		const link = actionRow.createEl("a", {
 			cls: "editorialist-panel__comment-entry-action-link",
-			attr: { href: "#", title: "Start a pending-edits review across the active book" },
+			attr: { href: "#", title: "Review the pending edits on this scene" },
 		});
-		link.createSpan({ text: "→ Review pending edits" });
+		link.createSpan({ text: "→ Review pending edits in this scene" });
 		this.bindImmediateAction(link, () => {
-			void this.plugin.startPendingEditsReview();
+			void this.plugin.startPendingEditsReviewForScene(notePath);
 		});
 	}
 
@@ -890,6 +890,8 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 			cls: "editorialist-suggestion__structure-bridge editorialist-suggestion__structure-bridge--move",
 		});
 		const destinationColumn = split.createDiv({ cls: "editorialist-suggestion__structure-column" });
+		const direction = this.getMoveDirection(suggestion);
+		const destinationResolved = this.plugin.canJumpToSuggestionAnchor(suggestion.id);
 		const placementLabel =
 			suggestion.payload.placement === "after" ? "Place it after this" : "Place it before this";
 		const placementIcon = suggestion.payload.placement === "after" ? "corner-up-left" : "corner-down-left";
@@ -904,18 +906,44 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 			hideHeader: true,
 		});
 
+		// The bridge arrow points the reviewer toward the destination: up if it
+		// sits earlier in the manuscript, down if later. Falls back to a neutral
+		// arrow when the destination couldn't be located (direction unknown).
 		const bridgeIcon = bridge.createSpan({ cls: "editorialist-suggestion__structure-bridge-icon" });
-		setIcon(bridgeIcon, "arrow-right");
+		setIcon(bridgeIcon, direction === "up" ? "arrow-up" : direction === "down" ? "arrow-down" : "arrow-right");
+		if (direction) {
+			bridge.setAttribute("aria-label", `Destination is ${direction} in this scene`);
+		}
 
 		this.renderStructureMiniHeader(destinationColumn, placementLabel, {
-			icon: placementIcon,
+			icon: direction === "up" ? "arrow-up" : direction === "down" ? "arrow-down" : placementIcon,
 			align: "start",
 		});
 		this.renderStructureBlock(destinationColumn, "", suggestion.payload.anchor, {
 			accent: "anchor",
 			tone: "muted",
 			hideHeader: true,
+			// When the destination resolved, clicking jumps the editor to it so the
+			// reviewer can see exactly where the text lands. When it didn't, flag
+			// the block so the card itself shows which side failed.
+			...(destinationResolved
+				? {
+						onActivate: () => void this.plugin.jumpToSuggestionAnchor(suggestion.id),
+						activateHint: "Jump",
+						activateLabel: "Jump to the destination",
+					}
+				: { unresolved: true }),
 		});
+	}
+
+	private getMoveDirection(
+		suggestion: Extract<ReviewSuggestion, { operation: "move" }>,
+	): "up" | "down" | null {
+		const relocation = suggestion.location.relocation;
+		if (!relocation || relocation.targetStart === undefined || relocation.anchorStart === undefined) {
+			return null;
+		}
+		return relocation.anchorStart < relocation.targetStart ? "up" : "down";
 	}
 
 	private renderDeleteStructure(parent: HTMLElement, label: string, text: string): void {
@@ -935,12 +963,16 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		text: string,
 		options: {
 			accent?: "anchor" | "source";
+			activateHint?: string;
+			activateLabel?: string;
 			copyHint?: string;
 			copyNotice?: string;
 			hideHeader?: boolean;
 			icon?: string;
+			onActivate?: () => void;
 			state?: "insert" | "delete";
 			tone: "active" | "ghost" | "muted";
+			unresolved?: boolean;
 		},
 	): void {
 		const block = parent.createDiv({
@@ -949,7 +981,18 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		if (options.accent) {
 			block.addClass(`editorialist-suggestion__structure-block--${options.accent}`);
 		}
-		if (options.copyHint) {
+		if (options.unresolved) {
+			block.addClass("editorialist-suggestion__structure-block--unresolved");
+		}
+		if (options.onActivate) {
+			block.addClass("is-actionable");
+			block.setAttribute("role", "button");
+			block.setAttribute("tabindex", "0");
+			if (options.activateLabel) {
+				block.setAttribute("aria-label", options.activateLabel);
+			}
+			this.bindImmediateAction(block, options.onActivate);
+		} else if (options.copyHint) {
 			block.addClass("is-copyable");
 			block.setAttribute("role", "button");
 			block.setAttribute("tabindex", "0");
@@ -978,6 +1021,13 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 					text: options.copyHint,
 				});
 			}
+		}
+		if (options.activateHint) {
+			const hint = block.createSpan({
+				cls: "editorialist-suggestion__structure-action-hint",
+			});
+			setIcon(hint.createSpan({ cls: "editorialist-suggestion__structure-action-hint-icon" }), "scan-search");
+			hint.createSpan({ text: options.activateHint });
 		}
 		block.createDiv({
 			cls: "editorialist-suggestion__structure-block-body",

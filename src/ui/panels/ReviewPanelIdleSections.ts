@@ -130,6 +130,25 @@ export function renderCompletedSweepCard(
 			return;
 		}
 
+		if (step.action === "pending" && step.scenePath) {
+			const scenePath = step.scenePath;
+			const link = item.createEl("a", {
+				cls: "editorialist-panel__completion-step-link",
+				attr: {
+					href: "#",
+					title: step.label,
+				},
+			});
+			link.createSpan({
+				cls: "editorialist-panel__completion-link-text",
+				text: step.label,
+			});
+			host.bindAction(link, () => {
+				void plugin.startPendingEditsReviewForScene(scenePath);
+			});
+			return;
+		}
+
 		item.createSpan({
 			cls: "editorialist-panel__completion-step-text",
 			text: step.label,

@@ -274,6 +274,61 @@ describe("PendingEditsCoordinator — inquiry brief map", () => {
 	});
 });
 
+describe("PendingEditsCoordinator — scene-scoped review", () => {
+	function sceneSegment(scenePath: string, id: string): PendingEditSegment {
+		return {
+			id,
+			kind: "human",
+			scenePath,
+			sceneTitle: scenePath,
+			sceneOrder: 0,
+			text: "note",
+			lines: ["note"],
+		};
+	}
+
+	function multiSceneSession(): PendingEditsSession {
+		return {
+			bookId: "b",
+			bookTitle: "B",
+			sourceFolder: "Book",
+			collectedAt: 0,
+			scenes: [
+				{ scenePath: "Book/s1.md", sceneTitle: "S1", sceneOrder: 0, rawField: "", segments: [sceneSegment("Book/s1.md", "s1-a")] },
+				{ scenePath: "Book/s2.md", sceneTitle: "S2", sceneOrder: 1, rawField: "", segments: [sceneSegment("Book/s2.md", "s2-a"), sceneSegment("Book/s2.md", "s2-b")] },
+			],
+			selectedSegmentId: null,
+		};
+	}
+
+	it("narrows the session to the requested scene only", async () => {
+		const { host, calls } = makeHost();
+		collectResult = { ok: true, session: multiSceneSession() };
+		const c = new PendingEditsCoordinator(host);
+		c.initialize();
+
+		await c.startPendingEditsReviewForScene("Book/s2.md");
+
+		const active = c.getPendingEditsSession();
+		expect(active?.scenes).toHaveLength(1);
+		expect(active?.scenes[0]?.scenePath).toBe("Book/s2.md");
+		expect(active?.selectedSegmentId).toBe("s2-a");
+		expect(calls).toContain("openReviewPanel");
+	});
+
+	it("does not open a session when the scene has no pending edits", async () => {
+		const { host, calls } = makeHost();
+		collectResult = { ok: true, session: multiSceneSession() };
+		const c = new PendingEditsCoordinator(host);
+		c.initialize();
+
+		await c.startPendingEditsReviewForScene("Book/nonexistent.md");
+
+		expect(c.getPendingEditsSession()).toBeNull();
+		expect(calls).not.toContain("openReviewPanel");
+	});
+});
+
 describe("PendingEditsCoordinator — summary dedupe", () => {
 	it("coalesces concurrent non-forced refreshes into one collect", async () => {
 		const { host } = makeHost();

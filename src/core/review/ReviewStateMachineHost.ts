@@ -60,7 +60,7 @@ export interface ReviewStateMachineHost {
 	getReviewNoteContext(): ReviewNoteContextLike | null;
 	getActiveEditorView(): unknown | null;
 	focusReviewLeaf(view: unknown): Promise<void>;
-	executeEditorUndo(): boolean; // wraps app.commands.executeCommandById("editor:undo")
+	executeEditorUndo(): boolean; // drives the active MarkdownView editor's undo(); returns whether the document changed
 	notify(message: string): void; // wraps new Notice(...)
 
 	// — guards / resolvers (atomic adapter methods) —

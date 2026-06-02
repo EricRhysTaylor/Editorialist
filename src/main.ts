@@ -23,6 +23,7 @@ import {
 	hasLiveActionableSuggestions as hasLiveActionableSuggestionsShared,
 } from "./core/review/SuggestionTraversal";
 import { ReviewStateMachine } from "./core/review/ReviewStateMachine";
+import { runEditorUndo } from "./core/review/EditorUndo";
 import type { ReviewStateMachineHost } from "./core/review/ReviewStateMachineHost";
 import { computeNoteTextFingerprint } from "./core/review/SessionAxis";
 import {
@@ -131,8 +132,9 @@ interface CompletedSweepPanelState {
 	editsReviewedLabel: string;
 	durationLabel?: string;
 	nextSteps: Array<{
-		action?: "clean" | "import" | "start";
+		action?: "clean" | "import" | "pending" | "start";
 		label: string;
+		scenePath?: string;
 	}>;
 	title: string;
 }
@@ -546,6 +548,10 @@ export default class EditorialistPlugin extends Plugin {
 		await this.pendingEdits.startPendingEditsReview();
 	}
 
+	async startPendingEditsReviewForScene(scenePath: string): Promise<void> {
+		await this.pendingEdits.startPendingEditsReviewForScene(scenePath);
+	}
+
 	async openPendingEditSegment(segment: PendingEditSegment): Promise<void> {
 		await this.pendingEdits.openPendingEditSegment(segment);
 	}
@@ -787,10 +793,7 @@ export default class EditorialistPlugin extends Plugin {
 			getReviewNoteContext: () => plugin.getReviewNoteContext(),
 			getActiveEditorView: () => plugin.getActiveEditorView(),
 			focusReviewLeaf: (view) => plugin.focusReviewLeaf(view as MarkdownView),
-			executeEditorUndo: () =>
-				(this.app as typeof this.app & {
-					commands?: { executeCommandById: (commandId: string) => boolean };
-				}).commands?.executeCommandById("editor:undo") ?? false,
+			executeEditorUndo: () => runEditorUndo(this.app.workspace.getActiveViewOfType(MarkdownView)),
 			notify: (message) => {
 				new Notice(message);
 			},
@@ -1110,6 +1113,21 @@ export default class EditorialistPlugin extends Plugin {
 		nextSteps.push({ action: "import", label: "Import new revision notes" });
 		if (!isCleaned && (entry?.importedNotePaths.length ?? 0) > 0) {
 			nextSteps.push({ action: "clean", label: "Clean review blocks" });
+		}
+
+		// End-of-batch reminder: if the scene the reviewer just finished still
+		// carries pending edits (human notes / inquiry items), offer to address
+		// them right here rather than leaving them for a separate book-wide pass.
+		const activeScenePath = this.getReviewNoteContext()?.filePath ?? this.app.workspace.getActiveFile()?.path;
+		const activeScenePendingCount = activeScenePath
+			? this.getPendingEditsCountForScene(activeScenePath)
+			: 0;
+		if (activeScenePath && activeScenePendingCount > 0) {
+			nextSteps.push({
+				action: "pending",
+				label: `Address ${activeScenePendingCount} pending edit${activeScenePendingCount === 1 ? "" : "s"} in this scene`,
+				scenePath: activeScenePath,
+			});
 		}
 
 		return {
