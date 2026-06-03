@@ -1,0 +1,27 @@
+name: Quality Gate
+
+# Blocking, deterministic quality gates for ordinary pushes/PRs. This workflow
+# avoids npm run build because build copies to a local vault and can trigger
+# backup behavior; check:ci uses build-only instead.
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Quality checks
+        run: npm run check:ci
