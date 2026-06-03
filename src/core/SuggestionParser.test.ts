@@ -190,3 +190,50 @@ describe("SuggestionParser — CONDENSE anchors", () => {
 		expect(s.payload.target).toContain("she wonders");
 	});
 });
+
+describe("SuggestionParser — EXPAND", () => {
+	function expandNote(lines: string[]): string {
+		return fenced(["Reviewer: Mara", "ReviewerType: beta-reader", "", ...lines].join("\n"));
+	}
+
+	it("parses a direct expand (Suggestion present) as executionMode 'direct'", () => {
+		const parsed = makeParser().parse(
+			expandNote([
+				"=== EXPAND ===",
+				"SceneId: scn_12345678",
+				"Target: She looked away and said nothing.",
+				"Suggestion: She looked away, jaw tightening, and let the silence stretch before she said nothing.",
+				"Why: The emotional turn feels summarized.",
+			]),
+		);
+		expect(parsed.suggestions).toHaveLength(1);
+		const s = parsed.suggestions[0];
+		expect(s.operation).toBe("expand");
+		if (s.operation !== "expand") return;
+		expect(s.executionMode).toBe("direct");
+		expect(s.payload.target).toBe("She looked away and said nothing.");
+		expect(s.payload.suggestion).toContain("let the silence stretch");
+		expect(s.routing?.sceneId).toBe("scn_12345678");
+	});
+
+	it("parses an advisory expand (no Suggestion) as executionMode 'advisory'", () => {
+		const parsed = makeParser().parse(
+			expandNote([
+				"=== EXPAND ===",
+				"Target: She looked away and said nothing.",
+				"Why: Slow this beat down with more internal reaction.",
+			]),
+		);
+		expect(parsed.suggestions).toHaveLength(1);
+		const s = parsed.suggestions[0];
+		expect(s.operation).toBe("expand");
+		if (s.operation !== "expand") return;
+		expect(s.executionMode).toBe("advisory");
+		expect(s.payload.suggestion).toBeUndefined();
+	});
+
+	it("drops an expand entry with no Target", () => {
+		const parsed = makeParser().parse(expandNote(["=== EXPAND ===", "Why: no target supplied"]));
+		expect(parsed.suggestions).toHaveLength(0);
+	});
+});

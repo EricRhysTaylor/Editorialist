@@ -726,7 +726,7 @@ export class EditorialistModal extends Modal {
 			return {
 				headline: "No formatted revision notes detected",
 				details: [
-					"Editorialist looks for `=== EDIT ===`, `=== MEMO ===`, `=== CUT ===`, `=== CONDENSE ===`, or `=== MOVE ===` section markers.",
+					"Editorialist looks for `=== EDIT ===`, `=== MEMO ===`, `=== CUT ===`, `=== CONDENSE ===`, `=== EXPAND ===`, or `=== MOVE ===` section markers.",
 					"The paste needs a metadata header (Template:, Reviewer:, etc.) followed by at least one operation block.",
 				],
 				hint: "Click 'Copy formatting instructions' below to see the expected shape, then run it through your AI again.",

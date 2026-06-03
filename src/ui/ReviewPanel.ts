@@ -867,7 +867,17 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 					suggestion.payload.target,
 					"Suggested version",
 					suggestion.payload.suggestion ?? "Condense this paragraph.",
-					true,
+					"condense",
+				);
+				return true;
+			case "expand":
+				this.renderComparisonStructure(
+					parent,
+					"Expand this",
+					suggestion.payload.target,
+					"Suggested version",
+					suggestion.payload.suggestion ?? "Develop this beat.",
+					"expand",
 				);
 				return true;
 			case "cut":
@@ -885,26 +895,40 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		beforeText: string,
 		afterLabel: string,
 		afterText: string,
-		isCondense = false,
+		variant: "edit" | "condense" | "expand" = "edit",
 	): void {
+		const isCondense = variant === "condense";
+		const isExpand = variant === "expand";
+		// Condense and expand share the "reshape a passage into a suggested
+		// version" visual treatment; only the leading icon and copy text differ.
+		const isReshape = isCondense || isExpand;
+		const variantClass = isCondense
+			? " editorialist-suggestion__structure--condense"
+			: isExpand
+				? " editorialist-suggestion__structure--expand"
+				: "";
 		const structure = parent.createDiv({
-			cls: `editorialist-suggestion__structure editorialist-suggestion__structure--comparison${isCondense ? " editorialist-suggestion__structure--condense" : ""}`,
+			cls: `editorialist-suggestion__structure editorialist-suggestion__structure--comparison${variantClass}`,
 		});
 		this.renderStructureBlock(structure, beforeLabel, beforeText, {
-			icon: isCondense ? "minimize-2" : "align-left",
+			icon: isCondense ? "minimize-2" : isExpand ? "maximize-2" : "align-left",
 			tone: "ghost",
 		});
 		const bridge = structure.createDiv({ cls: "editorialist-suggestion__structure-bridge" });
 		const bridgeIcon = bridge.createSpan({ cls: "editorialist-suggestion__structure-bridge-icon" });
-		setIcon(bridgeIcon, isCondense ? "arrow-down" : "arrow-right");
+		setIcon(bridgeIcon, isReshape ? "arrow-down" : "arrow-right");
 		bridge.createSpan({
 			cls: "editorialist-suggestion__structure-bridge-text",
-			text: isCondense ? "Condense to this version" : "Replace with this version",
+			text: isCondense
+				? "Condense to this version"
+				: isExpand
+					? "Expand to this version"
+					: "Replace with this version",
 		});
 		this.renderStructureBlock(structure, afterLabel, afterText, {
-			icon: isCondense ? "sparkles" : "check",
+			icon: isReshape ? "sparkles" : "check",
 			copyHint: "Click to copy",
-			copyNotice: isCondense ? "Suggestion copied" : "Revised text copied",
+			copyNotice: isReshape ? "Suggestion copied" : "Revised text copied",
 			tone: "active",
 		});
 	}
@@ -1100,6 +1124,8 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 				return "Remove paragraph";
 			case "condense":
 				return suggestion.payload.suggestion ?? "Condense paragraph";
+			case "expand":
+				return suggestion.payload.suggestion ?? "Develop this beat";
 			case "move":
 				return suggestion.payload.placement === "after"
 					? "Move text after another passage"
@@ -1529,6 +1555,8 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 						return "Already removed";
 					case "condense":
 						return "Already revised";
+					case "expand":
+						return "Already expanded";
 					case "move":
 						return "Already moved";
 				}
@@ -1540,6 +1568,8 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 					return "Text removed";
 				case "condense":
 					return "Condensed";
+				case "expand":
+					return "Expanded";
 				case "move":
 					return "Moved";
 			}
@@ -1565,6 +1595,12 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 					return "Already removed";
 				case "condense":
 					return "Already revised";
+				case "expand":
+					// Target text isn't in the manuscript. Unlike an already-applied
+					// match, we can't claim it was expanded — advisory expands often
+					// have no suggestion to detect, so an absent target just means we
+					// couldn't locate the passage.
+					return "Passage not located";
 				case "move":
 					return "Source missing";
 			}
@@ -1609,6 +1645,8 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 				return "scissors-line-dashed";
 			case "condense":
 				return "minimize-2";
+			case "expand":
+				return "maximize-2";
 			case "move":
 				return "arrow-right-left";
 		}

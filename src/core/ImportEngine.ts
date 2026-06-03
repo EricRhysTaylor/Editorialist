@@ -512,6 +512,8 @@ export class ImportEngine {
 				return suggestion.payload.target;
 			case "condense":
 				return suggestion.payload.target;
+			case "expand":
+				return suggestion.payload.target;
 			case "move":
 				return suggestion.payload.target;
 			default:
@@ -525,6 +527,7 @@ export class ImportEngine {
 				return "original";
 			case "cut":
 			case "condense":
+			case "expand":
 				return "target";
 			case "move":
 				return "target and anchor";
@@ -579,6 +582,11 @@ export class ImportEngine {
 					normalizedCount: this.findAllNormalizedMatches(noteText, suggestion.payload.target),
 				};
 			case "condense":
+				return {
+					exactCount: this.findAllExactMatches(noteText, suggestion.payload.target).length,
+					normalizedCount: this.findAllNormalizedMatches(noteText, suggestion.payload.target),
+				};
+			case "expand":
 				return {
 					exactCount: this.findAllExactMatches(noteText, suggestion.payload.target).length,
 					normalizedCount: this.findAllNormalizedMatches(noteText, suggestion.payload.target),
@@ -843,6 +851,12 @@ export class ImportEngine {
 					lines.push(`Target: ${result.suggestion.payload.target}`);
 					break;
 				case "condense":
+					lines.push(`Target: ${result.suggestion.payload.target}`);
+					if (result.suggestion.payload.suggestion) {
+						lines.push(`Suggestion: ${result.suggestion.payload.suggestion}`);
+					}
+					break;
+				case "expand":
 					lines.push(`Target: ${result.suggestion.payload.target}`);
 					if (result.suggestion.payload.suggestion) {
 						lines.push(`Suggestion: ${result.suggestion.payload.suggestion}`);

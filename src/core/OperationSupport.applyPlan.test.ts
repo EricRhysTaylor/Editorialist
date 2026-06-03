@@ -4,6 +4,7 @@ import type {
 	CondenseSuggestion,
 	CutSuggestion,
 	EditSuggestion,
+	ExpandSuggestion,
 	MatchType,
 	MoveSuggestion,
 	ReviewPlacement,
@@ -70,6 +71,23 @@ function condenseSuggestion(
 		source,
 		location: { target: t },
 		executionMode: "direct",
+		payload,
+	};
+}
+
+function expandSuggestion(
+	t: ReviewTargetRef | undefined,
+	payload: { target: string; suggestion?: string },
+	executionMode: "direct" | "advisory" = "direct",
+): ExpandSuggestion {
+	return {
+		id: "ex",
+		operation: "expand",
+		status: "pending",
+		contributor,
+		source,
+		location: { target: t },
+		executionMode,
 		payload,
 	};
 }
@@ -193,6 +211,38 @@ describe("createSuggestionApplyPlan — condense", () => {
 			suggestion: "tight",
 		});
 		expect(createSuggestionApplyPlan("ZZZZ winded text", s)).toBeNull();
+	});
+});
+
+describe("createSuggestionApplyPlan — expand", () => {
+	it("direct expand with suggestion returns a replace plan over the target span", () => {
+		const s = expandSuggestion(target({ startOffset: 0, endOffset: 5 }), {
+			target: "terse",
+			suggestion: "a much longer, developed beat",
+		});
+		expect(createSuggestionApplyPlan("terse text", s)).toEqual({
+			from: 0,
+			to: 5,
+			text: "a much longer, developed beat",
+		});
+	});
+
+	it("advisory expand (no suggestion) => null — guidance only, nothing to apply", () => {
+		const s = expandSuggestion(target({ startOffset: 0, endOffset: 5 }), { target: "terse" }, "advisory");
+		expect(createSuggestionApplyPlan("terse text", s)).toBeNull();
+	});
+
+	it("direct mode but missing payload.suggestion => null", () => {
+		const s = expandSuggestion(target({ startOffset: 0, endOffset: 5 }), { target: "terse" });
+		expect(createSuggestionApplyPlan("terse text", s)).toBeNull();
+	});
+
+	it("target span mismatch => null", () => {
+		const s = expandSuggestion(target({ startOffset: 0, endOffset: 5 }), {
+			target: "terse",
+			suggestion: "longer",
+		});
+		expect(createSuggestionApplyPlan("ZZZZZ text", s)).toBeNull();
 	});
 });
 

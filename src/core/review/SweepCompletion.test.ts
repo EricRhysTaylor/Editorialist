@@ -123,7 +123,7 @@ describe("SweepCompletion — completion rule", () => {
 });
 
 function buildOpSuggestion(
-	kind: "move" | "condense",
+	kind: "move" | "condense" | "expand",
 	status: ReviewStatus,
 ): ReviewSuggestion {
 	const parser = new SuggestionParser(new ContributorDirectory());
@@ -134,10 +134,16 @@ SceneId: scn_test
 Target: the target line
 After: the anchor line
 Why: testing`
-			: `=== CONDENSE ===
+			: kind === "condense"
+				? `=== CONDENSE ===
 SceneId: scn_test
 Target: the long passage to tighten
 Suggestion: tight
+Why: testing`
+				: `=== EXPAND ===
+SceneId: scn_test
+Target: the terse beat to develop
+Suggestion: the terse beat, now developed with interior reaction
 Why: testing`;
 	const note = `\`\`\`editorialist-review
 Reviewer: GPT-5.4
@@ -156,8 +162,8 @@ ${section}
 }
 
 describe("SweepCompletion — canonical rule across all operations (mixed pass)", () => {
-	it("MOVE and CONDENSE tally by status identically to EDIT", () => {
-		for (const kind of ["move", "condense"] as const) {
+	it("MOVE, CONDENSE, and EXPAND tally by status identically to EDIT", () => {
+		for (const kind of ["move", "condense", "expand"] as const) {
 			expect(tallySuggestionStatuses([buildOpSuggestion(kind, "accepted")]).accepted).toBe(1);
 			expect(tallySuggestionStatuses([buildOpSuggestion(kind, "rejected")]).rejected).toBe(1);
 			expect(tallySuggestionStatuses([buildOpSuggestion(kind, "rewritten")]).rewritten).toBe(1);
@@ -165,17 +171,18 @@ describe("SweepCompletion — canonical rule across all operations (mixed pass)"
 		}
 	});
 
-	it("a fully-decided mixed pass (accept/reject/rewrite + MOVE + CONDENSE) is complete", () => {
+	it("a fully-decided mixed pass (accept/reject/rewrite + MOVE + CONDENSE + EXPAND) is complete", () => {
 		const suggestions = [
 			buildEditSuggestion("accepted"),
 			buildEditSuggestion("rejected"),
 			buildEditSuggestion("rewritten"),
 			buildOpSuggestion("move", "accepted"),
 			buildOpSuggestion("condense", "rewritten"),
+			buildOpSuggestion("expand", "accepted"),
 		];
 		const tally = tallySuggestionStatuses(suggestions);
 		// DONE = accepted + rejected + rewritten ; OPEN = pending + deferred + unresolved
-		expect(tally.accepted + tally.rejected + tally.rewritten).toBe(5);
+		expect(tally.accepted + tally.rejected + tally.rewritten).toBe(6);
 		expect(tally.pending + tally.deferred + tally.unresolved).toBe(0);
 		expect(isSweepComplete(suggestions)).toBe(true);
 		expect(deriveSweepSummary(suggestions).status).toBe("completed");

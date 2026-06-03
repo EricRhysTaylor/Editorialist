@@ -4,7 +4,7 @@
 // independently. This module is the single source so the paste-in format and
 // the re-parse format can never disagree.
 
-export const REVIEW_OPERATION_KEYWORDS = ["EDIT", "MOVE", "CUT", "CONDENSE", "MEMO"] as const;
+export const REVIEW_OPERATION_KEYWORDS = ["EDIT", "MOVE", "CUT", "CONDENSE", "EXPAND", "MEMO"] as const;
 export type ReviewOperationKeyword = (typeof REVIEW_OPERATION_KEYWORDS)[number];
 
 const OPS = REVIEW_OPERATION_KEYWORDS.join("|");

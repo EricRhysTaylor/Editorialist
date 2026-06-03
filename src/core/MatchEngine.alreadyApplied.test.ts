@@ -158,4 +158,51 @@ Why: tightening
     const matched = new MatchEngine().matchSuggestion(noteText, suggestion);
     expect(matched.location.target?.matchType).toBe("already_applied");
   });
+
+  it("resolves an expand target to an exact match in the manuscript", () => {
+    const target = "She looked away and said nothing.";
+    const noteText = `Prelude unrelated.\n\n${target}\n\nPostlude unrelated.`;
+
+    const parser = new SuggestionParser(new ContributorDirectory());
+    const note = `\`\`\`editorialist-review
+Reviewer: GPT-5.4
+ReviewerType: ai-editor
+
+=== EXPAND ===
+SceneId: scn_test
+Target: ${target}
+Suggestion: She looked away, jaw tightening, and let the silence stretch.
+Why: develop the beat
+\`\`\``;
+    const suggestion = parser.parse(note).suggestions[0];
+    if (!suggestion || suggestion.operation !== "expand") throw new Error("expected expand suggestion");
+
+    const matched = new MatchEngine().matchSuggestion(noteText, suggestion);
+    expect(matched.location.target?.matchType).toBe("exact");
+    expect(matched.location.target?.startOffset).toBe(noteText.indexOf(target));
+    expect(matched.status).toBe("pending");
+  });
+
+  it("detects expand already-applied when the expanded version lives in the manuscript", () => {
+    const after = "She looked away, jaw tightening, and let the silence stretch before she said nothing.";
+    const before = "She looked away and said nothing.";
+
+    const parser = new SuggestionParser(new ContributorDirectory());
+    const note = `\`\`\`editorialist-review
+Reviewer: GPT-5.4
+ReviewerType: ai-editor
+
+=== EXPAND ===
+SceneId: scn_test
+Target: ${before}
+Suggestion: ${after}
+Why: develop the beat
+\`\`\``;
+    const suggestion = parser.parse(note).suggestions[0];
+    if (!suggestion) throw new Error("expected one suggestion");
+
+    const noteText = `Prelude unrelated.\n\n${after}\n\nPostlude unrelated.`;
+    const matched = new MatchEngine().matchSuggestion(noteText, suggestion);
+    expect(matched.location.target?.matchType).toBe("already_applied");
+  });
 });

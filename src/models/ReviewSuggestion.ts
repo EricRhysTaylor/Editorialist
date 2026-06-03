@@ -5,7 +5,7 @@ import type {
 	ReviewerType,
 } from "./ContributorProfile";
 
-export const SUPPORTED_REVIEW_OPERATIONS = ["edit", "move", "cut", "condense"] as const;
+export const SUPPORTED_REVIEW_OPERATIONS = ["edit", "move", "cut", "condense", "expand"] as const;
 
 export type SupportedReviewOperationType = (typeof SUPPORTED_REVIEW_OPERATIONS)[number];
 
@@ -14,6 +14,7 @@ export const SUPPORTED_REVIEW_OPERATION_LABELS: Record<SupportedReviewOperationT
 	move: "Move",
 	cut: "Cut",
 	condense: "Condense",
+	expand: "Expand",
 };
 
 export type ReviewStatus = "pending" | "accepted" | "rejected" | "deferred" | "unresolved" | "rewritten";
@@ -123,12 +124,23 @@ export interface CondenseSuggestionPayload {
 	targetAnchors?: CondenseTargetAnchorPair;
 }
 
+// EXPAND mirrors CONDENSE: a target passage and an optional replacement. Where
+// CONDENSE tightens, EXPAND develops or slows a beat. Advisory mode (no
+// `suggestion`) is the dominant case — most expand feedback is "develop this"
+// rather than finished prose — so EXPAND deliberately omits CONDENSE's
+// anchor-pair shape, which exists only to elide long middle prose.
+export interface ExpandSuggestionPayload {
+	target: string;
+	suggestion?: string;
+}
+
 export type EditSuggestion = ReviewSuggestionBase<"edit", EditSuggestionPayload>;
 export type MoveSuggestion = ReviewSuggestionBase<"move", MoveSuggestionPayload>;
 export type CutSuggestion = ReviewSuggestionBase<"cut", CutSuggestionPayload>;
 export type CondenseSuggestion = ReviewSuggestionBase<"condense", CondenseSuggestionPayload>;
+export type ExpandSuggestion = ReviewSuggestionBase<"expand", ExpandSuggestionPayload>;
 
-export type ReviewSuggestion = EditSuggestion | MoveSuggestion | CutSuggestion | CondenseSuggestion;
+export type ReviewSuggestion = EditSuggestion | MoveSuggestion | CutSuggestion | CondenseSuggestion | ExpandSuggestion;
 
 export interface SceneMemo {
 	id: string;
@@ -175,4 +187,8 @@ export function isCutSuggestion(suggestion: ReviewSuggestion): suggestion is Cut
 
 export function isCondenseSuggestion(suggestion: ReviewSuggestion): suggestion is CondenseSuggestion {
 	return suggestion.operation === "condense";
+}
+
+export function isExpandSuggestion(suggestion: ReviewSuggestion): suggestion is ExpandSuggestion {
+	return suggestion.operation === "expand";
 }

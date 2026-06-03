@@ -2,6 +2,7 @@ import type {
 	CondenseSuggestion,
 	CutSuggestion,
 	EditSuggestion,
+	ExpandSuggestion,
 	MoveSuggestion,
 	RelocationResolution,
 	ReviewStatus,
@@ -46,6 +47,7 @@ export class MatchEngine {
 		move: (noteText, suggestion) => this.resolveMoveSuggestion(noteText, suggestion as MoveSuggestion),
 		cut: (noteText, suggestion) => this.resolveCutSuggestion(noteText, suggestion as CutSuggestion),
 		condense: (noteText, suggestion) => this.resolveCondenseSuggestion(noteText, suggestion as CondenseSuggestion),
+		expand: (noteText, suggestion) => this.resolveExpandSuggestion(noteText, suggestion as ExpandSuggestion),
 	};
 
 	matchSuggestions(noteText: string, suggestions: ReviewSuggestion[]): ReviewSuggestion[] {
@@ -158,6 +160,25 @@ export class MatchEngine {
 			return this.resolveCondenseAnchorPair(noteText, suggestion, anchors);
 		}
 
+		const resolution = this.resolveTextTarget(
+			noteText,
+			suggestion.payload.target,
+			suggestion.payload.suggestion,
+		);
+
+		return {
+			...suggestion,
+			status: this.resolveSuggestionStatus(suggestion.status, resolution),
+			location: {
+				target: resolution.target,
+			},
+		};
+	}
+
+	// EXPAND resolves like a non-anchor CONDENSE: locate the verbatim target, and
+	// pass the optional expanded `suggestion` as the alternate so an already-applied
+	// expansion (target gone, longer version present) is detected.
+	private resolveExpandSuggestion(noteText: string, suggestion: ExpandSuggestion): ExpandSuggestion {
 		const resolution = this.resolveTextTarget(
 			noteText,
 			suggestion.payload.target,
@@ -489,7 +510,7 @@ export class MatchEngine {
 		}
 
 		// Already-applied detection: when the AI's revised text appears in the
-		// manuscript (byte-exact or under fuzzy normalization), the edit/condense
+		// manuscript (byte-exact or under fuzzy normalization), the edit/condense/expand
 		// is in place. Particularly important for condense, where AFTER text is
 		// a multi-line paraphrase — byte-exact matching is fragile to any drift.
 		if (alternateText) {

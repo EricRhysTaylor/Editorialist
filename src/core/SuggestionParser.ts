@@ -3,6 +3,7 @@ import type {
 	CondenseTargetAnchorPair,
 	CutSuggestion,
 	EditSuggestion,
+	ExpandSuggestion,
 	MoveSuggestion,
 	ParsedReviewDocument,
 	SupportedReviewOperationType,
@@ -73,6 +74,7 @@ const OPERATION_HEADERS: Record<string, SupportedReviewOperationType> = {
 	MOVE: "move",
 	CUT: "cut",
 	CONDENSE: "condense",
+	EXPAND: "expand",
 };
 
 const SECTION_KINDS: Record<string, SectionKind> = {
@@ -87,6 +89,8 @@ export class SuggestionParser {
 		cut: (fields, suggestionId, source, metadata) => this.parseCutSuggestion(fields, suggestionId, source, metadata),
 		condense: (fields, suggestionId, source, metadata) =>
 			this.parseCondenseSuggestion(fields, suggestionId, source, metadata),
+		expand: (fields, suggestionId, source, metadata) =>
+			this.parseExpandSuggestion(fields, suggestionId, source, metadata),
 	};
 
 	constructor(private readonly reviewerDirectory: ContributorDirectory) {}
@@ -408,6 +412,39 @@ export class SuggestionParser {
 				target: rawTarget,
 				suggestion,
 				...(anchors ? { targetAnchors: anchors } : {}),
+			},
+		};
+	}
+
+	// Mirrors parseCondenseSuggestion minus the anchor-pair shape: EXPAND targets
+	// are short beats, not long elided passages. `Suggestion:` (or `Revised:`)
+	// makes it a direct expand the author can apply; its absence keeps it advisory
+	// ("develop this beat"), which is the dominant case.
+	private parseExpandSuggestion(
+		fields: Map<string, string[]>,
+		suggestionId: string,
+		source: ReviewSourceRef,
+		metadata: BlockMetadata,
+	): ExpandSuggestion | null {
+		const target = this.cleanField(fields.get("target")) ?? this.cleanField(fields.get("original"));
+		const suggestion = this.cleanField(fields.get("suggestion")) ?? this.cleanField(fields.get("revised"));
+		if (!target) {
+			return null;
+		}
+
+		return {
+			id: suggestionId,
+			operation: "expand",
+			status: "pending",
+			contributor: this.reviewerDirectory.resolveContributor(metadata.rawReviewer),
+			source,
+			location: {},
+			routing: this.parseRouting(fields),
+			why: this.cleanField(fields.get("why")),
+			executionMode: suggestion ? "direct" : "advisory",
+			payload: {
+				target,
+				suggestion,
 			},
 		};
 	}

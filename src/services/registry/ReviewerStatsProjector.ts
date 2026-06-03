@@ -58,7 +58,7 @@ export class ReviewerStatsProjector {
 					stats.accepted += 1;
 					if (record.operation === "move") {
 						stats.acceptedMoves = (stats.acceptedMoves ?? 0) + 1;
-					} else if (record.operation === "edit" || record.operation === "cut" || record.operation === "condense") {
+					} else if (record.operation === "edit" || record.operation === "cut" || record.operation === "condense" || record.operation === "expand") {
 						stats.acceptedEdits = (stats.acceptedEdits ?? 0) + 1;
 					}
 					break;
@@ -110,7 +110,7 @@ export class ReviewerStatsProjector {
 			stats.accepted = Math.max(0, stats.accepted + direction);
 			if (record.operation === "move") {
 				stats.acceptedMoves = Math.max(0, (stats.acceptedMoves ?? 0) + direction);
-			} else if (record.operation === "edit" || record.operation === "cut" || record.operation === "condense") {
+			} else if (record.operation === "edit" || record.operation === "cut" || record.operation === "condense" || record.operation === "expand") {
 				stats.acceptedEdits = Math.max(0, (stats.acceptedEdits ?? 0) + direction);
 			}
 		} else if (record.status === "pending") {

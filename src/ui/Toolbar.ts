@@ -8,6 +8,7 @@ const OPERATION_ICONS: Record<SupportedReviewOperationType, string> = {
 	edit: "file-pen-line",
 	cut: "scissors-line-dashed",
 	condense: "minimize-2",
+	expand: "maximize-2",
 	move: "arrow-right-left",
 };
 

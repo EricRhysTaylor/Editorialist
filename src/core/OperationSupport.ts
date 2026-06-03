@@ -2,10 +2,12 @@ import {
 	isCondenseSuggestion,
 	isCutSuggestion,
 	isEditSuggestion,
+	isExpandSuggestion,
 	isMoveSuggestion,
 	type CondenseSuggestion,
 	type CutSuggestion,
 	type EditSuggestion,
+	type ExpandSuggestion,
 	type MoveSuggestion,
 	type ReviewSuggestion,
 	type ReviewTargetRef,
@@ -279,6 +281,66 @@ const operationSupport: {
 			suggestion.payload.suggestion ?? "",
 		],
 	},
+	expand: {
+		canApply: (suggestion: ExpandSuggestion) =>
+			suggestion.executionMode === "direct" &&
+			Boolean(
+				suggestion.payload.suggestion &&
+					suggestion.location.target &&
+					suggestion.location.target.matchType === "exact" &&
+					suggestion.location.target.startOffset !== undefined &&
+					suggestion.location.target.endOffset !== undefined,
+			),
+		createApplyPlan: (noteText: string, suggestion: ExpandSuggestion) => {
+			if (!suggestion.payload.suggestion) {
+				return null;
+			}
+
+			const target = suggestion.location.target;
+			if (
+				!target ||
+				target.startOffset === undefined ||
+				target.endOffset === undefined ||
+				target.matchType !== "exact"
+			) {
+				return null;
+			}
+
+			const existingText = noteText.slice(target.startOffset, target.endOffset);
+			if (
+				existingText !== suggestion.payload.target
+				&& normalizeMatchText(existingText) !== normalizeMatchText(suggestion.payload.target)
+			) {
+				return null;
+			}
+
+			return {
+				from: target.startOffset,
+				to: target.endOffset,
+				text: suggestion.payload.suggestion,
+			};
+		},
+		getCopyBlocks: (suggestion: ExpandSuggestion) => [
+			{ label: "Expand this", body: suggestion.payload.target },
+			...(suggestion.payload.suggestion
+				? [{ label: "Suggested version", body: suggestion.payload.suggestion }]
+				: []),
+		],
+		getPrimaryTarget: (suggestion: ExpandSuggestion) => suggestion.location.target,
+		getReason: (suggestion: ExpandSuggestion) => {
+			if (suggestion.executionMode === "advisory") {
+				return suggestion.location.target?.reason
+					? `${suggestion.location.target.reason} Advisory expand guidance is not directly applicable yet.`
+					: "Advisory expand guidance is not directly applicable yet.";
+			}
+
+			return suggestion.location.target?.reason ?? "Awaiting expand resolution.";
+		},
+		getSignatureParts: (suggestion: ExpandSuggestion) => [
+			suggestion.payload.target,
+			suggestion.payload.suggestion ?? "",
+		],
+	},
 };
 
 export function getSuggestionPrimaryTarget(suggestion: ReviewSuggestion): ReviewTargetRef | undefined {
@@ -356,7 +418,7 @@ export function isImplicitlyAcceptedSuggestion(suggestion: ReviewSuggestion): bo
 
 	// For cut operations, "text not found" legitimately means the cut already
 	// happened — the target is gone from the manuscript, so the work is done.
-	// For edit/condense/move, "not found" instead means the AI's Original/Target
+	// For edit/condense/expand/move, "not found" instead means the AI's Original/Target
 	// snippet didn't match (punctuation drift, paraphrase, quote wrapping, etc.).
 	// Treating those as accepted silently completes the sweep and hides edits
 	// the user never acted on.
@@ -407,4 +469,4 @@ export function getSuggestionSignatureParts(suggestion: ReviewSuggestion): strin
 	return operationSupport[suggestion.operation].getSignatureParts(suggestion as never);
 }
 
-export { isCondenseSuggestion, isCutSuggestion, isEditSuggestion, isMoveSuggestion };
+export { isCondenseSuggestion, isCutSuggestion, isEditSuggestion, isExpandSuggestion, isMoveSuggestion };
