@@ -893,7 +893,7 @@ export default class EditorialistPlugin extends Plugin {
 		rewritten: number;
 		deferred: number;
 	} {
-		return this.batchProcessor.getBatchDecisionStats(batchId);
+		return this.registry.getBatchDecisionStats(batchId);
 	}
 
 	getSceneReviewRecords(options?: { activeBookOnly?: boolean }): SceneReviewRecord[] {

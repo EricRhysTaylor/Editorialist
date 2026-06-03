@@ -284,6 +284,88 @@ describe("invariant: reviewer stats equal a direct tally of the signal index", (
 	});
 });
 
+// ── batch stats read the durable signal index ────────────────────────────
+
+describe("invariant: batch decision stats come from durable reviewer signals", () => {
+	it("tallies exact sessionId-attributed signals instead of frozen sweep counts", async () => {
+		const { service } = makeService();
+		await service.syncReviewerSignalsForSession(
+			session("n.md", [
+				suggestion("r1", "accepted"),
+				suggestion("r1", "rejected"),
+				suggestion("r2", "rewritten"),
+				suggestion("r2", "deferred"),
+			]),
+			{ persist: false, sessionId: "batch-1" },
+		);
+		await service.syncReviewerSignalsForSession(
+			session("other.md", [suggestion("r1", "accepted")]),
+			{ persist: false, sessionId: "other" },
+		);
+		service.load({
+			...service.buildPluginData([]),
+			sweepRegistry: {
+				"batch-1": {
+					acceptedCount: 0,
+					deferredCount: 0,
+					importedNotePaths: ["n.md"],
+					rejectedCount: 0,
+					rewrittenCount: 0,
+				},
+			},
+		});
+
+		expect(service.getBatchDecisionStats("batch-1")).toEqual({
+			accepted: 1,
+			deferred: 1,
+			rejected: 1,
+			rewritten: 1,
+		});
+	});
+
+	it("falls back to note-identity matching for legacy signals without sessionId", () => {
+		const { service } = makeService();
+		service.load({
+			reviewerSignalIndex: {
+				a: {
+					key: "n.md::0::1::edit::direct::orig-a",
+					reviewerId: "r1",
+					status: "accepted",
+					operation: "edit",
+				},
+				b: {
+					key: "n.md::0::2::edit::direct::orig-b",
+					reviewerId: "r1",
+					status: "rewritten",
+					operation: "edit",
+				},
+				c: {
+					key: "other.md::0::3::edit::direct::orig-c",
+					reviewerId: "r2",
+					status: "rejected",
+					operation: "edit",
+				},
+			},
+			sweepRegistry: {
+				"batch-1": {
+					acceptedCount: 0,
+					importedNotePaths: [],
+					rejectedCount: 0,
+					rewrittenCount: 0,
+					sceneOrder: ["n.md"],
+				},
+			},
+		});
+
+		expect(service.getBatchDecisionStats("batch-1")).toEqual({
+			accepted: 1,
+			deferred: 0,
+			rejected: 0,
+			rewritten: 1,
+		});
+	});
+});
+
 // ── persisted decision keys resolve to real suggestions ──────────────────
 
 describe("invariant: every persisted decision key resolves to a session suggestion", () => {

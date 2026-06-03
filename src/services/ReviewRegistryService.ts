@@ -53,6 +53,13 @@ interface ReviewActivitySummary {
 	unresolved: number;
 }
 
+interface BatchDecisionStats {
+	accepted: number;
+	deferred: number;
+	rejected: number;
+	rewritten: number;
+}
+
 interface TrackingIdentitySummary {
 	editorialIdCount: number;
 	genericFrontmatterIdCount: number;
@@ -285,6 +292,53 @@ export class ReviewRegistryService {
 			completedSweeps: entries.filter((entry) => entry.status === "completed").length,
 			cleanedSweeps: entries.filter((entry) => entry.status === "cleaned").length,
 		};
+	}
+
+	// Recent Reviews should read decisions from the same durable source as the
+	// Settings activity summary. Modern signal records carry sessionId ===
+	// batchId, which is exact; legacy records can still be approximated by
+	// joining the sweep's historical note identities.
+	getBatchDecisionStats(batchId: string): BatchDecisionStats {
+		const exactStatuses = Object.values(this.reviewerSignalIndex)
+			.filter((record) => record.sessionId === batchId)
+			.map((record) => record.status);
+		const signalTotals = tallyReviewStatuses(
+			exactStatuses.length > 0 ? exactStatuses : this.getLegacyBatchSignalStatuses(batchId),
+		);
+
+		if (signalTotals.totalSuggestions > 0) {
+			return {
+				accepted: signalTotals.accepted,
+				deferred: signalTotals.deferred,
+				rejected: signalTotals.rejected,
+				rewritten: signalTotals.rewritten,
+			};
+		}
+
+		const entry = this.getSweepRegistryEntry(batchId);
+		if (entry) {
+			return {
+				accepted: entry.acceptedCount ?? 0,
+				deferred: entry.deferredCount ?? 0,
+				rejected: entry.rejectedCount ?? 0,
+				rewritten: entry.rewrittenCount ?? 0,
+			};
+		}
+
+		let accepted = 0;
+		let deferred = 0;
+		let rejected = 0;
+		let rewritten = 0;
+		for (const record of this.getSceneReviewRecords()) {
+			if (!record.batchIds.includes(batchId)) {
+				continue;
+			}
+			accepted += record.acceptedCount;
+			deferred += record.deferredCount;
+			rejected += record.rejectedCount;
+			rewritten += record.rewrittenCount;
+		}
+		return { accepted, deferred, rejected, rewritten };
 	}
 
 	// Resume detection for the import/Begin flow. Only an `in_progress` sweep is
@@ -752,6 +806,39 @@ export class ReviewRegistryService {
 		}
 
 		return [`scene:${sceneId}`, notePath];
+	}
+
+	private getHistoricalNoteIdentityKeys(notePath: string): string[] {
+		const keys = new Set<string>([notePath]);
+		const sceneId = this.getSceneIdForNotePath(notePath) ?? this.sceneReviewIndex[notePath]?.sceneId;
+		if (sceneId?.trim()) {
+			keys.add(`scene:${sceneId.trim()}`);
+		}
+		return [...keys];
+	}
+
+	private getLegacyBatchSignalStatuses(batchId: string): ReviewerSignalRecord["status"][] {
+		const entry = this.getSweepRegistryEntry(batchId);
+		if (!entry) {
+			return [];
+		}
+
+		const notePaths = new Set([
+			...entry.importedNotePaths,
+			...entry.sceneOrder,
+			...(entry.currentNotePath ? [entry.currentNotePath] : []),
+		]);
+		if (notePaths.size === 0) {
+			return [];
+		}
+
+		const keyPrefixes = [...notePaths].flatMap((path) =>
+			this.getHistoricalNoteIdentityKeys(path).map((identity) => `${identity}::`),
+		);
+
+		return Object.values(this.reviewerSignalIndex)
+			.filter((record) => !record.sessionId && keyPrefixes.some((prefix) => record.key.startsWith(prefix)))
+			.map((record) => record.status);
 	}
 
 	private getSceneIdForNotePath(notePath: string): string | undefined {
