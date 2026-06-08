@@ -338,6 +338,9 @@ export function createReviewToolbarElement(
 			},
 			!state.canComplete,
 		);
+		buildButton(actions, tracker, "Backup to cut file", "archive", () => {
+			void plugin.backupSelectionToCutFile();
+		}, false);
 		return overlay;
 	}
 
@@ -485,6 +488,9 @@ export function createReviewToolbarElement(
 	buildButton(actions, tracker, "Rewrite myself", "pen-line", () => {
 		void plugin.rewriteSelectedSuggestion();
 	}, !state.canRewrite);
+	buildButton(actions, tracker, "Backup to cut file", "archive", () => {
+		void plugin.backupSelectionToCutFile();
+	}, false);
 	if (state.canUndoLastAccept) {
 		buildButton(actions, tracker, "Undo", "rotate-ccw", () => {
 			void plugin.undoLastAppliedSuggestion();
@@ -513,6 +519,7 @@ function renderToolbarLegend(parent: HTMLElement, applyOperationLabel: string): 
 		{ icon: "list-checks", keys: "Shift + Cmd", label: "Apply to all" },
 		{ icon: "clock", keys: "Click", label: "Defer" },
 		{ icon: "pen-line", keys: "Click", label: "Rewrite myself" },
+		{ icon: "archive", keys: "Click", label: "Backup to cut file" },
 		{ icon: "circle-off", keys: "Click", label: "Reject" },
 		{ icon: "x", keys: "Click", label: "Hide toolbar" },
 	];

@@ -17,6 +17,7 @@
 import type {
 	ContributorProfile,
 	EditorialistPluginData,
+	EditorialistSettings,
 	PersistedReviewDecisionRecord,
 	ReviewerSignalRecord,
 	SceneReviewRecord,
@@ -42,6 +43,30 @@ const defaultLogger: MigrationLogger = {
 	warn: (message) => console.warn(message),
 };
 
+export function defaultEditorialistSettings(): EditorialistSettings {
+	return {
+		cutFolderOverride: "",
+	};
+}
+
+// Tolerant settings normalizer: a non-string or garbage cutFolderOverride
+// collapses to the empty-string "unset" default so a malformed data.json never
+// throws downstream.
+export function normalizeEditorialistSettings(raw: unknown): EditorialistSettings {
+	const defaults = defaultEditorialistSettings();
+	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+		return defaults;
+	}
+
+	const candidate = raw as Record<string, unknown>;
+	const cutFolderOverride =
+		typeof candidate.cutFolderOverride === "string" ? candidate.cutFolderOverride : defaults.cutFolderOverride;
+
+	return {
+		cutFolderOverride,
+	};
+}
+
 export function emptyPluginData(): EditorialistPluginData {
 	return {
 		version: EDITORIALIST_PLUGIN_DATA_VERSION,
@@ -50,6 +75,7 @@ export function emptyPluginData(): EditorialistPluginData {
 		reviewDecisionIndex: {},
 		sceneReviewIndex: {},
 		sweepRegistry: {},
+		settings: defaultEditorialistSettings(),
 	};
 }
 
@@ -113,6 +139,7 @@ function normalizeIntoCurrent(raw: Record<string, unknown>): EditorialistPluginD
 				| Partial<Record<string, Partial<ReviewSweepRegistryEntry> & { status?: ReviewSweepRegistryEntry["status"] | "cleaned_up" | "imported" }>>
 				| undefined,
 		),
+		settings: normalizeEditorialistSettings(raw.settings),
 	};
 }
 

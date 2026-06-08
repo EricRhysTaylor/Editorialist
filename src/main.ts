@@ -39,6 +39,7 @@ import type {
 	ReviewSweepRegistryEntry,
 } from "./models/ReviewImport";
 import type { ReviewSession, ReviewSuggestion, ReviewTargetRef } from "./models/ReviewSuggestion";
+import { CutArchiveService, type CutBackupSourceType } from "./core/CutArchiveService";
 import type {
 	ParsedContributorReference,
 	ContributorProfile,
@@ -182,6 +183,10 @@ export default class EditorialistPlugin extends Plugin {
 		() => this.savePluginData(),
 		(notePath) => this.resolveOpenNoteText(notePath),
 	);
+	private readonly cutArchive = new CutArchiveService(this.app, {
+		getCutFolderOverride: () => this.registry.getCutFolderOverride(),
+		getActiveBookScope: () => this.registry.getActiveBookScopeInfo(),
+	});
 	private readonly editorialismService = new EditorialismService(this.app);
 	private readonly workflow = new ReviewWorkflowService(this.store, this.registry, {
 		clearReviewSelection: async () => {
@@ -743,6 +748,127 @@ export default class EditorialistPlugin extends Plugin {
 
 	deferSelectedSuggestion(): void {
 		this.reviewActions.deferSelectedSuggestion();
+	}
+
+	getCutFolderOverride(): string {
+		return this.registry.getCutFolderOverride();
+	}
+
+	async setCutFolderOverride(value: string): Promise<void> {
+		this.registry.setCutFolderOverride(value);
+		await this.savePluginData();
+	}
+
+	// "Backup to cut file" — a preservation-only utility. It copies the current
+	// editor selection (or, as a fallback, a selected cut/condense suggestion's
+	// resolved target) into the scene's cut file. It deliberately does NOT change
+	// any suggestion status, sweep stats, or contributor metrics.
+	async backupSelectionToCutFile(): Promise<void> {
+		const resolved = this.resolveCutBackupSource();
+		if (!resolved) {
+			new Notice(
+				"Select text in the editor, or choose a cut or condense suggestion, to back up to the cut file.",
+			);
+			return;
+		}
+
+		try {
+			const result = await this.cutArchive.backup({
+				sceneFile: resolved.sceneFile,
+				text: resolved.text,
+				source: resolved.source,
+				scenePath: resolved.sceneFile.path,
+				operation: resolved.operation,
+				suggestionId: resolved.suggestionId,
+				contributor: resolved.contributor,
+				reason: resolved.reason,
+				backedUpAtIso: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+			});
+			const displayName = result.cutFilePath.split("/").pop() ?? result.cutFilePath;
+			new Notice(`Backed up to ${displayName}.`);
+		} catch (error) {
+			// eslint-disable-next-line no-console
+			console.error("Editorialist: failed to back up text to cut file", error);
+			new Notice("Could not write to the cut file. Check the cut folder path in settings.");
+		}
+	}
+
+	// Resolves BOTH the text and the scene file it belongs to, so the two never
+	// drift apart: a manual selection archives into the file the selection lives
+	// in; a suggestion-target fallback archives into the suggestion's own scene
+	// (the session note), never whatever happens to be the active markdown file.
+	private resolveCutBackupSource(): {
+		sceneFile: TFile;
+		text: string;
+		source: CutBackupSourceType;
+		operation?: ReviewSuggestion["operation"];
+		suggestionId?: string;
+		contributor?: string;
+		reason?: string;
+	} | null {
+		// 1. Live editor selection wins. Read it at action time (not from cached
+		//    toolbar state) so a toolbar click that doesn't steal focus still sees
+		//    the user's current selection, and archive into that file.
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		const selection = view?.editor.getSelection();
+		if (view?.file && selection && selection.trim()) {
+			return { sceneFile: view.file, text: selection, source: "selection" };
+		}
+
+		// 2. Fall back to a selected shrink-style suggestion's resolved target,
+		//    archiving into the suggestion's scene (the session note).
+		const selected = this.store.getSelectedSuggestion();
+		if (!selected || (selected.operation !== "cut" && selected.operation !== "condense")) {
+			return null;
+		}
+
+		const session = this.getReviewSession();
+		if (!session) {
+			return null;
+		}
+
+		const sceneFile = this.app.vault.getAbstractFileByPath(session.notePath);
+		if (!(sceneFile instanceof TFile)) {
+			return null;
+		}
+
+		const text = this.resolveSuggestionTargetText(sceneFile, selected.location.target);
+		if (!text) {
+			return null;
+		}
+
+		return {
+			sceneFile,
+			text,
+			source: "suggestion-target",
+			operation: selected.operation,
+			suggestionId: selected.id,
+			contributor: selected.contributor.displayName,
+			reason: selected.why,
+		};
+	}
+
+	private resolveSuggestionTargetText(sceneFile: TFile, target: ReviewTargetRef | undefined): string | null {
+		if (!target) {
+			return null;
+		}
+
+		// Prefer the live manuscript slice by offsets (freshest wording); fall back
+		// to the matched text captured on the target ref.
+		const context = this.getNoteContextByPath(sceneFile.path);
+		if (
+			context &&
+			target.startOffset !== undefined &&
+			target.endOffset !== undefined &&
+			target.endOffset > target.startOffset
+		) {
+			const slice = context.text.slice(target.startOffset, target.endOffset);
+			if (slice.trim()) {
+				return slice;
+			}
+		}
+
+		return target.text.trim() ? target.text : null;
 	}
 
 	async jumpToSelectedSuggestionTarget(): Promise<void> {

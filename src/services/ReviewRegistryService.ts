@@ -19,6 +19,7 @@ import type {
 import type { ReviewSession, ReviewSuggestion } from "../models/ReviewSuggestion";
 import type {
 	EditorialistPluginData,
+	EditorialistSettings,
 	PersistedReviewDecisionRecord,
 	ContributorProfile,
 	ReviewerSignalRecord,
@@ -36,7 +37,11 @@ import {
 import { SweepRegistryManager } from "./registry/SweepRegistryManager";
 import { SceneInventoryBuilder } from "./registry/SceneInventoryBuilder";
 import { tallyReviewStatuses } from "../core/review/SweepCompletion";
-import { EDITORIALIST_PLUGIN_DATA_VERSION } from "./PluginDataMigration";
+import {
+	EDITORIALIST_PLUGIN_DATA_VERSION,
+	defaultEditorialistSettings,
+	normalizeEditorialistSettings,
+} from "./PluginDataMigration";
 
 interface ReviewActivitySummary {
 	accepted: number;
@@ -78,6 +83,7 @@ export class ReviewRegistryService {
 	private reviewerSignalIndex: Record<string, ReviewerSignalRecord> = {};
 	private sceneReviewIndex: Record<string, SceneReviewRecord> = {};
 	private sweepRegistry: Record<string, ReviewSweepRegistryEntry> = {};
+	private settings: EditorialistSettings = defaultEditorialistSettings();
 	private readonly statsProjector: ReviewerStatsProjector;
 	private readonly sweepManager: SweepRegistryManager;
 	private readonly inventoryBuilder: SceneInventoryBuilder;
@@ -123,6 +129,24 @@ export class ReviewRegistryService {
 		this.reviewerSignalIndex = normalizeReviewerSignalIndex(savedData?.reviewerSignalIndex);
 		this.sceneReviewIndex = normalizeSceneReviewIndex(savedData?.sceneReviewIndex);
 		this.sweepRegistry = normalizeSweepRegistry(savedData?.sweepRegistry);
+		this.settings = normalizeEditorialistSettings(savedData?.settings);
+	}
+
+	getSettings(): EditorialistSettings {
+		return { ...this.settings };
+	}
+
+	getCutFolderOverride(): string {
+		return this.settings.cutFolderOverride;
+	}
+
+	// Stores the raw override string (trimmed). Persistence is the caller's
+	// responsibility — main.ts awaits savePluginData() after mutating settings.
+	setCutFolderOverride(value: string): void {
+		this.settings = {
+			...this.settings,
+			cutFolderOverride: value.trim(),
+		};
 	}
 
 	rebuildReviewerStatsFromSignals(): void {
@@ -137,6 +161,7 @@ export class ReviewRegistryService {
 			reviewDecisionIndex: this.reviewDecisionIndex,
 			sceneReviewIndex: this.sceneReviewIndex,
 			sweepRegistry: this.sweepRegistry,
+			settings: { ...this.settings },
 		};
 	}
 

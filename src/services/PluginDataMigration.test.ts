@@ -169,6 +169,7 @@ describe("migratePluginData", () => {
 				"reviewerProfiles",
 				"reviewerSignalIndex",
 				"sceneReviewIndex",
+				"settings",
 				"sweepRegistry",
 				"version",
 			].sort(),
@@ -184,6 +185,33 @@ describe("migratePluginData", () => {
 		);
 		const second = migratePluginData(first, makeRecorder());
 		expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+	});
+
+	it("defaults settings to an empty cut folder override when absent", () => {
+		const out = migratePluginData({}, makeRecorder());
+		expect(out.settings).toEqual({ cutFolderOverride: "" });
+	});
+
+	it("preserves a valid cut folder override and survives round-trip", () => {
+		const out = migratePluginData(
+			{ settings: { cutFolderOverride: "Manuscript/Cuts" } },
+			makeRecorder(),
+		);
+		expect(out.settings.cutFolderOverride).toBe("Manuscript/Cuts");
+		const round = migratePluginData(out, makeRecorder());
+		expect(round.settings.cutFolderOverride).toBe("Manuscript/Cuts");
+	});
+
+	it("falls back to defaults for a malformed settings object", () => {
+		expect(migratePluginData({ settings: 42 }, makeRecorder()).settings).toEqual({
+			cutFolderOverride: "",
+		});
+		expect(migratePluginData({ settings: [1, 2] }, makeRecorder()).settings).toEqual({
+			cutFolderOverride: "",
+		});
+		expect(
+			migratePluginData({ settings: { cutFolderOverride: 7 } }, makeRecorder()).settings,
+		).toEqual({ cutFolderOverride: "" });
 	});
 });
 

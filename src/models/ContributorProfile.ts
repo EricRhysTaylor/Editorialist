@@ -106,6 +106,16 @@ export interface SceneReviewRecord {
 	cleanedAt?: number;
 }
 
+// User-tunable plugin settings persisted alongside the review indices. Kept as
+// a discrete object (rather than loose top-level fields) so the Configuration
+// tab can grow without churning the EditorialistPluginData surface.
+export interface EditorialistSettings {
+	// Optional explicit cut-folder path. Empty string means "unset" — cut-file
+	// resolution then falls back to the active book's source folder, or the
+	// scene's own folder. Stored verbatim; normalized at use time.
+	cutFolderOverride: string;
+}
+
 export interface EditorialistPluginData {
 	version: number;
 	reviewerProfiles: ContributorProfile[];
@@ -113,4 +123,5 @@ export interface EditorialistPluginData {
 	reviewDecisionIndex: Record<string, PersistedReviewDecisionRecord>;
 	sceneReviewIndex: Record<string, SceneReviewRecord>;
 	sweepRegistry: Record<string, ReviewSweepRegistryEntry>;
+	settings: EditorialistSettings;
 }

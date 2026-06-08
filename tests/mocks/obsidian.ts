@@ -11,6 +11,12 @@ export class TFile {
 	stat = { ctime: 0, mtime: 0, size: 0 };
 }
 
+export class TFolder {
+	path = "";
+	name = "";
+	children: unknown[] = [];
+}
+
 export class Notice {
 	constructor(_message: string, _timeout?: number) {}
 	setMessage(_message: string): this {

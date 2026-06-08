@@ -28,7 +28,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private static readonly STATS_REPO_SLUG = "EricRhysTaylor/Editorialist";
 	private static readonly STATS_PLUGIN_ID = "editorialist";
 	private activeBookOnly = true;
-	private activeTab: "core" | "reviewer" = "core";
+	private activeTab: "core" | "reviewer" | "configuration" = "core";
 	private displayRunId = 0;
 
 	private static readonly RT_STATUS_GLYPH_DEFINITIONS = [
@@ -82,11 +82,14 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const tabBar = shell.createDiv({ cls: "editorialist-settings__tabs" });
 		this.createTab(tabBar, "core", "settings", "Core");
 		this.createTab(tabBar, "reviewer", "users", "Contributors");
+		this.createTab(tabBar, "configuration", "sliders-horizontal", "Configuration");
 
 		const coreContent = shell.createDiv({ cls: "editorialist-settings__tab-content" });
 		const reviewerContent = shell.createDiv({ cls: "editorialist-settings__tab-content" });
+		const configurationContent = shell.createDiv({ cls: "editorialist-settings__tab-content" });
 		coreContent.toggleClass("is-hidden", this.activeTab !== "core");
 		reviewerContent.toggleClass("is-hidden", this.activeTab !== "reviewer");
+		configurationContent.toggleClass("is-hidden", this.activeTab !== "configuration");
 
 		const inventory = this.plugin.getSceneReviewRecords({ activeBookOnly: this.activeBookOnly });
 		this.renderCoreHero(coreContent);
@@ -104,6 +107,9 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		this.renderContributorsHero(reviewerContent);
 		this.renderContributorsSection(reviewerContent);
 		this.renderMetadataSection(reviewerContent);
+
+		this.renderConfigurationHero(configurationContent);
+		this.renderCutLocationSection(configurationContent, activeBook);
 	}
 
 	private getInventoryVocabulary(activeBook: { label: string | null; sourceFolder: string | null }): {
@@ -223,6 +229,104 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		this.createHeroFeature(featureList, "users", "Contributor directory — see everyone who has helped shape your revisions, from editors to AI tools.");
 		this.createHeroFeature(featureList, "shuffle", "Refine your sources — update or combine names so your contributor history stays clear and accurate.");
 		this.createHeroFeature(featureList, "star", "See what works — compare how often suggestions are accepted to understand which feedback improves your writing.");
+	}
+
+	private renderConfigurationHero(parent: HTMLElement): void {
+		const hero = parent.createDiv({
+			cls: "editorialist-settings__hero-intro editorialist-settings__panel",
+		});
+		const badgeRow = hero.createDiv({ cls: "editorialist-settings__hero-intro-badge-row" });
+		const badge = badgeRow.createSpan({ cls: "editorialist-settings__hero-intro-badge" });
+		const badgeIcon = badge.createSpan({ cls: "editorialist-settings__hero-intro-badge-icon" });
+		setIcon(badgeIcon, "sliders-horizontal");
+		badge.createSpan({
+			cls: "editorialist-settings__hero-intro-badge-text",
+			text: "Configuration · Cut archive",
+		});
+		const badgeLink = badge.createEl("a", {
+			href: EditorialistSettingTab.SETTINGS_DOCS_URL,
+			cls: "editorialist-settings__hero-intro-badge-link editorialist-settings__rt-card-badge-link",
+			attr: {
+				"aria-label": "Open Editorialist documentation",
+				target: "_blank",
+				rel: "noopener",
+			},
+		});
+		setIcon(badgeLink, "external-link");
+
+		const titleRow = hero.createDiv({ cls: "editorialist-settings__hero-intro-title-row" });
+		titleRow.createDiv({
+			cls: "editorialist-settings__hero-intro-title",
+			text: "Preserve strong prose before you reduce",
+		});
+		hero.createDiv({
+			cls: "editorialist-settings__hero-intro-subtitle",
+			text: "When a pass calls for cutting or condensing, you often want to keep the original wording — strong lines, lore, ideas you might reuse later. “Backup to cut file” copies the selected text into a per-scene cut file without changing any review decision. Configure where those cut files live below.",
+		});
+
+		const features = hero.createDiv({ cls: "editorialist-settings__hero-features" });
+		features.createDiv({
+			cls: "editorialist-settings__hero-features-kicker",
+			text: "How cut files work:",
+		});
+		const featureList = features.createDiv({ cls: "editorialist-settings__hero-features-list" });
+		this.createHeroFeature(featureList, "archive", "One file per scene — every backup appends to a cut file named after the scene, tagged with a Class: Cut property.");
+		this.createHeroFeature(featureList, "folder", "Predictable location — cut files default to a Cut folder beside your manuscript, or wherever you point them.");
+		this.createHeroFeature(featureList, "shield-check", "Never destructive — backing up preserves text only; accepting, rejecting, and rewriting stay your review decisions.");
+	}
+
+	private renderCutLocationSection(
+		parent: HTMLElement,
+		activeBook: { label: string | null; sourceFolder: string | null },
+	): void {
+		const body = this.createSection(
+			parent,
+			"Cut location",
+			"Choose where “Backup to cut file” writes. Cut files accumulate one per scene and carry their own Class: Cut frontmatter, separate from your scenes.",
+			"scissors",
+		);
+		body.parentElement?.addClass("editorialist-settings__section--utility");
+
+		const fieldRow = body.createDiv({ cls: "editorialist-settings__cut-row" });
+		fieldRow.createDiv({
+			cls: "editorialist-settings__cut-label",
+			text: "Cut folder override",
+		});
+
+		const defaultFolder = activeBook.sourceFolder ? `${activeBook.sourceFolder}/Cut` : "<scene folder>/Cut";
+		const input = fieldRow.createEl("input", {
+			cls: "editorialist-settings__cut-input",
+			attr: {
+				type: "text",
+				spellcheck: "false",
+				placeholder: defaultFolder,
+			},
+		});
+		input.value = this.plugin.getCutFolderOverride();
+
+		const actions = fieldRow.createDiv({ cls: "editorialist-settings__cut-actions" });
+		this.createActionButton(actions, "save", "Save", async () => {
+			await this.plugin.setCutFolderOverride(input.value);
+			new Notice(
+				input.value.trim()
+					? `Cut folder set to ${input.value.trim()}.`
+					: "Cut folder override cleared — using the default location.",
+			);
+			void this.displayAsync(false);
+		});
+		this.createActionButton(actions, "rotate-ccw", "Use default", async () => {
+			await this.plugin.setCutFolderOverride("");
+			new Notice("Cut folder override cleared — using the default location.");
+			void this.displayAsync(false);
+		});
+
+		const note = body.createDiv({ cls: "editorialist-settings__cut-note" });
+		note.createDiv({
+			cls: "editorialist-settings__maintenance-note",
+			text: this.plugin.getCutFolderOverride()
+				? `Override active: cut files write under ${this.plugin.getCutFolderOverride()}/.`
+				: `No override set. Cut files default to ${defaultFolder}/ — falling back to the scene’s own folder when it sits outside the active book.`,
+		});
 	}
 
 	private isRadialTimelineInstalled(): boolean {
@@ -1336,7 +1440,12 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		return `${dateLabel} · ${entry.totalSuggestions} edits · ${sceneCount} ${sceneLabel} · ${statusLabel}`;
 	}
 
-	private createTab(parent: HTMLElement, id: "core" | "reviewer", icon: string, label: string): void {
+	private createTab(
+		parent: HTMLElement,
+		id: "core" | "reviewer" | "configuration",
+		icon: string,
+		label: string,
+	): void {
 		const tab = parent.createDiv({
 			cls: "editorialist-settings__tab" + (this.activeTab === id ? " is-active" : ""),
 		});
