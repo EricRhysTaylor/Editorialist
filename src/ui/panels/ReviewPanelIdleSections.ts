@@ -26,6 +26,8 @@ export interface IdleSectionsHost {
 	requestRender(): void;
 	getOnboardingExpanded(): boolean | null;
 	setOnboardingExpanded(value: boolean): void;
+	getPendingEditsExpanded(): boolean;
+	setPendingEditsExpanded(value: boolean): void;
 }
 
 // ── completed sweep ──────────────────────────────────────────────────────
@@ -279,13 +281,63 @@ export function renderPendingEditsWorkspaceBlock(
 		return;
 	}
 
-	const card = parent.createDiv({
-		cls: "editorialist-panel__completion editorialist-panel__completion--neutral",
+	const expandable = summary.scenes.length > 0;
+	const expanded = expandable && host.getPendingEditsExpanded();
+	const section = parent.createDiv({
+		cls: `editorialist-panel__pending-edits${expanded ? "" : " is-collapsed"}`,
 	});
-	const bgIcon = card.createSpan({ cls: "editorialist-panel__completion-bg-icon" });
-	setIcon(bgIcon, "clipboard-list");
 
-	const steps = card.createDiv({ cls: "editorialist-panel__completion-steps" });
+	const heading = section.createDiv({
+		cls: "editorialist-panel__section-header editorialist-panel__pending-edits-header",
+	});
+	if (expandable) {
+		const caret = heading.createSpan({ cls: "editorialist-panel__pending-edits-caret" });
+		setIcon(caret, expanded ? "chevron-down" : "chevron-right");
+	} else {
+		const icon = heading.createSpan({ cls: "editorialist-panel__pending-edits-icon" });
+		setIcon(icon, "clipboard-list");
+	}
+	heading.createDiv({ cls: "editorialist-panel__section-title", text: "Pending edits" });
+	const sceneNoun = summary.sceneCount === 1 ? "scene" : "scenes";
+	heading.createDiv({
+		cls: "editorialist-panel__section-meta",
+		text: `${summary.segmentCount} across ${summary.sceneCount} ${sceneNoun}`,
+	});
+	if (expandable) {
+		host.bindAction(heading, () => {
+			host.setPendingEditsExpanded(!expanded);
+			host.requestRender();
+		});
+	}
+
+	if (expanded) {
+		const list = section.createDiv({ cls: "editorialist-panel__pending-edits-list" });
+		for (const scene of summary.scenes) {
+			const row = list.createDiv({ cls: "editorialist-panel__pending-edits-row" });
+			const rowHeader = row.createDiv({ cls: "editorialist-panel__pending-edits-row-header" });
+			const link = rowHeader.createEl("a", {
+				cls: "editorialist-panel__pending-edits-row-title",
+				attr: { href: "#", title: `Review pending edits in ${scene.title}` },
+				text: scene.title,
+			});
+			const targetScenePath = scene.scenePath;
+			host.bindAction(link, () => {
+				void plugin.startPendingEditsReviewForScene(targetScenePath);
+			});
+			rowHeader.createSpan({
+				cls: "editorialist-panel__pending-edits-row-count",
+				text: `${scene.count}`,
+			});
+			if (scene.firstExcerpt) {
+				row.createDiv({
+					cls: "editorialist-panel__pending-edits-row-excerpt",
+					text: scene.firstExcerpt,
+				});
+			}
+		}
+	}
+
+	const steps = section.createDiv({ cls: "editorialist-panel__completion-steps" });
 	renderPendingEditsStep(host, plugin, steps, summary);
 }
 

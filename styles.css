@@ -865,6 +865,85 @@
 	font-size: var(--font-ui-smaller);
 }
 
+/* "Up next" pending list hugs the Continue Review hero above it, so it uses a
+   tighter top margin than a standalone review-state card. */
+.editorialist-panel__review-state--upnext {
+	margin-top: var(--editorialist-space-sm);
+}
+
+.editorialist-panel__review-state-subhead {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+/* Pending edits — formal expandable block. */
+.editorialist-panel__pending-edits {
+	display: flex;
+	flex-direction: column;
+	gap: var(--editorialist-space-sm);
+	margin-top: var(--editorialist-space-lg);
+}
+
+.editorialist-panel__pending-edits-header {
+	cursor: pointer;
+}
+
+.editorialist-panel__pending-edits-caret,
+.editorialist-panel__pending-edits-icon {
+	display: inline-flex;
+	width: 0.95rem;
+	height: 0.95rem;
+	color: var(--text-muted);
+}
+
+.editorialist-panel__pending-edits-caret svg,
+.editorialist-panel__pending-edits-icon svg {
+	width: 0.95rem;
+	height: 0.95rem;
+}
+
+.editorialist-panel__pending-edits-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--editorialist-space-sm);
+}
+
+.editorialist-panel__pending-edits-row {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	padding: 0.4rem 0.5rem;
+	border-radius: var(--editorialist-radius-xs);
+	background: color-mix(in srgb, var(--background-primary) 85%, var(--background-secondary) 15%);
+}
+
+.editorialist-panel__pending-edits-row-header {
+	display: flex;
+	align-items: center;
+	gap: var(--editorialist-space-sm);
+}
+
+.editorialist-panel__pending-edits-row-title {
+	font-weight: 600;
+	color: var(--text-normal);
+	cursor: pointer;
+}
+
+.editorialist-panel__pending-edits-row-count {
+	margin-left: auto;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-variant-numeric: tabular-nums;
+}
+
+.editorialist-panel__pending-edits-row-excerpt {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.4;
+}
+
 .editorialist-panel__review-state-group {
 	display: flex;
 	flex-direction: column;

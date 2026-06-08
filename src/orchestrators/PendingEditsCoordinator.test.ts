@@ -353,3 +353,40 @@ describe("PendingEditsCoordinator — summary dedupe", () => {
 		expect(summary?.inquiryCount).toBe(1);
 	});
 });
+
+describe("PendingEditsCoordinator — summary scenes", () => {
+	it("captures per-scene title, count, and a first-item excerpt", async () => {
+		const { host } = makeHost();
+		collectResult = {
+			ok: true,
+			session: session([inquirySegment("seg1"), inquirySegment("seg2")]),
+		};
+
+		const c = new PendingEditsCoordinator(host);
+		await c.refreshPendingEditsSummary({ force: true });
+
+		const summary = c.getPendingEditsSummary();
+		expect(summary?.scenes).toHaveLength(1);
+		expect(summary?.scenes[0]).toEqual({
+			scenePath: "Book/s1.md",
+			title: "S1",
+			count: 2,
+			firstExcerpt: "[[Brief Note]] tighten the opening",
+		});
+	});
+
+	it("collapses whitespace and truncates a long first-item excerpt with an ellipsis", async () => {
+		const { host } = makeHost();
+		const longText = `${"word ".repeat(60)}tail`;
+		const seg: PendingEditSegment = { ...inquirySegment("seg1"), text: longText, lines: [longText] };
+		collectResult = { ok: true, session: session([seg]) };
+
+		const c = new PendingEditsCoordinator(host);
+		await c.refreshPendingEditsSummary({ force: true });
+
+		const excerpt = c.getPendingEditsSummary()?.scenes[0]?.firstExcerpt ?? "";
+		expect(excerpt.endsWith("…")).toBe(true);
+		expect(excerpt.length).toBe(120);
+		expect(excerpt).not.toContain("  ");
+	});
+});

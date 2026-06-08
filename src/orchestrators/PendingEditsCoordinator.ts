@@ -35,6 +35,16 @@ import { InquiryBriefResolver, type InquiryBriefContext } from "../core/InquiryB
 import type { PendingEditSegment, PendingEditsSession } from "../models/PendingEditSegment";
 import type { ToolbarState } from "../ui/Toolbar";
 
+// Per-scene preview retained for the idle panel's expandable pending-edits
+// block. `firstExcerpt` is a whitespace-collapsed, truncated snippet of the
+// scene's first pending item — enough to recognize the edit at a glance.
+export interface PendingEditsSceneSummary {
+	scenePath: string;
+	title: string;
+	count: number;
+	firstExcerpt: string;
+}
+
 export interface PendingEditsSummary {
 	sceneCount: number;
 	segmentCount: number;
@@ -42,6 +52,20 @@ export interface PendingEditsSummary {
 	inquiryCount: number;
 	scenePaths: ReadonlySet<string>;
 	segmentCountsByScene: ReadonlyMap<string, number>;
+	scenes: ReadonlyArray<PendingEditsSceneSummary>;
+}
+
+const PENDING_EDIT_EXCERPT_MAX_LENGTH = 120;
+
+function buildPendingEditExcerpt(text: string | undefined): string {
+	if (!text) {
+		return "";
+	}
+	const collapsed = text.replace(/\s+/g, " ").trim();
+	if (collapsed.length <= PENDING_EDIT_EXCERPT_MAX_LENGTH) {
+		return collapsed;
+	}
+	return `${collapsed.slice(0, PENDING_EDIT_EXCERPT_MAX_LENGTH - 1).trimEnd()}…`;
 }
 
 export interface PendingEditsCoordinatorHost {
@@ -119,6 +143,7 @@ export class PendingEditsCoordinator {
 				let inquiryCount = 0;
 				const scenePaths = new Set<string>();
 				const segmentCountsByScene = new Map<string, number>();
+				const scenes: PendingEditsSceneSummary[] = [];
 				for (const scene of result.session.scenes) {
 					scenePaths.add(scene.scenePath);
 					segmentCountsByScene.set(scene.scenePath, scene.segments.length);
@@ -126,6 +151,12 @@ export class PendingEditsCoordinator {
 						if (segment.kind === "human") humanCount += 1;
 						else inquiryCount += 1;
 					}
+					scenes.push({
+						scenePath: scene.scenePath,
+						title: scene.sceneTitle,
+						count: scene.segments.length,
+						firstExcerpt: buildPendingEditExcerpt(scene.segments[0]?.text),
+					});
 				}
 
 				this.pendingEditsSummary = {
@@ -135,6 +166,7 @@ export class PendingEditsCoordinator {
 					inquiryCount,
 					scenePaths,
 					segmentCountsByScene,
+					scenes,
 				};
 			} finally {
 				this.pendingEditsSummaryLastRefreshAt = Date.now();

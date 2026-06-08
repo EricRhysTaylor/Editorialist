@@ -2,7 +2,7 @@ import { ButtonComponent, DropdownComponent, ItemView, setIcon, type WorkspaceLe
 import { formatContributorIdentityLabel } from "../core/ContributorIdentity";
 import { getEffectiveSuggestionStatus, getSuggestionCopyBlocks, getSuggestionReason as getOperationSuggestionReason, isImplicitlyAcceptedSuggestion, isMoveSuggestion } from "../core/OperationSupport";
 import type { ReviewSuggestion, SceneMemo } from "../models/ReviewSuggestion";
-import type { default as EditorialistPlugin, ReviewStateIndexEntry, ReviewStateOverview } from "../main";
+import type { default as EditorialistPlugin, ReviewStateIndexEntry } from "../main";
 import { bindImmediateAction } from "./util/bindImmediateAction";
 // Pure projection helpers extracted to characterize ReviewPanel before the
 // eventual file split. See src/ui/viewmodels/ReviewPanelViewModel.ts for the
@@ -67,6 +67,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 	private reviewerPickerValue: string | null = null;
 	private starredOnly = false;
 	private reviewStateProcessedExpanded = false;
+	private pendingEditsExpanded = false;
 	private commentsCollapsed = false;
 	// null = follow the cold-start default; an explicit boolean once the user
 	// toggles the onboarding disclosure within this view session.
@@ -166,35 +167,42 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 				this.plugin.getSweepRegistryEntries().length > 0 ||
 				this.plugin.getSortedReviewerProfiles().length > 0;
 
-			// 1. Continue Review — the dominant resumable workspace card.
+			// 1. Up next — the resumable work, grouped at the top. The Continue
+			// Review hero anchors the cluster; the remaining pending sweeps
+			// (every pending scene except the hero) follow directly beneath as a
+			// scene list, so the two are read as one "what's waiting on me" unit
+			// instead of competing cards. The processed "Ready to clean" group is
+			// a separate cleanup chore and is rendered lower down, not here.
 			if (launchTarget) {
 				renderContinueReviewCard(this, this.plugin, this.contentEl, launchTarget, overview);
 			}
+			if (overview) {
+				this.renderUpNextPendingScenes(overview.pending, launchTarget?.notePath ?? null, Boolean(launchTarget));
+			}
 
-			// 1b. Pending-edits CTA — only appears when there are actual
-			// pending edit segments. Reuses the compact onboarding card's
-			// chip-style step verbatim so the visual treatment is identical
-			// to what users see in the new-vault state, just shaped as a
-			// workspace block. This preserves the side-panel CTA for users
-			// who previously relied on the compact card to reach pending
-			// edits but now route to the workspace view per Pass 22.
+			// 2. Pending edits — a formal, expandable block (header + per-scene
+			// rows with an excerpt of the first item). Still surfaces the
+			// "Review N pending edit items…" action; only appears when there are
+			// actual pending edit segments.
 			const pendingSummary = this.plugin.getPendingEditsSummary();
 			if (pendingSummary && pendingSummary.segmentCount > 0) {
 				renderPendingEditsWorkspaceBlock(this, this.plugin, this.contentEl, pendingSummary);
 			}
 
-			// 2. Recent review sessions.
+			// 3. Recent review sessions.
 			renderRecentActivityBlock(this.plugin, this.contentEl);
 
-			// 3. Pending sweeps / review state.
-			if (overview) {
-				this.renderReviewStateCard(overview);
+			// 4. Ready to clean — processed sweeps awaiting cleanup. Distinct from
+			// the pending work above: it's post-resolution housekeeping, so it sits
+			// after recent reviews rather than in the Up next cluster.
+			if (overview && overview.processed.length > 0) {
+				this.renderReadyToCleanCard(overview.processed);
 			}
 
-			// 4. Contributors.
+			// 5. Contributors.
 			renderContributorsBlock(this.plugin, this.contentEl);
 
-			// 5. Onboarding — demoted to a disclosure. Auto-expanded only on a
+			// 6. Onboarding — demoted to a disclosure. Auto-expanded only on a
 			// cold-start vault where there is nothing else to anchor on.
 			renderWorkflowsDisclosure(this, this.plugin, this.contentEl, !hasHistory && !launchTarget);
 			return;
@@ -285,43 +293,54 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 	}
 
 
-	private renderReviewStateCard(overview: ReviewStateOverview): void {
-		const card = this.contentEl.createDiv({ cls: "editorialist-panel__review-state" });
+	// Pending scenes that belong to the "Up next" cluster beneath the Continue
+	// Review hero. When the hero is shown, its scene is filtered out (by path,
+	// so duplicate-title scenes don't collapse together) and a quiet subhead
+	// introduces the remainder. With no hero, this stands alone under an
+	// "Up next" header.
+	private renderUpNextPendingScenes(
+		pending: ReviewStateIndexEntry[],
+		excludeNotePath: string | null,
+		heroShown: boolean,
+	): void {
+		const remaining = pending.filter((entry) => entry.notePath !== excludeNotePath);
+		if (remaining.length === 0) {
+			return;
+		}
 
-		const header = card.createDiv({ cls: "editorialist-panel__review-state-header" });
-		const titleIcon = header.createSpan({ cls: "editorialist-panel__review-state-title-icon" });
-		setIcon(titleIcon, "list-checks");
-		header.createSpan({
-			cls: "editorialist-panel__review-state-title",
-			text: "Pending sweeps",
+		const card = this.contentEl.createDiv({
+			cls: "editorialist-panel__review-state editorialist-panel__review-state--upnext",
 		});
-		const summaryParts: string[] = [];
-		if (overview.pending.length > 0) {
-			summaryParts.push(`${overview.pending.length} pending`);
-		}
-		if (overview.processed.length > 0) {
-			summaryParts.push(`${overview.processed.length} ready to clean`);
-		}
-		if (summaryParts.length > 0) {
+
+		if (heroShown) {
+			card.createDiv({
+				cls: "editorialist-panel__review-state-subhead",
+				text: remaining.length === 1 ? "1 more pending scene" : `${remaining.length} more pending scenes`,
+			});
+		} else {
+			const header = card.createDiv({ cls: "editorialist-panel__review-state-header" });
+			const titleIcon = header.createSpan({ cls: "editorialist-panel__review-state-title-icon" });
+			setIcon(titleIcon, "list-checks");
+			header.createSpan({ cls: "editorialist-panel__review-state-title", text: "Up next" });
 			header.createSpan({
 				cls: "editorialist-panel__review-state-summary",
-				text: summaryParts.join(" · "),
+				text: `${remaining.length} pending`,
 			});
 		}
 
-		// Drop the per-group label row when only one group is present — the
-		// header summary already carries that count. Keep group labels when
-		// both groups exist so they discriminate.
-		const hasBothGroups = overview.pending.length > 0 && overview.processed.length > 0;
-
-		if (overview.pending.length > 0) {
-			this.renderReviewStateGroup(card, "Pending", overview.pending, false, true, hasBothGroups);
+		const list = card.createDiv({ cls: "editorialist-panel__review-state-list" });
+		const sorted = [...remaining].sort(compareReviewStateEntriesByNarrativeOrder);
+		for (const entry of sorted) {
+			this.renderReviewStateRow(list, entry, false);
 		}
+	}
 
-		if (overview.processed.length > 0) {
-			const expanded = this.reviewStateProcessedExpanded;
-			this.renderReviewStateGroup(card, "Ready to clean", overview.processed, true, expanded, hasBothGroups);
-		}
+	// Processed sweeps awaiting review-block cleanup. Its own collapsible group
+	// (the group header carries the caret + count + Clean actions), rendered as
+	// a standalone secondary card below recent reviews.
+	private renderReadyToCleanCard(processed: ReviewStateIndexEntry[]): void {
+		const card = this.contentEl.createDiv({ cls: "editorialist-panel__review-state" });
+		this.renderReviewStateGroup(card, "Ready to clean", processed, true, this.reviewStateProcessedExpanded, true);
 	}
 
 	private renderReviewStateGroup(
@@ -1494,6 +1513,14 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 
 	setOnboardingExpanded(value: boolean): void {
 		this.onboardingExpanded = value;
+	}
+
+	getPendingEditsExpanded(): boolean {
+		return this.pendingEditsExpanded;
+	}
+
+	setPendingEditsExpanded(value: boolean): void {
+		this.pendingEditsExpanded = value;
 	}
 
 	private getFilteredSuggestions(suggestions: ReviewSuggestion[]): ReviewSuggestion[] {
