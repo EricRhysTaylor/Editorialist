@@ -65,7 +65,12 @@ function makeService(
 		label: options.sourceFolder ? "Book" : null,
 		sourceFolder: options.sourceFolder ?? null,
 	};
-	const app = { vault } as unknown as App;
+	const app = {
+		vault,
+		// No frontmatter cache in tests → isSceneClassFile() reads no class, so the
+		// scene-note guard only fires on the explicit path-equality check below.
+		metadataCache: { getFileCache: () => null },
+	} as unknown as App;
 	return new CutArchiveService(app, {
 		getCutFolderOverride: () => options.override ?? "",
 		getActiveBookScope: () => scope,
@@ -213,6 +218,20 @@ describe("CutArchiveService.backup", () => {
 		expect(content).toContain("First cut.");
 		expect(content).toContain("Second cut.");
 		expect(content.indexOf("First cut.")).toBeLessThan(content.indexOf("Second cut."));
+	});
+
+	it("refuses to write when the override resolves the cut file onto the scene itself", async () => {
+		const vault = new FakeVault();
+		// Override points at the scene's own folder (no Cut subfolder), so the cut
+		// file path collides with the scene note — must be refused, not appended.
+		const service = makeService(vault, { override: "Manuscript" });
+		vault.files.set("Manuscript/Scene 1.md", "manuscript body");
+
+		await expect(
+			service.backup({ ...META, sceneFile: makeFile("Manuscript/Scene 1.md"), text: "x" }),
+		).rejects.toThrow(/scene itself/);
+		// The manuscript file is untouched.
+		expect(vault.files.get("Manuscript/Scene 1.md")).toBe("manuscript body");
 	});
 
 	it("creates nested cut folders that do not yet exist", async () => {

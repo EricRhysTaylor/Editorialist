@@ -1,6 +1,6 @@
 import { normalizePath, TFile, TFolder, type App } from "obsidian";
 import type { SupportedReviewOperationType } from "../models/ReviewSuggestion";
-import { getActiveNoteScopeRoot, isPathInFolderScope, type ActiveBookScopeInfo } from "./VaultScope";
+import { getActiveNoteScopeRoot, isPathInFolderScope, isSceneClassFile, type ActiveBookScopeInfo } from "./VaultScope";
 
 // CutArchiveService owns the "Backup to cut file" workflow: where a scene's cut
 // file lives, how it is created/appended, and the per-cut block format. It is a
@@ -54,7 +54,7 @@ export function resolveCutFolderPath(scenePath: string, input: CutFolderResoluti
 		return normalizePath(`${input.sourceFolder}/${CUT_FOLDER_NAME}`);
 	}
 
-	const sceneFolder = getActiveNoteScopeRoot(normalizedScenePath) ?? "";
+	const sceneFolder = getActiveNoteScopeRoot(normalizedScenePath) ?? ""; // SAFE: "" = vault root, the correct parent for a scene at the top level
 	return normalizePath(sceneFolder ? `${sceneFolder}/${CUT_FOLDER_NAME}` : CUT_FOLDER_NAME);
 }
 
@@ -118,11 +118,23 @@ export class CutArchiveService {
 
 	async backup(request: CutBackupRequest): Promise<CutBackupResult> {
 		const cutFilePath = this.resolveCutFilePathForScene(request.sceneFile);
+
+		// Manuscript safety: a misconfigured override (e.g. pointing at the
+		// source folder) or a basename collision could resolve the cut file to a
+		// real scene note. Refuse rather than append a cut block into the
+		// manuscript — the cut archive must never mutate manuscript text.
+		const existing = this.app.vault.getAbstractFileByPath(cutFilePath);
+		if (cutFilePath === request.sceneFile.path) {
+			throw new Error(`Cut file path resolves to the scene itself: ${cutFilePath}`);
+		}
+		if (existing instanceof TFile && isSceneClassFile(this.app, existing)) {
+			throw new Error(`Cut file path resolves to a scene note: ${cutFilePath}`);
+		}
+
 		const folderPath = resolveCutFolderPath(request.sceneFile.path, this.resolutionInput());
 		await this.ensureFolderExists(folderPath);
 
 		const block = formatCutBlock(request, request.text);
-		const existing = this.app.vault.getAbstractFileByPath(cutFilePath);
 
 		if (existing instanceof TFile) {
 			await this.app.vault.process(existing, (current) => {
