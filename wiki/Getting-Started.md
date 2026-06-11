@@ -28,7 +28,9 @@ A five-minute walkthrough of the core loop:
 
 ### 1. Copy the template
 
-Run **Open review launcher** and click the template button. This copies the full review format — instructions, both templates, and (with Radial Timeline) your book's actual scene IDs — to the clipboard.
+Run **Open review launcher** and click **Copy formatting instructions**. This copies the full review format — instructions, both templates, and (with Radial Timeline) your book's actual scene IDs — to the clipboard.
+
+<p align="center"><img src="images/panel-import.png" alt="The review launcher: copy instructions, clipboard detection, and manual paste" width="560"></p>
 
 ### 2. Get suggestions
 

@@ -2,7 +2,7 @@
 
 The second sidebar view. Where the [Review Panel](Review-Panel.md) handles line-level suggestions inside scenes, the Editorialisms panel manages **Editorialism documents** — structural guidance that spans scenes, arcs, or the whole manuscript.
 
-<!-- Screenshot placeholder: Editorialisms panel with a document open (images/) -->
+<!-- Screenshot still needed: Editorialisms panel with a document open (images/panel-editorialisms.png) -->
 
 ## What an Editorialism is
 

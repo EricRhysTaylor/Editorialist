@@ -2,13 +2,13 @@
 
 Editorialist's settings are organized into three tabs: **Core**, **Contributors**, and **Configuration**. The Core tab doubles as the plugin's dashboard — most of it is live status, not knobs.
 
-<!-- Screenshot placeholder: settings tab bar (images/) -->
-
 ---
 
 ## Core tab
 
 **Core · Editorial review** — the dashboard for the active book's revision state.
+
+<p align="center"><img src="images/settings-core.png" alt="Core settings tab: structured editorial review hero, current revision progress, and scene inventory" width="620"></p>
 
 ### Radial Timeline card
 
@@ -71,6 +71,8 @@ Author, version, and links to GitHub, releases, issues, and docs.
 
 **Contributors · Directory** — every reviewer who has ever contributed a batch, human or AI.
 
+<p align="center"><img src="images/settings-contributors.png" alt="Contributors settings tab: contributor directory with per-contributor cards and stats, backup section" width="620"></p>
+
 ### Contributor directory
 
 A card grid, one per contributor:
@@ -95,7 +97,9 @@ A card grid, one per contributor:
 
 **Configuration · Cut archive** — where cut text gets preserved.
 
-When you accept a **Cut** suggestion (or use **Backup to cut file** from the suggestion toolbar), the removed text is archived to a per-scene cut file with hidden metadata: the operation, the contributor, the reason, and a timestamp. Cut files never touch review status or acceptance decisions — they are a safety net, not part of the workflow state.
+<p align="center"><img src="images/settings-configuration.png" alt="Configuration settings tab: how cut files work, and the cut location override" width="620"></p>
+
+When you accept a **Cut** suggestion (or use **Backup to cut file** from the suggestion toolbar), the removed text is archived to a per-scene cut file — one cut file per scene, named after the scene and tagged with its own `Class: Cut` frontmatter, with hidden metadata per entry: the operation, the contributor, the reason, and a timestamp. Cut files never touch review status or acceptance decisions — they are a safety net, not part of the workflow state.
 
 ### Cut location
 

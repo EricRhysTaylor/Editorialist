@@ -4,7 +4,7 @@
 
 Editorialist imports structured revision notes — from human editors, beta readers, or AI — into the manuscript you are already editing, matches suggestions conservatively against note content, and keeps every manuscript change explicit and author-controlled.
 
-<!-- Screenshot placeholder: review session in progress (images/) -->
+<p align="center"><img src="images/panel-side-home.png" alt="The Editorialist review panel: how to use Editorialist, recent reviews, and contributors" width="340"></p>
 
 ## How it behaves
 

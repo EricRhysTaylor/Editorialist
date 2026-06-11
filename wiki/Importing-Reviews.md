@@ -155,6 +155,8 @@ Save it under `Editorialist/<Book>/<Title>.md` and the [Editorialisms Panel](Edi
 
 ## Importing a batch: the review launcher
 
+<p align="center"><img src="images/panel-import.png" alt="The review launcher: copy instructions card, clipboard card, paste formatted revision notes, and the advanced template copy row" width="560"></p>
+
 Run **Open review launcher** (command palette). The launcher modal:
 
 1. **Checks your clipboard** — if it detects a review batch, one click imports it.

@@ -2,9 +2,9 @@
 
 The Review Panel is Editorialist's main working surface — a sidebar view that drives review sessions and shows the state of the active book between them. Open it with the **Open review panel** command.
 
-<!-- Screenshot placeholder: review panel, idle and in-session states (images/) -->
-
 ## Idle state
+
+<p align="center"><img src="images/panel-side-home.png" alt="Review panel idle state: imported review pass, pending edits sweep, contributor directory, recent reviews, contributors" width="340"></p>
 
 Between sessions the panel shows:
 
@@ -18,6 +18,8 @@ Between sessions the panel shows:
 
 Starting a workflow card (or importing a batch) begins a **guided review sweep**: Editorialist walks the batch suggestion by suggestion, scene by scene, highlighting each suggestion inline in the editor.
 
+<p align="center"><img src="images/panel-side-progressing.png" alt="Review panel during a sweep: next-in-sweep card with unresolved and resolved counts, start scene button, recent reviews" width="340"></p>
+
 ### Navigation and filters
 
 - **Previous / next** moves through suggestions; the sweep auto-advances to the next scene when the current one is resolved.
@@ -27,6 +29,8 @@ Starting a workflow card (or importing a batch) begins a **guided review sweep**
 - **Collapse controls** — fold away processed suggestions, pending edits, and comments to reduce noise.
 
 ### The suggestion toolbar
+
+<!-- Screenshot still needed: the inline suggestion toolbar in the editor (images/toolbar.png) -->
 
 Each highlighted suggestion gets an inline toolbar in the editor:
 
