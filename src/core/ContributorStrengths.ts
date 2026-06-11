@@ -55,7 +55,7 @@ export function getContributorStrengthDefinition(
 }
 
 export function normalizeContributorStrengths(
-	values: Array<string | ContributorStrength>,
+	values: Array<string>,
 ): ContributorStrength[] {
 	const normalized: ContributorStrength[] = [];
 	for (const value of values) {
@@ -69,7 +69,7 @@ export function normalizeContributorStrengths(
 }
 
 export function resolveContributorStrength(
-	value: string | ContributorStrength | undefined,
+	value: string | undefined,
 ): ContributorStrength | null {
 	if (!value) {
 		return null;

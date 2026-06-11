@@ -1175,7 +1175,6 @@
 	display: flex;
 	flex-direction: column;
 	gap: 0.8rem;
-	overflow: hidden;
 	overflow: clip;
 	padding: var(--editorialist-space-lg) 1.05rem 1.1rem;
 	border: 1px solid color-mix(in srgb, var(--color-green) 24%, var(--background-modifier-border));
@@ -2475,7 +2474,6 @@
 	display: flex;
 	flex-direction: column;
 	gap: 0.65rem;
-	overflow: hidden;
 	overflow: clip;
 	padding-left: var(--editorialist-settings-panel-pad);
 	background:

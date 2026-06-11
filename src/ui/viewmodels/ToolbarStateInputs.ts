@@ -60,7 +60,7 @@ export interface GuidedSweepHandoffInput {
 export interface PanelOnlyInput {
 	progressLabel?: string;
 	remainingCount: number;
-	unitLabel: "scene" | "note" | string;
+	unitLabel: string;
 }
 
 // Everything getToolbarState consults, fully resolved. NOTE: the "review"

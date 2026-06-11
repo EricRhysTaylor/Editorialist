@@ -53,7 +53,7 @@ export interface RecordingHostConfig {
 	guidedSweep?: GuidedSweepState | null;
 	selectedSuggestionId?: string | null;
 	noteContext?: ReviewNoteContextLike | null;
-	activeEditorView?: unknown | null;
+	activeEditorView?: unknown;
 	suggestionsById?: Record<string, ReviewSuggestion>;
 	guards?: Partial<
 		Record<
@@ -65,7 +65,7 @@ export interface RecordingHostConfig {
 			boolean
 		>
 	>;
-	panelOnly?: unknown | null;
+	panelOnly?: unknown;
 	editorUndoResult?: boolean;
 	trackingContext?: { sessionId?: string; sessionStartedAt?: number };
 	editorValue?: string;
@@ -148,7 +148,7 @@ export class RecordingReviewStateMachineHost implements ReviewStateMachineHost {
 		);
 	}
 
-	getActiveEditorView(): unknown | null {
+	getActiveEditorView(): unknown {
 		this.rec("getActiveEditorView");
 		return this.config.activeEditorView ?? {};
 	}
@@ -216,7 +216,7 @@ export class RecordingReviewStateMachineHost implements ReviewStateMachineHost {
 		this.rec("getCurrentSessionTrackingContext");
 		return this.config.trackingContext ?? {};
 	}
-	getPanelOnlyReviewStateForSession(): unknown | null {
+	getPanelOnlyReviewStateForSession(): unknown {
 		this.rec("getPanelOnlyReviewStateForSession");
 		return this.config.panelOnly ?? null;
 	}

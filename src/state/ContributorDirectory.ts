@@ -580,7 +580,7 @@ export class ContributorDirectory {
 		return merged.length > 0 ? merged : undefined;
 	}
 
-	private normalizeStrengths(strengths: Array<string | ContributorStrength>): ContributorStrength[] {
+	private normalizeStrengths(strengths: Array<string>): ContributorStrength[] {
 		return normalizeContributorStrengths(strengths);
 	}
 

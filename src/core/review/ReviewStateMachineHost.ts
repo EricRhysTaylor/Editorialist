@@ -58,7 +58,7 @@ export interface ReviewStateMachineHost {
 
 	// — editor / Obsidian —
 	getReviewNoteContext(): ReviewNoteContextLike | null;
-	getActiveEditorView(): unknown | null;
+	getActiveEditorView(): unknown;
 	focusReviewLeaf(view: unknown): Promise<void>;
 	executeEditorUndo(): boolean; // drives the active MarkdownView editor's undo(); returns whether the document changed
 	notify(message: string): void; // wraps new Notice(...)
@@ -72,7 +72,7 @@ export interface ReviewStateMachineHost {
 	getReviewSession(): ReviewSession | null;
 	getSuggestionById(id: string): ReviewSuggestion | null;
 	getCurrentSessionTrackingContext(): { sessionId?: string; sessionStartedAt?: number };
-	getPanelOnlyReviewStateForSession(session: ReviewSession | null): unknown | null;
+	getPanelOnlyReviewStateForSession(session: ReviewSession | null): unknown;
 
 	// — UI / reveal / decorations —
 	revealSelectedSuggestion(): Promise<void>;

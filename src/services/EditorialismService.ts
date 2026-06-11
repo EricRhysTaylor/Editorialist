@@ -78,7 +78,7 @@ export class EditorialismService {
 
 	private async tryLoad(file: TFile): Promise<Editorialism | null> {
 		const cached = this.app.metadataCache.getFileCache(file);
-		const cachedType = cached?.frontmatter?.type;
+		const cachedType: unknown = cached?.frontmatter?.type;
 		// Cheap precheck: if frontmatter is in metadata cache and `type:` is set
 		// to anything other than the expected value, skip parsing.
 		if (typeof cachedType === "string" && cachedType.trim().toLowerCase() !== EDITORIALISM_TYPE_VALUE) {

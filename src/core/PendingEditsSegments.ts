@@ -145,7 +145,7 @@ export function hasPendingEdits(rawField: unknown): boolean {
 
 export function readPendingEditsField(app: App, file: TFile): string {
 	const cache = app.metadataCache.getFileCache(file);
-	const raw = cache?.frontmatter?.[PENDING_EDITS_FRONTMATTER_KEY];
+	const raw: unknown = cache?.frontmatter?.[PENDING_EDITS_FRONTMATTER_KEY];
 	return typeof raw === "string" ? raw : "";
 }
 
@@ -192,9 +192,9 @@ export async function drainSegmentFromFrontmatter(
 ): Promise<DrainResult> {
 	let result: DrainResult = { outcome: "skipped", nextValue: "" };
 
-	await app.fileManager.processFrontMatter(file, (frontmatter) => {
+	await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
 		const currentRaw = typeof frontmatter[PENDING_EDITS_FRONTMATTER_KEY] === "string"
-			? (frontmatter[PENDING_EDITS_FRONTMATTER_KEY] as string)
+			? frontmatter[PENDING_EDITS_FRONTMATTER_KEY]
 			: "";
 		result = computeFieldAfterDrain(currentRaw, segment);
 		if (result.outcome === "written") {
@@ -206,7 +206,7 @@ export async function drainSegmentFromFrontmatter(
 }
 
 export async function clearPendingEditsField(app: App, file: TFile): Promise<void> {
-	await app.fileManager.processFrontMatter(file, (frontmatter) => {
+	await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
 		if (PENDING_EDITS_FRONTMATTER_KEY in frontmatter) {
 			frontmatter[PENDING_EDITS_FRONTMATTER_KEY] = "";
 		}

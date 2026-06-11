@@ -411,7 +411,7 @@ export default class EditorialistPlugin extends Plugin {
 		void this.pendingEdits.refreshPendingEditsSummary({ force: true });
 	}
 
-	async onunload(): Promise<void> {
+	onunload(): void {
 		// Obsidian submission guideline: do NOT detach leaves of your own view type here —
 		// Obsidian restores workspace state on reload, and registerView() already handles cleanup.
 		this.toolbarOverlay.destroy();
@@ -420,14 +420,12 @@ export default class EditorialistPlugin extends Plugin {
 		this.pendingEdits.clearInquiryMaps();
 		// Flush any debounced plugin-data save so pending changes (e.g. a star
 		// toggle right before the user disables the plugin) are not lost.
-		try {
-			await this.flushPluginDataSave();
-		} catch (err) {
-			// console.error is the only diagnostic surface during unload — a
-			// Notice would not be seen because the plugin is shutting down.
-			// eslint-disable-next-line no-console
+		// Obsidian does not await onunload, so the flush is fire-and-forget;
+		// console.error is the only diagnostic surface during unload — a Notice
+		// would not be seen because the plugin is shutting down.
+		this.flushPluginDataSave().catch((err: unknown) => {
 			console.error("Editorialist: failed to flush plugin data on unload", err);
-		}
+		});
 	}
 
 	async parseCurrentNote(options?: { suppressNotice?: boolean }): Promise<void> {
@@ -497,7 +495,7 @@ export default class EditorialistPlugin extends Plugin {
 			type: REVIEW_PANEL_VIEW_TYPE,
 			active: false,
 		});
-		this.app.workspace.revealLeaf(leaf);
+		await this.app.workspace.revealLeaf(leaf);
 		this.refreshReviewPanel();
 		void this.pendingEdits.refreshPendingEditsSummary({ force: true });
 	}
@@ -520,7 +518,7 @@ export default class EditorialistPlugin extends Plugin {
 			type: EDITORIALISM_PANEL_VIEW_TYPE,
 			active: true,
 		});
-		this.app.workspace.revealLeaf(leaf);
+		await this.app.workspace.revealLeaf(leaf);
 	}
 
 	getEditorialismFolder(): string {
@@ -805,7 +803,6 @@ export default class EditorialistPlugin extends Plugin {
 			const displayName = result.cutFilePath.split("/").pop() ?? result.cutFilePath;
 			new Notice(`Backed up to ${displayName}.`);
 		} catch (error) {
-			// eslint-disable-next-line no-console
 			console.error("Editorialist: failed to back up text to cut file", error);
 			new Notice("Could not write to the cut file. Check the cut folder path in settings.");
 		}
@@ -2872,8 +2869,8 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		await this.app.workspace.setActiveLeaf(leaf, false, true);
-		this.app.workspace.revealLeaf(leaf);
+		this.app.workspace.setActiveLeaf(leaf, { focus: true });
+		await this.app.workspace.revealLeaf(leaf);
 	}
 
 	private async loadPluginData(): Promise<void> {

@@ -446,9 +446,10 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 				cls: "editorialist-panel__review-state-row-clean-text",
 				text: "Clean",
 			});
-			this.bindImmediateAction(cleanButton, async () => {
-				await this.plugin.cleanSceneReviewNote(entry.notePath);
-				this.render();
+			this.bindImmediateAction(cleanButton, () => {
+				void this.plugin.cleanSceneReviewNote(entry.notePath).then(() => {
+					this.render();
+				});
 			});
 		}
 	}

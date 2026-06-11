@@ -16,7 +16,7 @@ export default [
 			"@typescript-eslint": tseslint,
 		},
 		rules: {
-			"no-console": "warn",
+			"no-console": ["error", { allow: ["warn", "error"] }],
 			"no-debugger": "error",
 			"no-duplicate-imports": "error",
 			"prefer-const": "error",
