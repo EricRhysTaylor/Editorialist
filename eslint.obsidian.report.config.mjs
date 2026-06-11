@@ -34,6 +34,7 @@ export default defineConfig([
     rules: {
       // Product and feature names are proper nouns; sentence case still
       // applies to the rest of each string.
+      '@typescript-eslint/no-deprecated': 'error',
       'obsidianmd/ui/sentence-case': ['error', {
         ignoreWords: ['Editorialist', 'Editorialism', 'Editorialisms', 'Radial', 'Timeline'],
       }],

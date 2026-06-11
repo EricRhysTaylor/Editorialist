@@ -155,3 +155,17 @@ For the initial community-plugin submission only, open a PR to
 <https://github.com/obsidianmd/obsidian-releases> adding this plugin to
 `community-plugins.json`. Subsequent releases only require a new GitHub
 Release on this repo — the Obsidian updater picks them up automatically.
+
+## Obsidian scanner parity (added 2026-06-11)
+
+The community directory's automated review runs MORE than the public
+`eslint-plugin-obsidianmd` preset: typed deprecation detection against current
+`obsidian` typings, a ban on `eslint-disable` directives for `no-console`, and
+CSS feature checks. To keep local scans equivalent:
+
+- `npm run lint:obsidian:report` now includes `@typescript-eslint/no-deprecated`.
+- Weekly (or before any release): `npm install -D obsidian@latest eslint-plugin-obsidianmd@latest`
+  then run the report. Stale typings hide new deprecations — that is how
+  `setActiveLeaf` slipped through 1.0.0.
+- Never add `eslint-disable` for `no-console`; the config allows
+  `console.warn`/`console.error` for diagnostic surfaces.

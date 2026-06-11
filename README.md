@@ -2,7 +2,9 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/EricRhysTaylor/Editorialist/master/logo.png">
     <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/EricRhysTaylor/Editorialist/master/logo-light.png">
-    <img src="https://raw.githubusercontent.com/EricRhysTaylor/Editorialist/master/logo-light.png" alt="Editorialist Logo" width="10%" style="border-radius: 0;">
+    <!-- Fallback img is the WHITE logo: renderers that ignore <picture> (e.g. the
+         community.obsidian.md listing page, which is dark-themed) show this one. -->
+    <img src="https://raw.githubusercontent.com/EricRhysTaylor/Editorialist/master/logo.png" alt="Editorialist Logo" width="10%" style="border-radius: 0;">
   </picture>
 </p>
 <p align="center" style="font-family: sans-serif; font-weight: 100; font-size: 14px; margin-top: 12px; margin-bottom: 0; letter-spacing: 8px;">
