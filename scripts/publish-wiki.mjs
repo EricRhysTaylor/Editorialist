@@ -42,6 +42,8 @@ function publish() {
     console.log(`Copying files from ${SOURCE_DIR} to ${TEMP_DIR}...`);
     // Using cp -R for simplicity on Mac
     run(`cp -R ${SOURCE_DIR}/. ${TEMP_DIR}/`);
+    // Strip macOS metadata files so they never reach the public wiki
+    run(`find ${TEMP_DIR} -name .DS_Store -delete`);
 
     // 4. Commit and Push
     console.log('Committing and pushing changes...');
