@@ -387,7 +387,9 @@ export default class EditorialistPlugin extends Plugin {
 					return;
 				}
 				menu.addItem((item) => {
-					item.setTitle("Backup selection to cut file")
+					// "ED —" text prefix: macOS native menus drop Obsidian's item
+					// icons, so the brand mark has to live in the title itself.
+					item.setTitle("ED — Backup selection to cut file")
 						.setIcon("archive")
 						.onClick(() => {
 							void this.backupSelectionToCutFile();
