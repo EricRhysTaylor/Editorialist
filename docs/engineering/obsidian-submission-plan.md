@@ -36,11 +36,18 @@ Status snapshot (2026-06-11):
 8. Cut the first GitHub release: bare version tag (`0.1.0`, not `v0.1.0`), exactly three
    assets attached individually — `manifest.json`, `main.js`, `styles.css`. Manifest
    version must equal the tag.
-9. Fork `obsidianmd/obsidian-releases`, append to `community-plugins.json`:
-   `{ "id": "editorialist", "name": "Editorialist", "author": "RT LLC",
-   "description": <final wording>, "repo": "EricRhysTaylor/Editorialist" }`.
-   Open PR titled `Add plugin: Editorialist` using their template.
-10. Respond to ObsidianReviewBot findings (push fixes to this repo; no new PR needed),
-    then human review — typically takes weeks. Plugin goes live on merge.
+9. ~~Fork `obsidianmd/obsidian-releases` and open a PR~~ **PROCESS CHANGED May 13, 2026**
+   (https://obsidian.md/blog/future-of-plugins/): submission now goes through the
+   community directory dashboard. Steps: community.obsidian.md → sign in with your
+   Obsidian account → link GitHub (verifies repo ownership) → Plugins → New plugin →
+   enter `EricRhysTaylor/Editorialist` → agree to developer policies → Submit.
+   A preview scan can be run from the dashboard on any branch/tag before submitting.
+10. Automated review returns within minutes (policies, eslint-plugin-obsidianmd best
+    practices, vulnerability/malware scan). To address findings: fix, publish a new
+    release with an incremented version (`npm run release -- patch`), and the scan
+    re-runs. Once passed, installable in-app within ~24 hours. Every version is scanned.
 
-Task list for this plan is tracked in the Claude Code session task system (tasks #1–#10).
+License verdict (verified June 2026): the non-commercial source-available license is
+acceptable — only closed-source is restricted, and radial-timeline is listed precedent.
+
+Task list for this plan is tracked in the Claude Code session task system (tasks #1–#11).
