@@ -379,6 +379,24 @@ export default class EditorialistPlugin extends Plugin {
 		);
 
 		this.registerEvent(
+			this.app.workspace.on("editor-menu", (menu, editor) => {
+				// Offered whenever text is selected — backupSelectionToCutFile
+				// resolves the cut file from the note itself, so it works with or
+				// without an active review batch.
+				if (!editor.getSelection().trim()) {
+					return;
+				}
+				menu.addItem((item) => {
+					item.setTitle("Backup selection to cut file")
+						.setIcon("archive")
+						.onClick(() => {
+							void this.backupSelectionToCutFile();
+						});
+				});
+			}),
+		);
+
+		this.registerEvent(
 			this.app.workspace.on("editor-change", () => {
 				// Trailing-debounce because editor-change fires per-keystroke on
 				// large manuscripts; the resync is idempotent so coalescing

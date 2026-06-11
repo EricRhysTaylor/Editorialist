@@ -24,4 +24,14 @@ export function registerCommands(plugin: EditorialistPlugin): void {
 			void plugin.startPendingEditsReview();
 		},
 	});
+
+	plugin.addCommand({
+		id: "backup-selection-to-cut-file",
+		name: "Backup selection to cut file",
+		// editorCallback so the command only appears when an editor is active;
+		// the plugin method re-reads the live selection itself.
+		editorCallback: () => {
+			void plugin.backupSelectionToCutFile();
+		},
+	});
 }

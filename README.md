@@ -42,6 +42,7 @@ Editorialist is a local-first editorial review workspace for Obsidian. It import
 - `Open review launcher` — opens the launcher modal to import a review batch or start pending-edits review.
 - `Open review panel` — opens the review side panel for the active note.
 - `Review pending edits in active book` — starts the pending-edits review flow across the active book.
+- `Backup selection to cut file` — copies the selected text into the scene's cut file without changing the manuscript. Also available from the editor right-click menu when text is selected.
 
 Editorialist ships no default hotkeys. Assign your own from Obsidian's hotkey settings.
 
