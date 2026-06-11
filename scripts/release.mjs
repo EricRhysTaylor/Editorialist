@@ -268,12 +268,15 @@ async function startRelease(bumpArg) {
 	writeJSON(PKG, pkg);
 	console.log(`\n→ Synced manifest.json, versions.json, package.json to ${targetVersion}`);
 
-	// 3. Rebuild after the bump so the bundled manifest pickup is correct.
+	// 3. Sync package-lock.json to the bumped version and rebuild so the
+	// bundled manifest pickup is correct. main.js is gitignored — CI builds
+	// the release asset from the tag.
+	run("npm install --package-lock-only --ignore-scripts", "Syncing package-lock.json");
 	run("node esbuild.config.mjs production", `Rebuilding production bundle for ${targetVersion}`);
 
 	// 4. Commit, tag (bare version — no "v" prefix), push.
 	run(
-		"git add manifest.json versions.json package.json package-lock.json main.js",
+		"git add manifest.json versions.json package.json package-lock.json",
 		"Staging version bump"
 	);
 	run(`git commit -m "release: ${targetVersion}"`, "Committing version bump");

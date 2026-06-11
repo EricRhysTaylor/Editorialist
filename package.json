@@ -1,6 +1,6 @@
 {
 	"name": "editorialist",
-	"version": "0.1.0",
+	"version": "1.0.0",
 	"description": "Import structured editorial feedback from human editors, beta readers, or AI, then review every suggested edit scene by scene.",
 	"main": "main.js",
 	"type": "module",
