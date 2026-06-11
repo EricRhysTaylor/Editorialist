@@ -93,7 +93,7 @@ export class SessionOrchestrator {
 		const context = this.host.getActiveNoteContext();
 		if (!context) {
 			if (!suppressNotice) {
-				new Notice("No active markdown note to review.");
+				new Notice("No active Markdown note to review.");
 			}
 			return;
 		}

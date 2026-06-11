@@ -2,7 +2,7 @@
 	"id": "editorialist",
 	"name": "Editorialist",
 	"version": "1.0.0",
-	"minAppVersion": "1.5.0",
+	"minAppVersion": "1.7.2",
 	"description": "Import structured editorial feedback from human editors, beta readers, or AI, then review every suggested edit scene by scene.",
 	"author": "RT LLC",
 	"authorUrl": "https://github.com/EricRhysTaylor",

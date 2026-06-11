@@ -1996,7 +1996,7 @@ export default class EditorialistPlugin extends Plugin {
 	private async openNextSweepNoteFromLaunch(): Promise<void> {
 		const context = this.getActiveNoteContext();
 		if (!context) {
-			new Notice("No active markdown note to continue from.");
+			new Notice("No active Markdown note to continue from.");
 			return;
 		}
 

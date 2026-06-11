@@ -154,7 +154,7 @@ export class ReviewBatchProcessor {
 	async importReviewBatchToActiveNote(rawText: string, startReview: boolean): Promise<void> {
 		const context = this.host.getActiveNoteContext();
 		if (!context) {
-			new Notice("No active markdown note to import into.");
+			new Notice("No active Markdown note to import into.");
 			return;
 		}
 
@@ -338,7 +338,7 @@ export class ReviewBatchProcessor {
 	async removeImportedReviewBlocksInCurrentNote(): Promise<void> {
 		const context = this.host.getActiveNoteContext();
 		if (!context) {
-			new Notice("No active markdown note.");
+			new Notice("No active Markdown note.");
 			return;
 		}
 

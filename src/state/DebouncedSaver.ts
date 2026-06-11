@@ -9,7 +9,7 @@
 // not drop a pending save.
 
 export class DebouncedSaver {
-	private timer: ReturnType<typeof setTimeout> | null = null;
+	private timer: number | null = null;
 	private pendingResolvers: Array<() => void> = [];
 	private pendingRejectors: Array<(err: unknown) => void> = [];
 	// writeChain tracks the most recent in-flight write so that flush() and
@@ -28,9 +28,9 @@ export class DebouncedSaver {
 			this.pendingResolvers.push(resolve);
 			this.pendingRejectors.push(reject);
 			if (this.timer !== null) {
-				clearTimeout(this.timer);
+				window.clearTimeout(this.timer);
 			}
-			this.timer = setTimeout(() => {
+			this.timer = window.setTimeout(() => {
 				this.timer = null;
 				// The drain promise itself may reject when the write throws,
 				// but the originating request's rejector has already been
@@ -43,7 +43,7 @@ export class DebouncedSaver {
 
 	async flush(): Promise<void> {
 		if (this.timer !== null) {
-			clearTimeout(this.timer);
+			window.clearTimeout(this.timer);
 			this.timer = null;
 			await this.drain();
 			return;

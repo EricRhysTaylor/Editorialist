@@ -5513,9 +5513,29 @@
 
 .editorialist-editorialism-panel__scope-bar-fill {
 	position: absolute;
-	inset: 0 calc(100% - var(--editorialist-scope-end, 100%)) 0 var(--editorialist-scope-start, 0%);
+	inset: 0 calc(100% - var(--editorialist-scope-end, 0%)) 0 var(--editorialist-scope-start, 0%);
 	background: var(--interactive-accent);
 	border-radius: var(--editorialist-radius-pill);
+}
+
+.editorialist-editorialism-panel__scope-chip--manuscript .editorialist-editorialism-panel__scope-bar-fill {
+	--editorialist-scope-start: 0%;
+	--editorialist-scope-end: 100%;
+}
+
+.editorialist-editorialism-panel__scope-chip--scene .editorialist-editorialism-panel__scope-bar-fill {
+	--editorialist-scope-start: 45%;
+	--editorialist-scope-end: 55%;
+}
+
+.editorialist-editorialism-panel__scope-chip--range .editorialist-editorialism-panel__scope-bar-fill {
+	--editorialist-scope-start: 10%;
+	--editorialist-scope-end: 90%;
+}
+
+.editorialist-editorialism-panel__scope-chip--arc .editorialist-editorialism-panel__scope-bar-fill {
+	--editorialist-scope-start: 20%;
+	--editorialist-scope-end: 80%;
 }
 
 .editorialist-editorialism-panel__scope-label {

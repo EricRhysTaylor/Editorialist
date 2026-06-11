@@ -121,7 +121,7 @@ export function createReviewToolbarElement(
 	state: ToolbarState,
 ): HTMLElement {
 	const tracker = plugin.getToolbarKeyTracker();
-	const overlay = document.createElement("div");
+	const overlay = activeDocument.createElement("div");
 	overlay.classList.add("editorialist-toolbar-overlay");
 	markAsNonEditorSurface(overlay);
 
@@ -638,7 +638,7 @@ function buildButton(	parent: HTMLElement,
 	if (alternateActions && alternateActions.length > 0) {
 		unsubscribeShiftTracking = tracker.subscribe(applyPresentation);
 	}
-	removalObserver?.observe(document.body, {
+	removalObserver?.observe(button.buttonEl.ownerDocument.body, {
 		childList: true,
 		subtree: true,
 	});

@@ -15,7 +15,9 @@
 
 <p align="center">
   <a href="https://github.com/EricRhysTaylor/Editorialist/stargazers" target="_blank" rel="noopener"><img src="https://img.shields.io/github/stars/EricRhysTaylor/Editorialist?colorA=363a4f&colorB=e0ac00&style=for-the-badge" alt="GitHub star count"></a>
+  <!-- Restore once Editorialist is listed in the community directory:
   <a href="https://obsidian.md/plugins?id=editorialist" target="_blank" rel="noopener"><img src="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/community-plugin-stats.json&query=$.editorialist.downloads&label=Downloads&style=for-the-badge&colorA=363a4f&colorB=d53984" alt="Plugin Downloads"/></a>
+  -->
   <a href="https://github.com/EricRhysTaylor/Editorialist/blob/master/LICENSE" target="_blank" rel="noopener"><img src="https://img.shields.io/static/v1.svg?style=for-the-badge&label=LICENSE&message=NON-COMMERCIAL%20SOFTWARE%20LICENSE&colorA=363a4f&colorB=b7bdf8" alt="LICENSE — NON-COMMERCIAL SOFTWARE LICENSE"/></a>
   <br/>
   <a href="https://github.com/EricRhysTaylor/Editorialist/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement" target="_blank" rel="noopener"><img src="https://img.shields.io/github/issues/EricRhysTaylor/Editorialist/enhancement?colorA=363a4f&colorB=00bfa5&style=for-the-badge&label=enhancements" alt="Open enhancements on GitHub"></a>

@@ -63,7 +63,7 @@ const appendSvgElement = (
 	tag: string,
 	attributes: SvgAttributes,
 ): SVGElement => {
-	const element = document.createElementNS(SVG_NAMESPACE, tag);
+	const element = parent.ownerDocument.createElementNS(SVG_NAMESPACE, tag);
 	for (const [key, value] of Object.entries(attributes)) {
 		element.setAttribute(key, value);
 	}
@@ -78,7 +78,7 @@ export const renderContributorBrandMark = (
 	parent.empty();
 	const instanceId = `editorialist-brand-${brand}-${++brandMarkInstanceCount}`;
 
-	const svg = document.createElementNS(SVG_NAMESPACE, "svg");
+	const svg = parent.ownerDocument.createElementNS(SVG_NAMESPACE, "svg");
 	svg.setAttribute("fill", "none");
 	svg.setAttribute("aria-hidden", "true");
 	svg.classList.add("editorialist-settings__brand-mark");

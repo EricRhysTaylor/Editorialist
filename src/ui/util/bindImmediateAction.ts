@@ -12,7 +12,7 @@ export interface ImmediateActionOptions {
 }
 
 function isDisabledButton(element: HTMLElement): boolean {
-	return element instanceof HTMLButtonElement && element.disabled;
+	return element.instanceOf(HTMLButtonElement) && element.disabled;
 }
 
 function originatesFromNestedInteractive(

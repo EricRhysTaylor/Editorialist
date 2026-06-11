@@ -31,5 +31,12 @@ export default defineConfig([
         tsconfigRootDir: import.meta.dirname,
       },
     },
+    rules: {
+      // Product and feature names are proper nouns; sentence case still
+      // applies to the rest of each string.
+      'obsidianmd/ui/sentence-case': ['error', {
+        ignoreWords: ['Editorialist', 'Editorialism', 'Editorialisms', 'Radial', 'Timeline'],
+      }],
+    },
   },
 ]);

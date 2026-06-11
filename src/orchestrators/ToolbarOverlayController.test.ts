@@ -1,7 +1,7 @@
 // Focused tests for ToolbarOverlayController. The controller has NO Obsidian
-// dependency — only DOM globals (window.requestAnimationFrame, document.body)
-// and plain types — so it is testable with tiny stubs and no jsdom / no
-// Obsidian mock. These lock the extraction's critical invariants:
+// dependency — only DOM globals (window.requestAnimationFrame) plus the
+// element's ownerDocument and plain types — so it is testable with tiny
+// stubs and no jsdom / no Obsidian mock. These lock the extraction's critical invariants:
 //   - position updates are rAF-deduped (one frame for N schedule calls)
 //   - destroy() cancels the pending frame and detaches the element
 //   - the dismissal signature gates rebuild until mode/selection changes
@@ -27,6 +27,7 @@ function fakeToolbarEl() {
 		firstElementChild: { getBoundingClientRect: () => ({ height: 30 }) },
 		classList: { toggle: vi.fn() },
 		style: { setProperty: vi.fn() },
+		ownerDocument: { body: { appendChild: () => { appended += 1; } } },
 		removed: 0,
 		remove() {
 			this.removed += 1;
@@ -55,7 +56,6 @@ beforeEach(() => {
 			cancelCalls += 1;
 		},
 	});
-	vi.stubGlobal("document", { body: { appendChild: () => { appended += 1; } } });
 });
 
 afterEach(() => {

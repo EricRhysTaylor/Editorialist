@@ -82,7 +82,7 @@ export class ToolbarOverlayController {
 
 		this.state = toolbarState;
 		this.el = this.host.createToolbarElement(toolbarState);
-		document.body.appendChild(this.el);
+		this.el.ownerDocument.body.appendChild(this.el);
 		this.measureHeight();
 		this.lastPosition = null;
 		this.scheduleRepositionInternal();

@@ -198,8 +198,8 @@ export class EditorialismPanel extends ItemView {
 			cls: "editorialist-editorialism-panel__detail-open",
 			attr: {
 				type: "button",
-				"aria-label": "Open source markdown",
-				title: "Open source markdown",
+				"aria-label": "Open source Markdown",
+				title: "Open source Markdown",
 			},
 		});
 		const openIcon = openSource.createSpan({ cls: "editorialist-editorialism-panel__detail-open-icon" });
@@ -282,28 +282,9 @@ export class EditorialismPanel extends ItemView {
 			cls: `editorialist-editorialism-panel__scope-chip editorialist-editorialism-panel__scope-chip--${scope.kind}`,
 		});
 		const bar = chip.createSpan({ cls: "editorialist-editorialism-panel__scope-bar" });
-		const fill = bar.createSpan({ cls: "editorialist-editorialism-panel__scope-bar-fill" });
-		switch (scope.kind) {
-			case "manuscript":
-				fill.style.setProperty("--editorialist-scope-start", "0%");
-				fill.style.setProperty("--editorialist-scope-end", "100%");
-				break;
-			case "scene":
-				fill.style.setProperty("--editorialist-scope-start", "45%");
-				fill.style.setProperty("--editorialist-scope-end", "55%");
-				break;
-			case "range":
-				fill.style.setProperty("--editorialist-scope-start", "10%");
-				fill.style.setProperty("--editorialist-scope-end", "90%");
-				break;
-			case "arc":
-				fill.style.setProperty("--editorialist-scope-start", "20%");
-				fill.style.setProperty("--editorialist-scope-end", "80%");
-				break;
-			default:
-				fill.style.setProperty("--editorialist-scope-start", "0%");
-				fill.style.setProperty("--editorialist-scope-end", "0%");
-		}
+		// Fill extents per scope kind are defined in styles.css via the
+		// scope-chip--{kind} modifier; unknown kinds fall back to a zero-width fill.
+		bar.createSpan({ cls: "editorialist-editorialism-panel__scope-bar-fill" });
 		const label = chip.createSpan({ cls: "editorialist-editorialism-panel__scope-label" });
 		label.setText(this.formatScopeLabel(scope, editorialism));
 	}

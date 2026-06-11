@@ -284,8 +284,8 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		const cardToCenter = (selectedCard ?? panelPrimaryCard) as HTMLElement | null;
 		if (cardToCenter) {
 			const targetCard = cardToCenter;
-			requestAnimationFrame(() => {
-				if (document.body.contains(targetCard)) {
+			window.requestAnimationFrame(() => {
+				if (targetCard.isConnected) {
 					this.centerCardInScrollView(targetCard);
 				}
 			});

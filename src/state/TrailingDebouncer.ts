@@ -18,7 +18,7 @@
 // future consumers that need terminal execution.
 
 export class TrailingDebouncer {
-	private timer: ReturnType<typeof setTimeout> | null = null;
+	private timer: number | null = null;
 
 	constructor(
 		private readonly handler: () => void,
@@ -27,7 +27,7 @@ export class TrailingDebouncer {
 
 	schedule(): void {
 		this.cancel();
-		this.timer = setTimeout(() => {
+		this.timer = window.setTimeout(() => {
 			this.timer = null;
 			this.handler();
 		}, this.delayMs);
@@ -37,7 +37,7 @@ export class TrailingDebouncer {
 		if (this.timer === null) {
 			return;
 		}
-		clearTimeout(this.timer);
+		window.clearTimeout(this.timer);
 		this.timer = null;
 		this.handler();
 	}
@@ -46,7 +46,7 @@ export class TrailingDebouncer {
 		if (this.timer === null) {
 			return;
 		}
-		clearTimeout(this.timer);
+		window.clearTimeout(this.timer);
 		this.timer = null;
 	}
 

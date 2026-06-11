@@ -9,6 +9,7 @@ export default defineConfig({
 		include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
 		environment: "node",
 		globals: true,
+		setupFiles: ["tests/setup.ts"],
 		alias: {
 			obsidian: path.resolve(here, "tests/mocks/obsidian.ts"),
 		},
