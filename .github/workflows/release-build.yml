@@ -1,0 +1,73 @@
+name: Release Build
+
+# Builds release assets on GitHub-hosted runners, signs a build-provenance
+# attestation for each asset, and uploads them to the GitHub release.
+# Dispatched by scripts/release.mjs during the "finish release" phase.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag to build and upload to (e.g. 1.0.0 — bare version, no "v" prefix)'
+        required: true
+        type: string
+      ref:
+        description: 'Git ref to build from (defaults to the version tag)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Build and attest, but skip uploading assets to the release'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build-attest-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || inputs.version }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify manifest version matches release tag
+        run: |
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          if [ "$MANIFEST_VERSION" != "${{ inputs.version }}" ]; then
+            echo "manifest.json version ($MANIFEST_VERSION) does not match release tag (${{ inputs.version }})"
+            exit 1
+          fi
+
+      - name: Build release assets
+        run: node esbuild.config.mjs production
+
+      - name: Verify assets exist
+        run: ls -la main.js manifest.json styles.css
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+
+      - name: Upload assets to release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.version }}" main.js manifest.json styles.css --clobber

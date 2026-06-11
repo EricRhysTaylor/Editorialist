@@ -1,6 +1,9 @@
-<!-- Logo placeholder — replace src with the Editorialist logo once supplied. -->
 <p align="center">
-  <img src="https://raw.githubusercontent.com/EricRhysTaylor/Editorialist/master/logo.png" alt="Editorialist Logo" width="10%" style="border-radius: 0;">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/EricRhysTaylor/Editorialist/master/logo.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/EricRhysTaylor/Editorialist/master/logo-light.png">
+    <img src="https://raw.githubusercontent.com/EricRhysTaylor/Editorialist/master/logo-light.png" alt="Editorialist Logo" width="10%" style="border-radius: 0;">
+  </picture>
 </p>
 <p align="center" style="font-family: sans-serif; font-weight: 100; font-size: 14px; margin-top: 12px; margin-bottom: 0; letter-spacing: 8px;">
   Editorialist
@@ -48,7 +51,7 @@ Editorialist ships no default hotkeys. Assign your own from Obsidian's hotkey se
 
 ## License
 
-Source-Available, Non-Commercial Software License. Free for personal,
+Editorialist Source-Available Non-Commercial License. Free for personal,
 educational, and professional creative work — including manuscripts and other
 commercial creative output produced with the plugin. Commercial use of the
 software itself, redistribution, and forks for public distribution require
