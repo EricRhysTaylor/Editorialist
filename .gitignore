@@ -6,3 +6,5 @@ main.js
 
 .obsidian/
 *.nosync/
+
+.wiki_temp_publish/
