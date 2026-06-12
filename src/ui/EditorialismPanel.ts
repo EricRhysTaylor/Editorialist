@@ -199,7 +199,6 @@ export class EditorialismPanel extends ItemView {
 			attr: {
 				type: "button",
 				"aria-label": "Open source Markdown",
-				title: "Open source Markdown",
 			},
 		});
 		const openIcon = openSource.createSpan({ cls: "editorialist-editorialism-panel__detail-open-icon" });
@@ -247,7 +246,6 @@ export class EditorialismPanel extends ItemView {
 			attr: {
 				type: "button",
 				"aria-label": `Status: ${STATUS_LABEL[item.status]} (click to advance)`,
-				title: `${STATUS_LABEL[item.status]} — click to advance`,
 			},
 		});
 		const checkboxIcon = checkbox.createSpan({ cls: "editorialist-editorialism-panel__item-status-icon" });

@@ -280,7 +280,10 @@ export function createReviewToolbarElement(
 				cls: "editorialist-toolbar__pending-brief-link",
 				attr: {
 					href: "#",
-					title: `Open brief: ${state.briefContext.noteTitle}`,
+					// aria-label, not native `title`: the overlay re-renders while
+					// hovering, and Chromium ghosts orphaned title-tooltips over the
+					// editor text beneath.
+					"aria-label": `Open brief: ${state.briefContext.noteTitle}`,
 				},
 				text: state.briefContext.noteTitle,
 			});
@@ -704,7 +707,6 @@ function renderMetaSegment(parent: HTMLElement, text: string, className?: string
 	});
 	markAsNonEditorSurface(segment);
 	if (title) {
-		segment.setAttribute("title", title);
 		segment.setAttribute("aria-label", `${text}. ${title}`);
 	}
 }

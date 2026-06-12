@@ -136,8 +136,10 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		const settingsButton = titleRow.createEl("button", {
 			cls: "editorialist-panel__settings-button",
 			attr: {
+				// aria-label only — no native `title`. The panel re-renders on every
+				// store change, and Chromium re-shows an orphaned title-tooltip at the
+				// cursor (over the editor) when the hovered node is destroyed.
 				"aria-label": "Open Editorialist settings",
-				title: "Open Editorialist settings",
 				type: "button",
 			},
 		});
@@ -407,7 +409,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 			cls: "editorialist-panel__review-state-row-link",
 			attr: {
 				href: "#",
-				title: `Open ${entry.noteTitle}`,
+				"aria-label": `Open ${entry.noteTitle}`,
 			},
 		});
 		link.createSpan({
@@ -438,7 +440,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		if (showCleanAction) {
 			const cleanButton = row.createEl("button", {
 				cls: "editorialist-panel__review-state-row-clean",
-				attr: { type: "button", title: "Clean review block from this scene" },
+				attr: { type: "button", "aria-label": "Clean review block from this scene" },
 			});
 			const cleanIcon = cleanButton.createSpan({ cls: "editorialist-panel__review-state-row-clean-icon" });
 			setIcon(cleanIcon, "eraser");
@@ -482,7 +484,6 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 				type: "button",
 				"aria-label": this.commentsCollapsed ? "Show comments" : "Hide comments",
 				"aria-expanded": this.commentsCollapsed ? "false" : "true",
-				title: this.commentsCollapsed ? "Show comments" : "Hide comments",
 			},
 		});
 		const toggleIcon = toggle.createSpan({ cls: "editorialist-panel__comments-toggle-icon" });
@@ -600,7 +601,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		const actionRow = entry.createDiv({ cls: "editorialist-panel__comment-entry-action" });
 		const link = actionRow.createEl("a", {
 			cls: "editorialist-panel__comment-entry-action-link",
-			attr: { href: "#", title: options.tooltip },
+			attr: { href: "#", "aria-label": options.tooltip },
 		});
 		link.createSpan({ text: options.linkText });
 		this.bindImmediateAction(link, () => {
@@ -636,7 +637,6 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 			starredButton.buttonEl.addClass("is-active");
 		}
 		starredButton.buttonEl.setAttribute("aria-label", this.starredOnly ? "Show all reviewers" : "Show starred reviewers");
-		starredButton.buttonEl.setAttribute("title", this.starredOnly ? "Show all reviewers" : "Show starred reviewers");
 		setIcon(starredButton.buttonEl, "star");
 	}
 
@@ -737,7 +737,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		const summaryStatus = summary.createDiv({
 			cls: `editorialist-suggestion__label editorialist-suggestion__label--${statusName}`,
 			attr: {
-				title: `${this.toSentenceCase(suggestion.operation)} suggestion`,
+				"aria-label": `${this.toSentenceCase(suggestion.operation)} suggestion`,
 			},
 		});
 		const summaryStatusIcon = summaryStatus.createSpan({ cls: "editorialist-suggestion__label-icon" });
@@ -760,7 +760,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		const status = metaPrimary.createDiv({
 			cls: `editorialist-suggestion__label editorialist-suggestion__label--${statusName}`,
 			attr: {
-				title: `${this.toSentenceCase(suggestion.operation)} suggestion`,
+				"aria-label": `${this.toSentenceCase(suggestion.operation)} suggestion`,
 			},
 		});
 		const statusIcon = status.createSpan({ cls: "editorialist-suggestion__label-icon" });
