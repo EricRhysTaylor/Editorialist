@@ -93,6 +93,14 @@ async function confirm(question) {
 	return /^y(es)?$/i.test(answer.trim());
 }
 
+async function ask(question) {
+	if (!process.stdin.isTTY) return "";
+	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+	const answer = await new Promise((resolve) => rl.question(question, resolve));
+	rl.close();
+	return answer.trim();
+}
+
 function requireMasterBranch() {
 	const branch = capture("git rev-parse --abbrev-ref HEAD");
 	if (branch !== "master") {
@@ -373,6 +381,14 @@ async function main() {
 			console.log(`Found PUBLISHED release ${currentVersion}.`);
 			if (await confirm(`\nRepair/update assets for ${currentVersion}? [y/N] `)) {
 				await finishRelease(currentVersion, false);
+				return;
+			}
+			// "No" rolls into starting the next release rather than quitting.
+			const bump = await ask(`\nStart a new release from ${currentVersion}? Enter patch, minor, major, or x.y.z (blank to quit): `);
+			if (bump) {
+				await startRelease(bump);
+			} else {
+				console.log("Nothing to do.");
 			}
 		}
 		return;
