@@ -226,7 +226,7 @@ export class ReviewRegistryService {
 			}
 
 			const frontmatter =
-				this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+				this.app.metadataCache.getFileCache(file)?.frontmatter;
 			const editorialIds = getFrontmatterStringValues(frontmatter, [
 				"editorial_id",
 				"editorialId",
@@ -597,7 +597,7 @@ export class ReviewRegistryService {
 
 		let from = 0;
 		let to = 0;
-		await fileManager.processFrontMatter(file, (frontmatter) => {
+		await fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
 			const readBlock = (key: string): Record<string, unknown> | null => {
 				const value = frontmatter[key];
 				return value && typeof value === "object" && !Array.isArray(value)
@@ -656,7 +656,7 @@ export class ReviewRegistryService {
 				continue;
 			}
 
-			await fileManager.processFrontMatter(file, (frontmatter) => {
+			await fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
 				const existingId = getFrontmatterStringValues(frontmatter, [
 					"id",
 					"Id",
@@ -881,7 +881,7 @@ export class ReviewRegistryService {
 			return false;
 		}
 
-		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
 		const classValues = getFrontmatterStringValues(frontmatter, ["class", "Class", "classes", "Classes"]);
 
 		return classValues.some((value) => value.trim().toLowerCase() === "scene");

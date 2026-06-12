@@ -249,7 +249,7 @@ function serializeStructuredDocument(document: StructuredDocument, operations: u
 			continue;
 		}
 		const op = rawOp as StructuredOperation;
-		const type = String(op.type ?? "").toUpperCase();
+		const type = typeof op.type === "string" ? op.type.toUpperCase() : "";
 		if (!(OPERATION_KEYWORDS as readonly string[]).includes(type)) {
 			continue;
 		}
@@ -285,7 +285,12 @@ function pushString(lines: string[], key: string, value: unknown): void {
 	if (value === undefined || value === null) {
 		return;
 	}
-	const str = typeof value === "string" ? value : String(value);
+	const str =
+		typeof value === "string"
+			? value
+			: typeof value === "number" || typeof value === "boolean"
+				? String(value)
+				: "";
 	const trimmed = str.trim();
 	if (!trimmed) {
 		return;

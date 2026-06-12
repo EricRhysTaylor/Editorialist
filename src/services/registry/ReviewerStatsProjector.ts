@@ -248,7 +248,7 @@ export class ReviewerStatsProjector {
 					continue;
 				}
 
-				this.applyDelta(nextIndex[candidate] as ReviewerSignalRecord, -1);
+				this.applyDelta(nextIndex[candidate], -1);
 				delete nextIndex[candidate];
 				didChange = true;
 			}

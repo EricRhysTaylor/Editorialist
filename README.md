@@ -39,6 +39,8 @@ Editorialist is a local-first editorial review workspace for Obsidian. It import
 
 - No hidden network requests, no account, no telemetry.
 - Notes are only modified when you explicitly import a batch, apply a suggestion, clean review blocks, or run a maintenance action.
+- The vault file list is read (via Obsidian's standard metadata APIs) only to build the scene inventory and review registry — file contents never leave your vault.
+- The clipboard is touched only on your explicit action: copying the reviewer template out, or importing a review batch you've copied.
 - Bulk maintenance actions require confirmation.
 - Backup export writes contributor + revision metadata only — never manuscript text.
 

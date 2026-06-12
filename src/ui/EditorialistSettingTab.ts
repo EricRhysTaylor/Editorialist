@@ -877,7 +877,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		if (!(file instanceof TFile)) {
 			return { revision: 0, lastUpdatedLabel: null };
 		}
-		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
 		if (!frontmatter) {
 			return { revision: 0, lastUpdatedLabel: null };
 		}
@@ -908,7 +908,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			return null;
 		}
 
-		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
 		if (!frontmatter) {
 			return null;
 		}

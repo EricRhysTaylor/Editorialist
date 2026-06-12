@@ -387,9 +387,9 @@ export default class EditorialistPlugin extends Plugin {
 					return;
 				}
 				menu.addItem((item) => {
-					// "ED —" text prefix: macOS native menus drop Obsidian's item
+					// "Ed —" text prefix: macOS native menus drop Obsidian's item
 					// icons, so the brand mark has to live in the title itself.
-					item.setTitle("ED — Backup selection to cut file")
+					item.setTitle("Ed — backup selection to cut file")
 						.setIcon("archive")
 						.onClick(() => {
 							void this.backupSelectionToCutFile();
@@ -910,65 +910,64 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	private createReviewStateMachineHost(): ReviewStateMachineHost {
-		const plugin = this;
 		return {
 			store: {
-				getSession: () => plugin.store.getSession(),
-				getCompletedSweep: () => plugin.store.getCompletedSweep(),
-				selectSuggestion: (suggestionId) => plugin.store.selectSuggestion(suggestionId),
+				getSession: () => this.store.getSession(),
+				getCompletedSweep: () => this.store.getCompletedSweep(),
+				selectSuggestion: (suggestionId) => this.store.selectSuggestion(suggestionId),
 				updateSuggestionStatus: (suggestionId, status) =>
-					plugin.store.updateSuggestionStatus(suggestionId, status),
-				setCompletedSweep: (value) => plugin.store.setCompletedSweep(value),
-				setGuidedSweep: (value) => plugin.store.setGuidedSweep(value),
+					this.store.updateSuggestionStatus(suggestionId, status),
+				setCompletedSweep: (value) => this.store.setCompletedSweep(value),
+				setGuidedSweep: (value) => this.store.setGuidedSweep(value),
 			},
-			getSelectedSuggestionId: () => plugin.store.getState().selectedSuggestionId,
-			getGuidedSweep: () => plugin.getGuidedSweep(),
+			getSelectedSuggestionId: () => this.store.getState().selectedSuggestionId,
+			getGuidedSweep: () => this.getGuidedSweep(),
 			registry: {
 				persistReviewDecision: (notePath, suggestion, status, options) =>
-					plugin.registry.persistReviewDecision(notePath, suggestion, status, options),
+					this.registry.persistReviewDecision(notePath, suggestion, status, options),
 				clearPersistedReviewDecision: (notePath, suggestion, options) =>
-					plugin.registry.clearPersistedReviewDecision(notePath, suggestion, options),
+					this.registry.clearPersistedReviewDecision(notePath, suggestion, options),
 				syncReviewerSignalsForSession: (session, options) =>
-					plugin.registry.syncReviewerSignalsForSession(session as ReviewSession | null, options),
+					this.registry.syncReviewerSignalsForSession(session as ReviewSession | null, options),
 				syncSceneInventoryForSession: (session) =>
-					plugin.registry.syncSceneInventoryForSession(session as ReviewSession | null),
+					this.registry.syncSceneInventoryForSession(session as ReviewSession | null),
 			},
-			getReviewNoteContext: () => plugin.getReviewNoteContext(),
-			getActiveEditorView: () => plugin.getActiveEditorView(),
-			focusReviewLeaf: (view) => plugin.focusReviewLeaf(view as MarkdownView),
+			getReviewNoteContext: () => this.getReviewNoteContext(),
+			getActiveEditorView: () => this.getActiveEditorView(),
+			focusReviewLeaf: (view) => this.focusReviewLeaf(view as MarkdownView),
 			executeEditorUndo: () => runEditorUndo(this.app.workspace.getActiveViewOfType(MarkdownView)),
 			notify: (message) => {
 				new Notice(message);
 			},
-			canAcceptSuggestion: (suggestionId) => plugin.canAcceptSuggestion(suggestionId),
-			canRejectSuggestion: (suggestionId) => plugin.canRejectSuggestion(suggestionId),
-			canMarkSuggestionRewritten: (suggestionId) => plugin.canMarkSuggestionRewritten(suggestionId),
-			hasActiveReviewSession: () => plugin.hasActiveReviewSession(),
-			hasReviewSessionContext: () => plugin.hasReviewSessionContext(),
-			getReviewSession: () => plugin.getReviewSession(),
-			getSuggestionById: (suggestionId) => plugin.getSuggestionById(suggestionId),
-			getCurrentSessionTrackingContext: () => plugin.getCurrentSessionTrackingContext(),
+			canAcceptSuggestion: (suggestionId) => this.canAcceptSuggestion(suggestionId),
+			canRejectSuggestion: (suggestionId) => this.canRejectSuggestion(suggestionId),
+			canMarkSuggestionRewritten: (suggestionId) => this.canMarkSuggestionRewritten(suggestionId),
+			hasActiveReviewSession: () => this.hasActiveReviewSession(),
+			hasReviewSessionContext: () => this.hasReviewSessionContext(),
+			getReviewSession: () => this.getReviewSession(),
+			getSuggestionById: (suggestionId) => this.getSuggestionById(suggestionId),
+			getCurrentSessionTrackingContext: () => this.getCurrentSessionTrackingContext(),
 			getPanelOnlyReviewStateForSession: (session) =>
-				plugin.getPanelOnlyReviewStateForSession(session as ReviewSession | null),
-			revealSelectedSuggestion: () => plugin.revealSelectedSuggestion(),
-			revealSuggestionContext: (suggestionId) => plugin.revealSuggestionContext(suggestionId),
-			enterGuidedSweepHandoff: () => plugin.enterGuidedSweepHandoff(),
+				this.getPanelOnlyReviewStateForSession(session as ReviewSession | null),
+			revealSelectedSuggestion: () => this.revealSelectedSuggestion(),
+			revealSuggestionContext: (suggestionId) => this.revealSuggestionContext(suggestionId),
+			enterGuidedSweepHandoff: () => this.enterGuidedSweepHandoff(),
 			refreshSessionAfterAcceptedEdit: (session, suggestionId) =>
-				plugin.refreshSessionAfterAcceptedEdit(session as ReviewSession, suggestionId),
-			syncActiveEditorDecorations: () => plugin.syncActiveEditorDecorations(),
-			resyncSessionForActiveNote: () => plugin.resyncSessionForActiveNote(),
+				this.refreshSessionAfterAcceptedEdit(session as ReviewSession, suggestionId),
+			syncActiveEditorDecorations: () => this.syncActiveEditorDecorations(),
+			resyncSessionForActiveNote: () => this.resyncSessionForActiveNote(),
 			focusResolvedTarget: async (target) => {
-				await plugin.focusResolvedTarget(target as ReviewTargetRef | undefined);
+				await this.focusResolvedTarget(target as ReviewTargetRef | undefined);
 			},
 			get lastAppliedChange() {
-				return plugin.lastAppliedChange;
+				return this.lastAppliedChange;
 			},
 			set lastAppliedChange(value) {
-				plugin.lastAppliedChange = value;
+				this.lastAppliedChange = value;
 			},
 			setActiveHighlight: (range, tone) => {
-				plugin.activeHighlightRange = range;
-				plugin.activeHighlightTone = tone ?? "active";
+				this.activeHighlightRange = range;
+				this.activeHighlightTone = tone ?? "active";
 			},
 		};
 	}

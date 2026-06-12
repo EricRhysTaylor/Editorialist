@@ -48,7 +48,7 @@ function resolveRadialTimelinePlugin(app: App): RadialTimelinePluginSurface | nu
 		return null;
 	}
 
-	return candidate as RadialTimelinePluginSurface;
+	return candidate;
 }
 
 export async function collectPendingEdits(app: App): Promise<CollectPendingEditsResult> {

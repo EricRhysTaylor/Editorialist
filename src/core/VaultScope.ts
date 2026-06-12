@@ -41,7 +41,7 @@ export function isSceneClassFile(app: App, file: TFile): boolean {
 }
 
 export function getSceneIdForFile(app: App, file: TFile): string | undefined {
-	const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined;
+	const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
 	const values = getFrontmatterStringValues(frontmatter, [
 		"id",
 		"Id",
@@ -62,7 +62,7 @@ export function getSceneIdForFile(app: App, file: TFile): string | undefined {
 export function matchesSceneId(app: App, file: TFile, sceneId: string): boolean {
 	const normalizedSceneId = sceneId.trim().toLowerCase();
 	const frontmatterCandidates = getFrontmatterStringValues(
-		app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined,
+		app.metadataCache.getFileCache(file)?.frontmatter,
 		["id", "Id", "ID", "editorial_id", "editorialId", "EditorialId", "sceneid", "sceneId", "SceneId", "scene_id", "Scene_ID"],
 	).map((value) => value.trim().toLowerCase());
 
