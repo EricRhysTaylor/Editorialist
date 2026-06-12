@@ -888,6 +888,12 @@
 
 .editorialist-panel__pending-edits-header {
 	cursor: pointer;
+	justify-content: flex-start;
+	align-items: center;
+}
+
+.editorialist-panel__pending-edits-header .editorialist-panel__section-meta {
+	margin-left: auto;
 }
 
 .editorialist-panel__pending-edits-caret,
@@ -915,8 +921,15 @@
 	flex-direction: column;
 	gap: 0.2rem;
 	padding: 0.4rem 0.5rem;
+	border: 1px solid transparent;
 	border-radius: var(--editorialist-radius-xs);
 	background: color-mix(in srgb, var(--background-primary) 85%, var(--background-secondary) 15%);
+	cursor: pointer;
+}
+
+.editorialist-panel__pending-edits-row:hover {
+	border-color: var(--background-modifier-border-hover);
+	background: var(--background-modifier-hover);
 }
 
 .editorialist-panel__pending-edits-row-header {
@@ -928,7 +941,6 @@
 .editorialist-panel__pending-edits-row-title {
 	font-weight: 600;
 	color: var(--text-normal);
-	cursor: pointer;
 }
 
 .editorialist-panel__pending-edits-row-count {

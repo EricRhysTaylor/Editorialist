@@ -371,8 +371,22 @@ describe("PendingEditsCoordinator — summary scenes", () => {
 			scenePath: "Book/s1.md",
 			title: "S1",
 			count: 2,
-			firstExcerpt: "[[Brief Note]] tighten the opening",
+			firstExcerpt: "Brief Note tighten the opening",
 		});
+	});
+
+	it("renders aliased wiki-links in the excerpt as their alias only", async () => {
+		const { host } = makeHost();
+		const text = "[[IB-260601-1517|Jun 1]] S9 preamble front-loads a lecture";
+		const seg: PendingEditSegment = { ...inquirySegment("seg1"), text, lines: [text] };
+		collectResult = { ok: true, session: session([seg]) };
+
+		const c = new PendingEditsCoordinator(host);
+		await c.refreshPendingEditsSummary({ force: true });
+
+		expect(c.getPendingEditsSummary()?.scenes[0]?.firstExcerpt).toBe(
+			"Jun 1 S9 preamble front-loads a lecture",
+		);
 	});
 
 	it("collapses whitespace and truncates a long first-item excerpt with an ellipsis", async () => {

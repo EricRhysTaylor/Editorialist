@@ -313,15 +313,17 @@ export function renderPendingEditsWorkspaceBlock(
 	if (expanded) {
 		const list = section.createDiv({ cls: "editorialist-panel__pending-edits-list" });
 		for (const scene of summary.scenes) {
-			const row = list.createDiv({ cls: "editorialist-panel__pending-edits-row" });
+			const row = list.createDiv({
+				cls: "editorialist-panel__pending-edits-row",
+				attr: { title: `Review pending edits in ${scene.title}` },
+			});
 			const rowHeader = row.createDiv({ cls: "editorialist-panel__pending-edits-row-header" });
-			const link = rowHeader.createEl("a", {
+			rowHeader.createDiv({
 				cls: "editorialist-panel__pending-edits-row-title",
-				attr: { href: "#", title: `Review pending edits in ${scene.title}` },
 				text: scene.title,
 			});
 			const targetScenePath = scene.scenePath;
-			host.bindAction(link, () => {
+			host.bindAction(row, () => {
 				void plugin.startPendingEditsReviewForScene(targetScenePath);
 			});
 			rowHeader.createSpan({

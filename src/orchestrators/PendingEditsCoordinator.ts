@@ -61,7 +61,14 @@ function buildPendingEditExcerpt(text: string | undefined): string {
 	if (!text) {
 		return "";
 	}
-	const collapsed = text.replace(/\s+/g, " ").trim();
+	// Render wiki-links the way Obsidian displays them: alias only, or the bare
+	// target when the link has no alias. The raw [[target|alias]] markup is
+	// noise in a one-line excerpt.
+	const unlinked = text.replace(
+		/\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g,
+		(_match, target: string, alias?: string) => (alias?.trim() || target.trim()),
+	);
+	const collapsed = unlinked.replace(/\s+/g, " ").trim();
 	if (collapsed.length <= PENDING_EDIT_EXCERPT_MAX_LENGTH) {
 		return collapsed;
 	}
