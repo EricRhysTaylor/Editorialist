@@ -8,19 +8,17 @@ Editorialist is designed to integrate tightly with the [Radial Timeline](Radial-
 
 <p align="center"><img src="images/panel-side-home.png" alt="The Editorialist review panel: how to use Editorialist, recent reviews, and contributors" width="340"></p>
 
-## How it behaves
+## How it works
 
-These are commitments, not defaults:
+Editorialist is a local-only system — it runs entirely inside your vault, with no account or service behind it. You handle the transfer yourself: copy the formatting instructions out to your AI, and bring the formatted response back. Your manuscript changes only when you accept a suggestion, and anything you cut along the way is archived to per-scene [cut files](Settings-Reference.md#configuration-tab) rather than discarded.
 
-- **No hidden network requests, no account, no telemetry.** Everything runs in your vault.
-- **Notes are only modified when you act.** Importing a batch, applying a suggestion, cleaning review blocks, or running a maintenance action — nothing else writes to your manuscript.
-- **Bulk maintenance actions require confirmation.**
-- **Backup export writes contributor + revision metadata only — never manuscript text.**
-- **Cut text is archived, not destroyed.** Accepted cuts can be preserved in per-scene [cut files](Settings-Reference.md#configuration-tab) with full attribution.
+## The workflow
 
-## The workflow in one paragraph
-
-You (or the review launcher's template button) hand a reviewer the [format specification](Importing-Reviews.md); they return suggestions as a review block or an Editorialism file; you import the batch through the launcher; then you walk the suggestions in a [guided review sweep](Review-Panel.md) — accepting, rejecting, rewriting, or deferring each one — while Editorialist tracks per-scene progress, per-contributor acceptance stats, and revision history.
+1. **Copy the formatting instructions** from the review launcher — they include the [format specification](Importing-Reviews.md) and your book's scene IDs.
+2. **Get suggestions.** Paste the instructions into your AI conversation along with the prose. For human feedback, collect your reviewer's notes in any form — a photo of a marked-up page, a document, an email — and have an AI shape them into a batch using the same instructions.
+3. **Import the batch** through the launcher; the suggestions land in the targeted scenes as review blocks.
+4. **Walk the [guided review sweep](Review-Panel.md)** — accept, reject, rewrite, or defer each suggestion.
+5. **Finish.** Per-scene progress, contributor stats, and revision history update as each sweep completes.
 
 ## Pages
 
@@ -29,7 +27,7 @@ You (or the review launcher's template button) hand a reviewer the [format speci
 | [Getting Started](Getting-Started.md) | Install, commands, and your first review sweep |
 | [Review Panel](Review-Panel.md) | The main working surface — sessions, the suggestion toolbar, statuses |
 | [Editorialisms Panel](Editorialisms-Panel.md) | Structural guidance documents and the checklist workflow |
-| [Importing Reviews](Importing-Reviews.md) | The block format and Editorialism file format — the page to give your reviewers |
+| [Importing Reviews](Importing-Reviews.md) | The block format and Editorialism file format — what your AI produces and the launcher imports |
 | [Settings Reference](Settings-Reference.md) | All three settings tabs: Core, Contributors, Configuration |
 | [Radial Timeline Integration](Radial-Timeline-Integration.md) | What the companion plugin adds, how the coupling works, where it's heading |
 | [Roadmap](Roadmap.md) | What's planned, in rough order |

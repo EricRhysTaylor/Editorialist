@@ -4,11 +4,12 @@
 
 Editorialist is **desktop only** — it won't appear or load on Obsidian mobile.
 
-Editorialist is not yet in the Obsidian Community Plugins directory (that's [planned](Roadmap.md)). Until then, install manually:
+Install from the Obsidian Community Plugins directory:
 
-1. Download `manifest.json`, `main.js`, and `styles.css` from the [latest release](https://github.com/EricRhysTaylor/Editorialist/releases).
-2. Create `<your-vault>/.obsidian/plugins/editorialist/` and place the three files inside.
-3. In Obsidian: **Settings → Community plugins → Installed plugins**, enable **Editorialist**.
+1. In Obsidian: **Settings → Community plugins → Browse**, search for **Editorialist**.
+2. Install, then enable it.
+
+(To install a specific version manually, grab `manifest.json`, `main.js`, and `styles.css` from the [latest release](https://github.com/EricRhysTaylor/Editorialist/releases) and place them in `<your-vault>/.obsidian/plugins/editorialist/`.)
 
 If you also use [Radial Timeline](Radial-Timeline-Integration.md), Editorialist will detect it automatically and scope itself to your active book. It is optional — everything below works without it.
 
@@ -36,7 +37,11 @@ Run **Open review launcher** and click **Copy formatting instructions**. This co
 
 ### 2. Get suggestions
 
-Paste the template into a conversation with whoever is reviewing — an AI chat, or as instructions to a human editor or beta reader — along with the prose to review. They reply with suggestions in the [review block format](Importing-Reviews.md).
+The formatting instructions are written for an AI — a human reviewer never works from them directly.
+
+**AI review:** paste the instructions into your AI conversation along with the prose to review. The AI replies with suggestions in the [review block format](Importing-Reviews.md).
+
+**Human feedback:** your editor or beta reader works however they naturally work — margin notes on a printed page, comments in a document, an email. Collect their notes in whatever form they arrive (a photo of the handwritten page, the electronic doc) and hand them to an AI along with the formatting instructions. The AI shapes everything into a properly formatted batch for Editorialist, with your human reviewer credited as the contributor.
 
 ### 3. Import the batch
 

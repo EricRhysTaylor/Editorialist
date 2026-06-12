@@ -1,6 +1,6 @@
 # Roadmap
 
-Rough order of work. Dates are deliberately absent — sequencing matters more than schedule. (Last updated 2026-06-10.)
+Rough order of work. Dates are deliberately absent — sequencing matters more than schedule. (Last updated 2026-06-11.)
 
 ## Now: settle the feature set
 
@@ -10,13 +10,9 @@ The current focus is stabilizing what exists rather than adding surface area. Kn
 - **Rewrite capture** — deferred release-candidate follow-up (`main.ts`).
 - General polish, documentation (this wiki), and hardening guided by the engineering audit cadence in `docs/engineering/audits/`.
 
-## Next: Obsidian Community Plugins submission
-
-Once the feature set has settled, submit Editorialist to the Obsidian Community Plugins directory. The compliance tooling (`scripts/obsidian-compliance.mjs`, run on every build) is already in place to keep submission blockers out of the codebase.
-
 ## Later: full API integration
 
-Full API integration is planned — **but not for a while**. It deliberately waits until after the feature set settles and the plugin ships in the Obsidian Community directory, so the API surface stabilizes against a settled feature set rather than a moving one.
+Full API integration is planned — **but not for a while**. It deliberately waits until the feature set settles, so the API surface stabilizes against a settled feature set rather than a moving one.
 
 ## Major: Website community editorial feedback system
 
