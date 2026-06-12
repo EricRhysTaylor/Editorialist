@@ -12,9 +12,8 @@ Open an issue at
   Editorialism file, a minimal sample (with any manuscript text replaced by
   placeholder text) makes fixes dramatically faster.
 - **Feature requests:** describe the editorial workflow you're trying to
-  accomplish, not just the mechanism — the
-  [Roadmap](https://github.com/EricRhysTaylor/Editorialist/wiki/Roadmap)
-  shows what's already planned.
+  accomplish, not just the mechanism. Existing public requests are tracked in
+  GitHub issues.
 
 ## Pull requests
 
@@ -38,4 +37,6 @@ If a change is agreed:
 
 Wiki improvements are welcome — the wiki sources live in this repo under
 [`wiki/`](wiki/). Suggest changes via an issue or discussion rather than
-editing the GitHub wiki directly, since it is published from this folder.
+editing the GitHub wiki directly, since it is published from this folder. For
+tone, scope, and public/private boundaries, follow
+[docs/engineering/documentation-standards.md](docs/engineering/documentation-standards.md).

@@ -1,5 +1,3 @@
-# The Review Panel
-
 The Review Panel is Editorialist's main working surface — a sidebar view that drives review sessions and shows the state of the active book between them. Open it with the **Open review panel** command.
 
 ## Idle state
@@ -16,7 +14,7 @@ Between sessions the panel shows:
 
 ## Review sessions
 
-Starting a workflow card (or importing a batch) begins a **guided review sweep**: Editorialist walks the batch suggestion by suggestion, scene by scene, highlighting each suggestion inline in the editor.
+Starting a workflow card (or importing a review batch) begins a **guided review sweep**. The imported batch has already been split into review blocks at the bottom of the targeted scene notes; the panel reads those blocks and walks their suggestions scene by scene.
 
 <p align="center"><img src="images/panel-side-progressing.png" alt="Review panel during a sweep: next-in-sweep card with unresolved and resolved counts, start scene button, recent reviews" width="340"></p>
 
@@ -66,4 +64,4 @@ A sweep finishes only when every suggestion in the batch has a resolved status (
 
 Separate from imported batches, Editorialist can collect **free-form revision notes** sitting in your scene frontmatter — your own notes-to-self plus Inquiry View insertions — and walk them the same way. Start it from the **Review pending edits in active book** command, the launcher, or the **Start review** button on the [Core settings tab](Settings-Reference.md#core-tab).
 
-With [Radial Timeline](Radial-Timeline-Integration.md) installed, the collection is book-aware: Editorialist asks RT for the active book's scenes and gathers every scene with pending edits. Each note is presented one at a time with context jumping into the scene, and you record an accept/reject decision per segment.
+With [Radial Timeline](Radial-Timeline-Integration.md) installed, Editorialist uses the active book's scenes and gathers every scene with pending edits. Each note is presented one at a time with context jumping into the scene, and you record an accept/reject decision per segment.

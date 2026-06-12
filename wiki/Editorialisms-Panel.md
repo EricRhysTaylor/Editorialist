@@ -1,12 +1,10 @@
-# The Editorialisms Panel
-
-The second sidebar view. Where the [Review Panel](Review-Panel.md) handles line-level suggestions inside scenes, the Editorialisms panel manages **Editorialism documents** — structural guidance that spans scenes, arcs, or the whole manuscript.
+The second sidebar view. Where the [Review Panel](Review-Panel.md) handles imported review batches inside scene notes, the Editorialisms panel manages **Editorialism documents** — separate structural guidance files that span scenes, arcs, or the whole manuscript.
 
 <!-- Screenshot still needed: Editorialisms panel with a document open (images/panel-editorialisms.png) -->
 
 ## What an Editorialism is
 
-An Editorialism is a plain markdown file in your vault — a themed checklist of editorial directives. Examples of work that belongs here rather than in a review block:
+An Editorialism is a plain markdown file in your vault — a themed checklist of editorial directives. It is not a review batch and it is not appended to scene notes. Examples of work that belongs here rather than in a review block:
 
 - A development edit's structural agenda ("compress the middle act", "thread the antagonist earlier")
 - Design intent and doctrine the manuscript should conform to
@@ -47,7 +45,7 @@ Because Editorialisms are plain markdown task lists, they stay fully readable an
 
 | Situation | Use |
 |---|---|
-| Concrete prose change to a specific passage | [Review block](Importing-Reviews.md#format-a--the-review-block) → Review Panel |
+| Concrete prose change to a specific passage | [Review batch](Importing-Reviews.md#format-a--the-review-batch) → imported review blocks → Review Panel |
 | Commentary on a scene or the batch | `=== MEMO ===` in a review block |
 | Directive spanning scenes, arcs, or the whole book | Editorialism file → this panel |
 | A reviewer sends both line edits and structural notes | Both formats in one reply — each goes to its own surface |

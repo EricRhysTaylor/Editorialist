@@ -1,29 +1,28 @@
-# Importing Reviews & the Block Format
+This page documents what can come back from a reviewer or AI, where each object goes, and how a review batch gets into your vault.
 
-This page documents the two formats Editorialist accepts and how a batch gets into your vault.
-
-The format is written for an AI to produce. For an AI review, paste the formatting instructions into the conversation along with your prose. When the feedback comes from a human — margin notes on a printed page, a marked-up document, an email — hand their notes to an AI together with these same instructions, and it shapes them into a batch with your human reviewer credited as the contributor. A human never works from this format directly.
+The formats are written for an AI to produce. For an AI review, paste the formatting instructions into the conversation along with your prose. When the feedback comes from a human — margin notes on a printed page, a marked-up document, an email — hand their notes to an AI together with these same instructions, and it shapes them into Editorialist-ready output with your human reviewer credited as the contributor. A human never works from this format directly.
 
 > **Tip:** you never need to write this format by hand. The review launcher's **Copy formatting instructions** button puts the full specification — including your book's real scene IDs — on the clipboard, ready to paste into an AI conversation.
 
 ---
 
-## The two formats
+## What You Can Get Back
 
-Editorialist accepts two output formats. A reviewer can produce either, or both in the same response:
+The launcher's template includes two output formats. They are different objects with different jobs:
 
-| | Format A — Review block | Format B — Editorialism file |
-|---|---|---|
-| **Use for** | Concrete prose-level changes targeting specific scenes | Structural / multi-scene / doctrinal agendas |
-| **Granularity** | Line edits, memos, cuts, condenses, expands, moves | Checklist directives spanning scene ranges or the whole manuscript |
-| **Where it goes** | Imported through the review launcher | Saved as a file under `Editorialist/<Book>/<Title>.md` |
-| **Where you work it** | The [Review Panel](Review-Panel.md), suggestion by suggestion | The [Editorialisms Panel](Editorialisms-Panel.md), item by item |
+| Object | Use it for | When you get it | Where it goes |
+|---|---|---|---|
+| **Review batch** | Concrete suggestions for specific passages in specific scenes | After an AI review, or after an AI converts human notes into Editorialist format | Imported through the review launcher, then split into per-scene review blocks |
+| **Review block** | The scene-local copy of the imported suggestions | Created by Editorialist when you import a review batch | Appended to the bottom of each targeted scene note |
+| **Editorialism file** | Structural or manuscript-level guidance that should be worked as a checklist | When feedback is broader than scene-targeted line edits | Saved as a separate file under `Editorialist/<Book>/<Title>.md` |
+
+Most revision passes use a **review batch**. Use an **Editorialism file** when the output is a durable checklist: arc work, design rules, multi-scene directives, or manuscript-level guidance.
 
 ---
 
-## Format A — the review block
+## Format A — the review batch
 
-A review block is a fenced code block labelled `editorialist-review`:
+A review batch is usually a fenced code block labelled `editorialist-review`. It is the AI response you copy back into Editorialist:
 
 ````markdown
 ```editorialist-review
@@ -54,6 +53,8 @@ Why: ...
 ````
 
 **Fences are optional.** Most chat UIs strip the outer triple-backtick fence when you copy a reply. The importer accepts both fenced and unfenced output — what matters is the metadata header and the `=== SECTION ===` markers. Decorative divider lines some LLMs emit between sections (`⸻`, `---`, `***`, `═══`) are skipped harmlessly.
+
+When imported, Editorialist groups the batch by target scene and appends one review block to the bottom of each targeted scene note. The block stores the suggestions and memo text for that scene; it does not apply changes to the manuscript.
 
 ### Metadata header
 
@@ -103,7 +104,7 @@ Every operation entry targets one scene via `SceneId:`. Items in the same block 
 
 ### Matching against the manuscript
 
-`Original:` and `Target:` text is matched **conservatively** against the live note: exact text match only. Each suggestion gets a match type — exact, multiple matches, not found, or already applied — surfaced in the review UI so you always know what you're acting on. (A normalized fuzzy-match fallback is planned; see the [Roadmap](Roadmap.md).)
+`Original:` and `Target:` text is matched **conservatively** against the live note: exact text match only. Each suggestion gets a match type — exact, multiple matches, not found, or already applied — surfaced in the review UI so you know what you're acting on.
 
 ---
 
@@ -155,7 +156,7 @@ Save it under `Editorialist/<Book>/<Title>.md` and the [Editorialisms Panel](Edi
 
 ---
 
-## Importing a batch: the review launcher
+## Importing a Review Batch
 
 <p align="center"><img src="images/panel-import.png" alt="The review launcher: copy instructions card, clipboard card, paste formatted revision notes, and the advanced template copy row" width="560"></p>
 
@@ -166,4 +167,4 @@ Run **Open review launcher** (command palette). The launcher modal:
 3. **Route assignment** — entries that need routing decisions (e.g. missing SceneIds) get an assignment step before anything is written.
 4. **Template copy** — the launcher's template button copies the full format guidance, both templates, and your book's actual scene-ID list to the clipboard.
 
-Import writes the review block into the targeted scene notes. Nothing else in the note is touched, and no suggestion is applied until you act on it in the [Review Panel](Review-Panel.md).
+Import appends review blocks to the targeted scene notes. Nothing else in the note is touched, and no suggestion is applied until you act on it in the [Review Panel](Review-Panel.md).

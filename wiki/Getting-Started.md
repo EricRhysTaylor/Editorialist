@@ -1,5 +1,3 @@
-# Getting Started
-
 ## Install
 
 Editorialist is **desktop only** — it won't appear or load on Obsidian mobile.
@@ -11,17 +9,18 @@ Install from the Obsidian Community Plugins directory:
 
 (To install a specific version manually, grab `manifest.json`, `main.js`, and `styles.css` from the [latest release](https://github.com/EricRhysTaylor/Editorialist/releases) and place them in `<your-vault>/.obsidian/plugins/editorialist/`.)
 
-If you also use [Radial Timeline](Radial-Timeline-Integration.md), Editorialist will detect it automatically and scope itself to your active book. It is optional — everything below works without it.
+If you also use [Radial Timeline](Radial-Timeline-Integration.md), Editorialist detects it automatically and scopes review tools to the active book. It is optional; everything below works without it.
 
-## The three commands
+## Commands
 
-Editorialist registers three commands in the command palette:
+Editorialist registers these commands in the command palette:
 
 | Command | What it does |
 |---|---|
 | **Open review launcher** | Opens the launcher modal to import a review batch or start a pending-edits review |
 | **Open review panel** | Opens the [Review Panel](Review-Panel.md) in the sidebar |
 | **Review pending edits in active book** | Starts the pending-edits review flow across the active book |
+| **Backup selection to cut file** | Copies selected text to the scene's cut file without changing the manuscript |
 
 Editorialist ships **no default hotkeys** — assign your own under **Settings → Hotkeys** if you want them.
 
@@ -31,7 +30,7 @@ A five-minute walkthrough of the core loop:
 
 ### 1. Copy the template
 
-Run **Open review launcher** and click **Copy formatting instructions**. This copies the full review format — instructions, both templates, and (with Radial Timeline) your book's actual scene IDs — to the clipboard.
+Run **Open review launcher** and click **Copy formatting instructions**. This copies the review batch format, the Editorialism file format, and (with Radial Timeline) your book's actual scene IDs to the clipboard.
 
 <p align="center"><img src="images/panel-import.png" alt="The review launcher: copy instructions, clipboard detection, and manual paste" width="560"></p>
 
@@ -39,13 +38,15 @@ Run **Open review launcher** and click **Copy formatting instructions**. This co
 
 The formatting instructions are written for an AI — a human reviewer never works from them directly.
 
-**AI review:** paste the instructions into your AI conversation along with the prose to review. The AI replies with suggestions in the [review block format](Importing-Reviews.md).
+**AI review:** paste the instructions into your AI conversation along with the prose to review. The AI replies with a [review batch](Importing-Reviews.md#format-a--the-review-batch).
 
 **Human feedback:** your editor or beta reader works however they naturally work — margin notes on a printed page, comments in a document, an email. Collect their notes in whatever form they arrive (a photo of the handwritten page, the electronic doc) and hand them to an AI along with the formatting instructions. The AI shapes everything into a properly formatted batch for Editorialist, with your human reviewer credited as the contributor.
 
+For a normal review sweep, you want a **review batch**. It contains scene-targeted suggestions. An **Editorialism** is different: it is a separate structural checklist for broad guidance that spans scenes or the whole manuscript.
+
 ### 3. Import the batch
 
-Copy the reviewer's reply and run **Open review launcher** again. The launcher detects the batch on your clipboard — one click imports it. (If detection misses, paste manually; validation runs as you type.) The suggestions are written into the targeted scene notes as review blocks. **Nothing has been applied to your prose yet.**
+Copy the reviewer's reply and run **Open review launcher** again. The launcher detects the review batch on your clipboard — one click imports it. (If detection misses, paste manually; validation runs as you type.) Editorialist appends a review block to the bottom of each targeted scene note. **Nothing has been applied to your prose yet.**
 
 ### 4. Walk the sweep
 
@@ -59,6 +60,6 @@ When every suggestion is resolved, the sweep completes and the batch is recorded
 
 | Path | What it is |
 |---|---|
-| Your scene notes | Review blocks are injected here on import, removed on cleanup |
+| Your scene notes | Review blocks are appended here on import, removed on cleanup |
 | `Editorialist/<Book>/` | [Editorialism](Editorialisms-Panel.md) structural guidance documents |
 | `<book-source-folder>/Cut/` | Per-scene cut files (default location; [configurable](Settings-Reference.md#configuration-tab)) |

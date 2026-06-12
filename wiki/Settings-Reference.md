@@ -1,5 +1,3 @@
-# Settings Reference
-
 Editorialist's settings are organized into three tabs: **Core**, **Contributors**, and **Configuration**. The Core tab doubles as the plugin's dashboard — most of it is live status, not knobs.
 
 ---

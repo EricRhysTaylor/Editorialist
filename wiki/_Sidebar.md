@@ -11,4 +11,3 @@
 
 - [Settings Reference](Settings-Reference)
 - [Radial Timeline Integration](Radial-Timeline-Integration)
-- [Roadmap](Roadmap)
