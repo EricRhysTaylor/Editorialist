@@ -6,5 +6,5 @@
 	"description": "Import structured editorial feedback from human editors, beta readers, or AI, then review every suggested edit scene by scene.",
 	"author": "RT LLC",
 	"authorUrl": "https://github.com/EricRhysTaylor",
-	"isDesktopOnly": false
+	"isDesktopOnly": true
 }

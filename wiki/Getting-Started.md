@@ -2,6 +2,8 @@
 
 ## Install
 
+Editorialist is **desktop only** — it won't appear or load on Obsidian mobile.
+
 Editorialist is not yet in the Obsidian Community Plugins directory (that's [planned](Roadmap.md)). Until then, install manually:
 
 1. Download `manifest.json`, `main.js`, and `styles.css` from the [latest release](https://github.com/EricRhysTaylor/Editorialist/releases).

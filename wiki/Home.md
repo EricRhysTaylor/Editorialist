@@ -4,6 +4,8 @@
 
 Editorialist imports structured revision notes — from human editors, beta readers, or AI — into the manuscript you are already editing, matches suggestions conservatively against note content, and keeps every manuscript change explicit and author-controlled.
 
+Editorialist is designed to integrate tightly with the [Radial Timeline](Radial-Timeline-Integration.md) companion plugin — scene ID insertion, the upcoming community editorial feedback features, and more — while remaining fully functional on its own. It is a desktop-only plugin.
+
 <p align="center"><img src="images/panel-side-home.png" alt="The Editorialist review panel: how to use Editorialist, recent reviews, and contributors" width="340"></p>
 
 ## How it behaves

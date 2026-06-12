@@ -1,6 +1,6 @@
 # Radial Timeline Integration
 
-[Radial Timeline](https://github.com/EricRhysTaylor/Radial-Timeline) is Editorialist's companion plugin for manuscript structure. Editorialist works fully without it — the integration is **optional in both directions** and degrades gracefully at every point — but with both installed, Editorialist becomes book-aware.
+[Radial Timeline](https://github.com/EricRhysTaylor/Radial-Timeline) is Editorialist's companion plugin for manuscript structure, and Editorialist is designed to integrate tightly with it — scene ID insertion, the upcoming community editorial feedback features, and more. Editorialist still works fully without it — the integration is **optional in both directions** and degrades gracefully at every point — but with both installed, Editorialist becomes book-aware.
 
 ## What Radial Timeline adds
 
