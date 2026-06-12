@@ -14,15 +14,11 @@
   by Eric Rhys Taylor
 </p>
 
----
-
 ## What it does
 
 Editorialist is a local-first editorial review workspace for Obsidian. It imports structured revision notes — from human editors, beta readers, or AI — into the manuscript you are already editing, matches suggestions conservatively against note content, and keeps every manuscript change explicit and author-controlled.
 
 <!-- Screenshot placeholder — drop screenshots into /docs/images and reference them here. -->
-
----
 
 ## How it behaves
 
@@ -49,8 +45,6 @@ educational, and professional creative work — including manuscripts and other
 commercial creative output produced with the plugin. Commercial use of the
 software itself, redistribution, and forks for public distribution require
 written permission. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for full terms.
-
----
 
 <p align="center">
   <a href="https://github.com/EricRhysTaylor/Editorialist/stargazers" target="_blank" rel="noopener"><img src="https://img.shields.io/github/stars/EricRhysTaylor/Editorialist?colorA=363a4f&colorB=e0ac00&style=for-the-badge" alt="GitHub star count"></a>
