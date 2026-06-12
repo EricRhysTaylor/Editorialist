@@ -22,10 +22,9 @@ Starting a workflow card (or importing a batch) begins a **guided review sweep**
 
 ### Navigation and filters
 
-- **Previous / next** moves through suggestions; the sweep auto-advances to the next scene when the current one is resolved.
-- **Jump menu** — go directly to any scene in the batch.
-- **Reviewer filter** — limit the session to one contributor's suggestions.
-- **Starred-only toggle** — show only suggestions from [starred contributors](Settings-Reference.md#contributors-tab).
+- **Previous / next** moves through suggestions; the sweep hands off to the next scene when the current one is resolved.
+- **Jump to** — each suggestion card has a jump menu: jump to the suggested text in the editor, to its source review block, or (for a move) to the destination anchor.
+- **Contributor filter** — appears only when a session contains suggestions from **more than one contributor**. A dropdown limits the view to one contributor, and a star button shows only [starred contributors](Settings-Reference.md#contributors-tab). With a single-reviewer batch the row stays hidden.
 - **Collapse controls** — fold away processed suggestions, pending edits, and comments to reduce noise.
 
 ### The suggestion toolbar

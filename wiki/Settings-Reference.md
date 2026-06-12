@@ -108,9 +108,8 @@ When you accept a **Cut** suggestion (or use **Backup to cut file** from the sug
 
 ---
 
-## Safety model (applies everywhere)
+## Good to know
 
-- No network requests, no account, no telemetry.
-- Notes are modified only when you explicitly import a batch, apply a suggestion, clean review blocks, or run a maintenance action.
-- Every bulk maintenance action requires confirmation.
-- Backup export contains contributor and revision metadata only — never manuscript text.
+- Editorialist is local-only — everything runs inside your vault.
+- Your notes change when you import a batch, apply a suggestion, clean review blocks, or run a maintenance action — and bulk maintenance asks for confirmation first.
+- Backup export contains contributor and revision metadata; your manuscript text stays in your vault.

@@ -1,8 +1,10 @@
 # Importing Reviews & the Block Format
 
-This is the page to hand to a beta reader, a human editor, or to paste into an AI prompt. It documents the two formats Editorialist accepts and how a batch gets into your vault.
+This page documents the two formats Editorialist accepts and how a batch gets into your vault.
 
-> **Tip:** you never need to write this format by hand. The review launcher has a **copy template** button that puts the full format specification — including your book's real scene IDs — on the clipboard, ready to paste into a chat with an editor or AI.
+The format is written for an AI to produce. For an AI review, paste the formatting instructions into the conversation along with your prose. When the feedback comes from a human — margin notes on a printed page, a marked-up document, an email — hand their notes to an AI together with these same instructions, and it shapes them into a batch with your human reviewer credited as the contributor. A human never works from this format directly.
+
+> **Tip:** you never need to write this format by hand. The review launcher's **Copy formatting instructions** button puts the full specification — including your book's real scene IDs — on the clipboard, ready to paste into an AI conversation.
 
 ---
 

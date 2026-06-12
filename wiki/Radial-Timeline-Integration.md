@@ -30,7 +30,7 @@ Every RT call returns a typed result instead of erroring. If RT is missing, its 
 
 The committed direction (see the [Roadmap](Roadmap.md) for sequencing):
 
-- **Website community editorial feedback system.** A major planned feature: extensive integration with the community editorial feedback system on the Editorialist/Radial Timeline website. Feedback gathered there will flow into Editorialist's review workflow, and the system will work with Radial Timeline as well. This lands after the plugin's feature set settles and it ships in the Obsidian Community directory.
+- **Website community editorial feedback system.** A major planned feature: extensive integration with the community editorial feedback system on the Editorialist/Radial Timeline website. Feedback gathered there will flow into Editorialist's review workflow, and the system will work with Radial Timeline as well. This lands after the plugin's feature set settles.
 - **Full API integration** between the plugins — a deeper programmatic surface than today's two-call read-only coupling. Deliberately deferred: the current feature set needs to stabilize first.
 
 Under consideration, not committed:
