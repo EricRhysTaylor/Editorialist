@@ -7,11 +7,9 @@
     <img src="https://raw.githubusercontent.com/EricRhysTaylor/Editorialist/master/logo.png" alt="Editorialist Logo" width="360" style="border-radius: 0;">
   </picture>
 </p>
-<p align="center" style="font-family: sans-serif; font-weight: 100; font-size: 14px; margin-top: 12px; margin-bottom: 0; letter-spacing: 8px;">
-  Editorialist
-</p>
-<p align="center" style="font-family: sans-serif; font-size: 14px; margin-bottom: 10px;">
-  by Eric Rhys Taylor
+<p align="center" style="font-family: sans-serif; font-size: 14px; margin-top: 12px; margin-bottom: 10px;">
+  <span style="font-weight: 100; letter-spacing: 8px;">Editorialist</span><br>
+  <sub>by Eric Rhys Taylor</sub>
 </p>
 
 
