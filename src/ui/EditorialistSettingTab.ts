@@ -20,13 +20,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 	private static readonly RADIAL_TIMELINE_INSTALL_URL = "obsidian://show-plugin?id=radial-timeline";
 	private static readonly RADIAL_TIMELINE_REPOSITORY_URL = "https://github.com/EricRhysTaylor/Obsidian-Manuscript-Timeline";
 	private static readonly RADIAL_TIMELINE_WIKI_URL = "https://github.com/EricRhysTaylor/Obsidian-Manuscript-Timeline/wiki";
-	private static readonly REPOSITORY_URL = "https://github.com/EricRhysTaylor/Editorialist";
-	private static readonly RELEASES_URL = "https://github.com/EricRhysTaylor/Editorialist/releases";
-	private static readonly ISSUES_URL = "https://github.com/EricRhysTaylor/Editorialist/issues";
-	private static readonly LICENSE_URL = "https://github.com/EricRhysTaylor/Editorialist/blob/master/LICENSE";
-	private static readonly OBSIDIAN_PLUGIN_PAGE_URL = "https://obsidian.md/plugins?id=editorialist";
-	private static readonly STATS_REPO_SLUG = "EricRhysTaylor/Editorialist";
-	private static readonly STATS_PLUGIN_ID = "editorialist";
 	private activeBookOnly = true;
 	private activeTab: "core" | "reviewer" | "configuration" = "core";
 	private displayRunId = 0;
@@ -102,7 +95,6 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		this.renderActivitySection(coreContent, summary);
 		this.renderTrackingSection(coreContent, activeBook);
 		this.renderMaintenanceSection(coreContent, activeBook.label);
-		this.renderAboutFooter(coreContent);
 
 		this.renderContributorsHero(reviewerContent);
 		this.renderContributorsSection(reviewerContent);
@@ -417,117 +409,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		});
 	}
 
-	private renderAboutFooter(parent: HTMLElement): void {
-		const footer = parent.createDiv({
-			cls: "editorialist-settings__about-footer editorialist-settings__panel",
-		});
-
-		const heading = footer.createDiv({ cls: "editorialist-settings__about-footer-heading" });
-		heading.createDiv({
-			cls: "editorialist-settings__about-footer-title",
-			text: "Editorialist",
-		});
-		heading.createDiv({
-			cls: "editorialist-settings__about-footer-author",
-			text: "by Eric Rhys Taylor",
-		});
-
-		footer.createDiv({
-			cls: "editorialist-settings__about-footer-description",
-			text: "A local-first editorial review workspace for Obsidian. Imports structured revision notes from human editors, beta readers, or AI into the manuscript you are already editing, matches suggestions conservatively, and keeps every change explicit and author-controlled.",
-		});
-
-		const links = footer.createDiv({ cls: "editorialist-settings__about-footer-links" });
-		this.createAboutFooterLink(links, "github", "GitHub", EditorialistSettingTab.REPOSITORY_URL);
-		this.createAboutFooterLink(links, "tag", "Releases", EditorialistSettingTab.RELEASES_URL);
-		this.createAboutFooterLink(links, "bug", "Issues", EditorialistSettingTab.ISSUES_URL);
-		this.createAboutFooterLink(links, "book-open", "Docs", EditorialistSettingTab.SETTINGS_DOCS_URL);
-
-		this.renderAboutFooterStats(footer);
-	}
-
-	private renderAboutFooterStats(parent: HTMLElement): void {
-		const repo = EditorialistSettingTab.STATS_REPO_SLUG;
-		const pluginId = EditorialistSettingTab.STATS_PLUGIN_ID;
-		const wrap = parent.createDiv({ cls: "editorialist-settings__about-footer-stats" });
-
-		const rowOne = wrap.createDiv({ cls: "editorialist-settings__about-footer-stats-row" });
-		this.createAboutFooterStat(rowOne, {
-			href: `${EditorialistSettingTab.REPOSITORY_URL}/stargazers`,
-			src: `https://img.shields.io/github/stars/${repo}?colorA=363a4f&colorB=e0ac00&style=for-the-badge`,
-			alt: "GitHub star count",
-		});
-		this.createAboutFooterStat(rowOne, {
-			href: EditorialistSettingTab.OBSIDIAN_PLUGIN_PAGE_URL,
-			src: `https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/community-plugin-stats.json&query=$.${pluginId}.downloads&label=Downloads&style=for-the-badge&colorA=363a4f&colorB=d53984`,
-			alt: "Plugin downloads",
-		});
-		this.createAboutFooterStat(rowOne, {
-			href: EditorialistSettingTab.LICENSE_URL,
-			src: "https://img.shields.io/static/v1.svg?style=for-the-badge&label=LICENSE&message=NON-COMMERCIAL%20SOFTWARE%20LICENSE&colorA=363a4f&colorB=b7bdf8",
-			alt: "License — Non-Commercial Software License",
-		});
-
-		const rowTwo = wrap.createDiv({ cls: "editorialist-settings__about-footer-stats-row" });
-		this.createAboutFooterStat(rowTwo, {
-			href: `${EditorialistSettingTab.REPOSITORY_URL}/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement`,
-			src: `https://img.shields.io/github/issues/${repo}/enhancement?colorA=363a4f&colorB=00bfa5&style=for-the-badge&label=enhancements`,
-			alt: "Open enhancements",
-		});
-		this.createAboutFooterStat(rowTwo, {
-			href: `${EditorialistSettingTab.REPOSITORY_URL}/issues?q=is%3Aclosed+label%3Aenhancement`,
-			src: `https://img.shields.io/github/issues-closed/${repo}/enhancement?colorA=363a4f&colorB=4a90e2&style=for-the-badge&label=closed%20enhancements`,
-			alt: "Closed enhancements",
-		});
-		this.createAboutFooterStat(rowTwo, {
-			href: `${EditorialistSettingTab.REPOSITORY_URL}/issues?q=is%3Aissue+is%3Aopen+label%3Abug`,
-			src: `https://img.shields.io/github/issues/${repo}/bug?colorA=363a4f&colorB=e93147&style=for-the-badge&label=bugs`,
-			alt: "Open bugs",
-		});
-	}
-
-	private createAboutFooterStat(
-		parent: HTMLElement,
-		opts: { href: string; src: string; alt: string },
-	): void {
-		const link = parent.createEl("a", {
-			href: opts.href,
-			cls: "editorialist-settings__about-footer-stat",
-			attr: {
-				target: "_blank",
-				rel: "noopener noreferrer",
-				"aria-label": opts.alt,
-			},
-		});
-		link.createEl("img", {
-			attr: {
-				src: opts.src,
-				alt: opts.alt,
-				loading: "lazy",
-				referrerpolicy: "no-referrer",
-			},
-		});
-	}
-
-	private createAboutFooterLink(parent: HTMLElement, icon: string, label: string, href: string): void {
-		const link = parent.createEl("a", {
-			href,
-			cls: "editorialist-settings__about-footer-link",
-			attr: {
-				target: "_blank",
-				rel: "noopener",
-				"aria-label": `${label} — opens in browser`,
-			},
-		});
-		const iconEl = link.createSpan({ cls: "editorialist-settings__about-footer-link-icon" });
-		setIcon(iconEl, icon);
-		link.createSpan({
-			cls: "editorialist-settings__about-footer-link-label",
-			text: label,
-		});
-	}
-
-	private renderTrackingSection(
+		private renderTrackingSection(
 		parent: HTMLElement,
 		activeBook: { label: string | null; sourceFolder: string | null },
 	): void {
