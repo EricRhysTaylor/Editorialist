@@ -140,14 +140,12 @@ function isNoiseCommit(message) {
 	return /^backup: auto \d{4}-/.test(message);
 }
 
-function generateChangelog(fromTag, toRef = "HEAD") {
+function collectChanges(fromTag, toRef = "HEAD") {
+	const buckets = { features: [], fixes: [], other: [] };
 	try {
 		const range = fromTag ? `${fromTag}..${toRef}` : toRef;
 		const logs = capture(`git log ${range} --pretty=format:"%h|%H|%s" --no-merges`);
-		if (!logs) return "No changes since last release.";
-
-		const categorized = Object.fromEntries(CATEGORIES.map((c) => [c.title, []]));
-		const uncategorized = [];
+		if (!logs) return buckets;
 
 		for (const line of logs.split("\n")) {
 			const [shortHash, fullHash, ...rest] = line.split("|");
@@ -159,23 +157,45 @@ function generateChangelog(fromTag, toRef = "HEAD") {
 			const entry = `- ${message} ([${shortHash}](${REPO_URL}/commit/${fullHash}))`;
 
 			const category = CATEGORIES.find((c) => c.keywords.some((re) => re.test(message)));
-			(category ? categorized[category.title] : uncategorized).push(entry);
+			if (category?.title === "New Features") buckets.features.push(entry);
+			else if (category?.title === "Bug Fixes") buckets.fixes.push(entry);
+			else buckets.other.push(entry);
 		}
-
-		let changelog = "";
-		for (const { title } of CATEGORIES) {
-			if (categorized[title].length > 0) {
-				changelog += `### ${title}\n${categorized[title].join("\n")}\n\n`;
-			}
-		}
-		if (uncategorized.length > 0) {
-			changelog += `### Other Changes\n${uncategorized.join("\n")}\n\n`;
-		}
-		return changelog.trim() || "No significant changes since last release.";
 	} catch (error) {
 		console.error(error);
-		return "Could not generate changelog.";
 	}
+	return buckets;
+}
+
+// Draft release notes in the house style: short summary up top, new features,
+// major bugs fixed, screenshots at the bottom. The draft is reviewed and
+// finalized by hand on GitHub before `npm run release` publishes it.
+function buildReleaseNotes(fromTag) {
+	const { features, fixes, other } = collectChanges(fromTag);
+	const list = (items) => (items.length > 0 ? items.join("\n") : "- (none this release)");
+	return [
+		"## Summary",
+		"",
+		"<!-- EDIT ME: one short paragraph on what this release is about. -->",
+		"",
+		"## New features",
+		"",
+		list(features),
+		"",
+		"## Major bugs fixed",
+		"",
+		list(fixes),
+		"",
+		"<details><summary>Other changes</summary>",
+		"",
+		list(other),
+		"",
+		"</details>",
+		"",
+		"## Screenshots",
+		"",
+		"<!-- Drag images here while reviewing on GitHub, or delete this section. -->",
+	].join("\n");
 }
 
 function readLocalReleaseDraft(version) {
@@ -303,7 +323,7 @@ async function startRelease(bumpArg) {
 	// 5. Create a draft release with the changelog.
 	const lastTag = getLastReleaseTag();
 	const localDraft = readLocalReleaseDraft(targetVersion);
-	const notes = localDraft ?? `## What's Changed\n\n${generateChangelog(lastTag === targetVersion ? null : lastTag)}`;
+	const notes = localDraft ?? buildReleaseNotes(lastTag === targetVersion ? null : lastTag);
 	if (localDraft) {
 		console.log(`→ Using local release notes draft: docs/releases/draft-for-release-${targetVersion}.md`);
 	}
