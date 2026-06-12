@@ -515,6 +515,7 @@ export function createReviewToolbarElement(
 function renderToolbarLegend(parent: HTMLElement, applyOperationLabel: string): void {
 	const legend = parent.createDiv({ cls: "editorialist-toolbar__legend" });
 	markAsNonEditorSurface(legend);
+	bindLegendReveal(parent, legend);
 
 	const rows: Array<{ icon: string; keys: string; label: string }> = [
 		{ icon: "check", keys: "Click", label: `Apply ${applyOperationLabel}` },
@@ -540,9 +541,41 @@ function renderToolbarLegend(parent: HTMLElement, applyOperationLabel: string): 
 	}
 }
 
+// Hover/focus reveal for the shortcut legend. Listener-driven (a class on the
+// toolbar root) rather than CSS :has(), which the community review flags for
+// selector-invalidation cost. The short close delay lets the cursor cross the
+// gap from the trigger onto the legend without the popover collapsing.
+function bindLegendReveal(toolbar: HTMLElement, legend: HTMLElement): void {
+	const trigger = toolbar.querySelector(".editorialist-toolbar__legend-trigger");
+	let closeTimer: number | null = null;
+	const open = () => {
+		if (closeTimer !== null) {
+			window.clearTimeout(closeTimer);
+			closeTimer = null;
+		}
+		toolbar.classList.add("editorialist-toolbar--legend-open");
+	};
+	const scheduleClose = () => {
+		if (closeTimer !== null) {
+			window.clearTimeout(closeTimer);
+		}
+		closeTimer = window.setTimeout(() => {
+			closeTimer = null;
+			toolbar.classList.remove("editorialist-toolbar--legend-open");
+		}, 120);
+	};
+	for (const el of [trigger, legend]) {
+		if (!el) continue;
+		el.addEventListener("mouseenter", open);
+		el.addEventListener("mouseleave", scheduleClose);
+	}
+	trigger?.addEventListener("focus", open);
+	trigger?.addEventListener("blur", scheduleClose);
+}
+
 // Inline asterisk that reveals the shortcut legend on hover or keyboard focus.
-// Pure CSS handles the visibility (see styles.css `:has(...)` rules), so this
-// element is just an unstyled, focusable icon — no button chrome.
+// Visibility is driven by bindLegendReveal above, so this element is just an
+// unstyled, focusable icon — no button chrome.
 function buildLegendTrigger(parent: HTMLElement): void {
 	const trigger = parent.createSpan({ cls: "editorialist-toolbar__legend-trigger" });
 	trigger.setAttribute("tabindex", "0");

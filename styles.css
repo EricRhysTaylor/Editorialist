@@ -134,16 +134,14 @@
 
 .editorialist-toolbar__pending-brief-link {
 	color: inherit;
-	text-decoration-line: underline;
-	text-decoration-style: dashed;
-	text-decoration-thickness: 1px;
+	border-bottom: 1px dashed currentcolor;
 	text-underline-offset: 0.14em;
 	cursor: pointer;
 }
 
 .editorialist-toolbar__pending-brief-link:hover,
 .editorialist-toolbar__pending-brief-link:focus-visible {
-	text-decoration-style: solid;
+	border-bottom-style: solid;
 }
 
 .editorialist-toolbar__pending-brief-summary {
@@ -289,11 +287,11 @@
 	white-space: nowrap;
 }
 
-/* Show when trigger is hovered/focused, or when the legend itself is hovered
- * (so the popover stays open while the user reads it). */
-.editorialist-toolbar:has(.editorialist-toolbar__legend-trigger:hover) .editorialist-toolbar__legend,
-.editorialist-toolbar:has(.editorialist-toolbar__legend-trigger:focus-visible) .editorialist-toolbar__legend,
-.editorialist-toolbar:has(.editorialist-toolbar__legend:hover) .editorialist-toolbar__legend {
+/* Shown while the trigger or the legend itself is hovered/focused. The
+ * open/close class is toggled by listeners in Toolbar.ts (renderToolbarLegend)
+ * instead of CSS :has(), which the community review flags for selector
+ * invalidation cost. */
+.editorialist-toolbar--legend-open .editorialist-toolbar__legend {
 	display: flex;
 }
 
@@ -724,9 +722,7 @@
 .editorialist-panel__command-name {
 	font-weight: 700;
 	color: color-mix(in srgb, var(--interactive-accent) 78%, var(--text-normal));
-	text-decoration-line: underline;
-	text-decoration-style: dashed;
-	text-decoration-thickness: 1px;
+	border-bottom: 1px dashed currentcolor;
 	text-underline-offset: 0.14em;
 }
 
@@ -746,7 +742,7 @@
 .editorialist-panel__command-link:focus-visible .editorialist-panel__command-name,
 .editorialist-panel__launch-target-link:hover .editorialist-panel__launch-target-text,
 .editorialist-panel__launch-target-link:focus-visible .editorialist-panel__launch-target-text {
-	text-decoration-style: solid;
+	border-bottom-style: solid;
 }
 
 .editorialist-panel__command-link:focus-visible,
@@ -786,9 +782,7 @@
 .editorialist-panel__launch-target-text {
 	font-weight: 600;
 	color: color-mix(in srgb, var(--interactive-accent) 78%, var(--text-normal));
-	text-decoration-line: underline;
-	text-decoration-style: dashed;
-	text-decoration-thickness: 1px;
+	border-bottom: 1px dashed currentcolor;
 	text-underline-offset: 0.14em;
 }
 
@@ -1358,15 +1352,13 @@
 }
 
 .editorialist-panel__completion-link-text {
-	text-decoration-line: underline;
-	text-decoration-style: dashed;
-	text-decoration-thickness: 1px;
+	border-bottom: 1px dashed currentcolor;
 	text-underline-offset: 0.14em;
 }
 
 .editorialist-panel__completion-step-link:hover .editorialist-panel__completion-link-text,
 .editorialist-panel__completion-step-link:focus-visible .editorialist-panel__completion-link-text {
-	text-decoration-style: solid;
+	border-bottom-style: solid;
 }
 
 .editorialist-panel__completion-step.is-primary .editorialist-panel__completion-step-link {
@@ -1374,7 +1366,7 @@
 }
 
 .editorialist-panel__completion-step.is-primary .editorialist-panel__completion-link-text {
-	text-decoration-thickness: 1.5px;
+	border-bottom-width: 1.5px;
 }
 
 .editorialist-panel__completion--neutral .editorialist-panel__completion-step-bullet,
@@ -1387,7 +1379,7 @@
 }
 
 .editorialist-panel__completion-step--neutral-primary .editorialist-panel__completion-link-text {
-	text-decoration-thickness: 1.5px;
+	border-bottom-width: 1.5px;
 }
 
 .editorialist-panel__completion-step--active .editorialist-panel__completion-step-link {
@@ -1395,7 +1387,7 @@
 }
 
 .editorialist-panel__completion-step--active .editorialist-panel__completion-link-text {
-	text-decoration-thickness: 1.5px;
+	border-bottom-width: 1.5px;
 }
 
 .editorialist-panel__completion-step--active .editorialist-panel__completion-step-bullet,
@@ -1422,7 +1414,7 @@
 
 .editorialist-panel__completion-close-link:hover .editorialist-panel__completion-link-text,
 .editorialist-panel__completion-close-link:focus-visible .editorialist-panel__completion-link-text {
-	text-decoration-style: solid;
+	border-bottom-style: solid;
 }
 
 @keyframes editorialist-panel-completion-fade {
@@ -1664,16 +1656,14 @@
 .editorialist-panel__comment-entry-action-link {
 	color: color-mix(in srgb, var(--color-green) 64%, var(--text-normal));
 	font-size: var(--font-ui-small);
-	text-decoration-line: underline;
-	text-decoration-style: dashed;
-	text-decoration-thickness: 1px;
+	border-bottom: 1px dashed currentcolor;
 	text-underline-offset: 0.14em;
 	cursor: pointer;
 }
 
 .editorialist-panel__comment-entry-action-link:hover,
 .editorialist-panel__comment-entry-action-link:focus-visible {
-	text-decoration-style: solid;
+	border-bottom-style: solid;
 }
 
 /* === Suggestion cards =================================================== */
@@ -1976,8 +1966,6 @@
 
 .editorialist-suggestion__structure-block--delete .editorialist-suggestion__structure-block-body {
 	text-decoration: line-through;
-	text-decoration-thickness: 1px;
-	text-decoration-color: color-mix(in srgb, currentcolor 42%, transparent);
 }
 
 .editorialist-suggestion__structure-block--insert {
@@ -3258,15 +3246,13 @@
 	white-space: nowrap;
 	color: inherit;
 	font-weight: inherit;
-	text-decoration-line: underline;
-	text-decoration-style: dashed;
-	text-decoration-thickness: 1px;
+	border-bottom: 1px dashed currentcolor;
 	text-underline-offset: 0.14em;
 }
 
 .editorialist-settings__inventory-note-link:hover,
 .editorialist-settings__inventory-note-link:focus-visible {
-	text-decoration-style: solid;
+	border-bottom-style: solid;
 }
 
 .editorialist-settings__inventory-pending-badge {
@@ -3841,14 +3827,13 @@
 	background: transparent;
 	color: var(--text-normal);
 	font-weight: 600;
-	text-decoration-line: underline;
-	text-decoration-style: dashed;
+	border-bottom: 1px dashed currentcolor;
 	text-underline-offset: 0.18em;
 	cursor: pointer;
 }
 
 .editorialist-contributor-modal__identity-name-link:hover {
-	text-decoration-style: solid;
+	border-bottom-style: solid;
 }
 
 .editorialist-contributor-modal__identity-separator {
@@ -4052,13 +4037,12 @@
 }
 
 .editorialist-contributor-modal__rename-link-text {
-	text-decoration-line: underline;
-	text-decoration-style: dashed;
+	border-bottom: 1px dashed currentcolor;
 	text-underline-offset: 0.18em;
 }
 
 .editorialist-contributor-modal__rename-link:hover .editorialist-contributor-modal__rename-link-text {
-	text-decoration-style: solid;
+	border-bottom-style: solid;
 	color: var(--text-normal);
 }
 
@@ -4598,17 +4582,14 @@
 
 .editorialist-panel__launcher-chip-link {
 	color: color-mix(in srgb, var(--interactive-accent) 70%, var(--text-muted));
-	text-decoration: underline;
-	text-decoration-style: dashed;
-	text-decoration-thickness: 1px;
-	text-underline-offset: 0.14em;
+	border-bottom: 1px dashed currentcolor;
 	cursor: pointer;
 }
 
 .editorialist-panel__launcher-chip-link:hover,
 .editorialist-panel__launcher-chip-link:focus-visible {
 	color: var(--interactive-accent);
-	text-decoration-style: solid;
+	border-bottom-style: solid;
 	outline: none;
 }
 
