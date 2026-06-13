@@ -16,18 +16,18 @@
 
 ## What it does
 
-Editorialist is a local-first editorial review workspace for Obsidian. It imports structured revision notes — from human editors, beta readers, or AI — into the manuscript you are already editing, matches suggestions conservatively against note content, and keeps every manuscript change explicit and author-controlled.
+Editorialist turns outside feedback into a controlled revision workflow inside Obsidian. It imports review batches from human editors, beta readers, or AI into the scene notes you are already editing, matches suggestions conservatively against note content, and lets you accept, reject, rewrite, defer, or archive each change.
 
 <!-- Screenshot placeholder — drop screenshots into /docs/images and reference them here. -->
 
-## How it behaves
+## How it works
 
-- No hidden network requests, no account, no telemetry.
-- Notes are only modified when you explicitly import a batch, apply a suggestion, clean review blocks, or run a maintenance action.
-- The vault file list is read (via Obsidian's standard metadata APIs) only to build the scene inventory and review registry — file contents never leave your vault.
-- The clipboard is touched only on your explicit action: copying the reviewer template out, or importing a review batch you've copied.
-- Bulk maintenance actions require confirmation.
-- Backup export writes contributor + revision metadata only — never manuscript text.
+- Copy the formatting instructions from the review launcher, send them with the prose or notes you want reviewed, then copy the formatted response back into Editorialist.
+- A **review batch** is the AI-formatted response: line edits, cuts, moves, condenses, expands, and memos.
+- Importing a batch appends **review blocks** to the bottom of the targeted scene notes. Nothing is applied to the prose until you act on a suggestion.
+- The Review Panel walks those suggestions scene by scene and records contributor stats, revision history, and per-scene progress as you finish.
+- **Editorialisms** are separate structural checklist files under `Editorialist/<Book>/`; use them for broader guidance that spans scenes or the whole manuscript.
+- Maintenance actions can clean review blocks or reset history, and bulk actions ask for confirmation.
 
 ## Commands
 
