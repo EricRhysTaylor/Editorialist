@@ -117,7 +117,7 @@ export class ImportEngine {
 				continue;
 			}
 
-			const block = this.serializeGroup(batch.batchId, group);
+			const block = this.serializeGroup(batch.batchId, batch.createdAt, group);
 			await this.app.vault.process(file, (currentText) => this.appendImportBlock(currentText, block));
 			importedGroups.push(group);
 		}
@@ -792,12 +792,16 @@ export class ImportEngine {
 		};
 	}
 
-	private serializeGroup(batchId: string, group: ReviewImportNoteGroup): string {
+	private serializeGroup(batchId: string, createdAt: number, group: ReviewImportNoteGroup): string {
 		const metadata = this.extractMetadata(group.suggestions);
 		const lines: string[] = [`\`\`\`${REVIEW_BLOCK_FENCE}`];
 
 		lines.push(`BatchId: ${batchId}`);
 		lines.push("ImportedBy: Editorialist");
+		// Human-readable import time so successive batches in a scene can be told
+		// apart at a glance. ISO (UTC, seconds) sorts lexicographically = newest
+		// last. Readers ignore unknown header keys, so this is back-compatible.
+		lines.push(`ImportedAt: ${new Date(createdAt).toISOString().replace(/\.\d{3}Z$/, "Z")}`);
 		lines.push(`Reviewer: ${metadata.reviewer}`);
 		lines.push(`ReviewerType: ${metadata.reviewerType}`);
 

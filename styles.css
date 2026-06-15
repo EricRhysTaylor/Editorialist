@@ -1664,8 +1664,11 @@
 .editorialist-panel__comment-entry-action-link {
 	color: color-mix(in srgb, var(--color-green) 64%, var(--text-normal));
 	font-size: var(--font-ui-small);
+
+	/* Dashed border-bottom IS the underline; suppress the <a> default
+	   text-decoration so the two don't stack into a double underline. */
+	text-decoration: none;
 	border-bottom: 1px dashed currentcolor;
-	text-underline-offset: 0.14em;
 	cursor: pointer;
 }
 
