@@ -64,6 +64,7 @@ import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
 import { selectPanelPrimarySuggestionId } from "./ui/viewmodels/ReviewPanelViewModel";
 import { normalizeMatchText } from "./core/TextMatching";
 import { EDITORIALIST_ICON_ID, registerEditorialistIcon } from "./ui/EditorialistLogoIcon";
+import { registerRadialTimelineIcon } from "./ui/RadialTimelineLogoIcon";
 import { EditorialistSettingTab } from "./ui/EditorialistSettingTab";
 import { createReviewDecorationsExtension, syncReviewDecorations } from "./ui/Decorations";
 import { createReviewToolbarElement, type ToolbarState } from "./ui/Toolbar";
@@ -362,9 +363,10 @@ export default class EditorialistPlugin extends Plugin {
 		);
 		this.pendingEdits.initialize();
 		this.registerEditorExtension(createReviewDecorationsExtension());
-		// Register the brand icon before any view can render so a restored review
-		// panel finds "editorialist-logo" already available.
+		// Register the brand icons before any view can render so a restored review
+		// panel finds "editorialist-logo" (and the RT mark) already available.
 		registerEditorialistIcon();
+		registerRadialTimelineIcon();
 		this.registerView(REVIEW_PANEL_VIEW_TYPE, (leaf) => new ReviewPanel(leaf, this));
 		this.registerView(EDITORIALISM_PANEL_VIEW_TYPE, (leaf) => new EditorialismPanel(leaf, this));
 		this.addSettingTab(new EditorialistSettingTab(this.app, this));
@@ -3270,6 +3272,9 @@ export default class EditorialistPlugin extends Plugin {
 
 	async cleanupReviewBatchById(batchId: string): Promise<void> {
 		await this.batchProcessor.cleanupReviewBatchById(batchId);
+		// Refresh so the Recent Reviews row that triggered this (and its Clean
+		// action) reflects the now-cleaned batch immediately.
+		this.refreshReviewPanel();
 	}
 
 	async cleanupCompletedSweepReviewBlocks(): Promise<void> {

@@ -3,6 +3,7 @@ import {
 	formatRecentReviewSceneTitle,
 	formatRelativeTime,
 	formatStatsTooltip,
+	isBatchReadyToClean,
 } from "./ReviewPanelIdleSections";
 
 describe("formatRelativeTime", () => {
@@ -148,5 +149,52 @@ describe("formatRecentReviewSceneTitle", () => {
 				"Books/One",
 			),
 		).toBe("Chapter 1");
+	});
+});
+
+describe("isBatchReadyToClean", () => {
+	const stats = (over: Partial<{ accepted: number; rejected: number; rewritten: number; deferred: number }> = {}) => ({
+		accepted: 0,
+		rejected: 0,
+		rewritten: 0,
+		deferred: 0,
+		...over,
+	});
+
+	it("is ready when every suggestion is decided and none deferred", () => {
+		// The reported case: 8 suggestions, 7 accepted + 1 rejected.
+		expect(
+			isBatchReadyToClean({ status: "in_progress", totalSuggestions: 8 }, stats({ accepted: 7, rejected: 1 })),
+		).toBe(true);
+	});
+
+	it("is ready even while entry.status is still in_progress (other batch on the scene)", () => {
+		// entry.status is scene-aggregated, so it can lag; the decision math wins.
+		expect(
+			isBatchReadyToClean({ status: "in_progress", totalSuggestions: 2 }, stats({ accepted: 1, rewritten: 1 })),
+		).toBe(true);
+	});
+
+	it("is not ready when some suggestions are still undecided", () => {
+		// 37 suggestions, only 8 decided.
+		expect(
+			isBatchReadyToClean({ status: "in_progress", totalSuggestions: 37 }, stats({ accepted: 7, rejected: 1 })),
+		).toBe(false);
+	});
+
+	it("is not ready when any suggestion is deferred", () => {
+		expect(
+			isBatchReadyToClean({ status: "in_progress", totalSuggestions: 3 }, stats({ accepted: 2, deferred: 1 })),
+		).toBe(false);
+	});
+
+	it("is not ready for an already-cleaned batch", () => {
+		expect(
+			isBatchReadyToClean({ status: "cleaned", totalSuggestions: 8 }, stats({ accepted: 7, rejected: 1 })),
+		).toBe(false);
+	});
+
+	it("is not ready for a batch with no suggestions", () => {
+		expect(isBatchReadyToClean({ status: "completed", totalSuggestions: 0 }, stats())).toBe(false);
 	});
 });

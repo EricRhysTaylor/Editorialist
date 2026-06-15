@@ -90,7 +90,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 	}
 
 	getIcon(): string {
-		return "pen-tool";
+		return EDITORIALIST_ICON_ID;
 	}
 
 	async onOpen(): Promise<void> {

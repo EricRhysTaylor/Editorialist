@@ -50,12 +50,12 @@ class ContributorStrengthsModal extends PromiseModal<ContributorStrengthsModalRe
 		const identity = this.contentEl.createDiv({
 			cls: "editorialist-contributor-modal__identity",
 		});
-		this.identityNameEl = identity.createEl("button", {
-			cls: "editorialist-contributor-modal__identity-name-link",
-			attr: {
-				type: "button",
-				title: "Rename contributor",
-			},
+		// Read-only live preview of the identity. The single editable field is the
+		// rename control below — keeping this a plain span avoids the old
+		// duplicate-input confusion where both the header name and the field below
+		// opened the same editor.
+		this.identityNameEl = identity.createSpan({
+			cls: "editorialist-contributor-modal__identity-name",
 		});
 		this.identitySeparatorEl = identity.createSpan({
 			cls: "editorialist-contributor-modal__identity-separator",
@@ -69,11 +69,15 @@ class ContributorStrengthsModal extends PromiseModal<ContributorStrengthsModalRe
 		});
 
 		const nameSection = this.contentEl.createDiv({ cls: "editorialist-contributor-modal__row" });
+		nameSection.createDiv({
+			cls: "editorialist-contributor-modal__field-label",
+			text: "Display label",
+		});
 		this.nameTriggerEl = nameSection.createEl("button", {
 			cls: "editorialist-contributor-modal__rename-link",
 			attr: {
 				type: "button",
-				title: "Rename contributor",
+				title: "Edit display label",
 			},
 		});
 		this.nameTriggerEl.createSpan({
@@ -93,7 +97,6 @@ class ContributorStrengthsModal extends PromiseModal<ContributorStrengthsModalRe
 			this.syncIdentityPreview();
 			this.footer?.syncDisabled();
 		});
-		this.identityNameEl.addEventListener("click", () => this.openRenameEditor());
 		this.nameTriggerEl.addEventListener("click", () => this.openRenameEditor());
 		this.nameInput.inputEl.addEventListener("blur", () => this.closeRenameEditor());
 		this.nameInput.inputEl.addEventListener("keydown", (event) => {
