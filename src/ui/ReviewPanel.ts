@@ -134,6 +134,21 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		setIcon(titleIcon, EDITORIALIST_ICON_ID);
 		titleRow.createEl("h2", { text: "Editorialist review" });
 
+		const launcherButton = titleRow.createEl("button", {
+			cls: "editorialist-panel__settings-button editorialist-panel__launcher-button",
+			attr: {
+				// aria-label only — see the note on the settings button below for why
+				// we avoid a native `title` on these re-rendered header controls.
+				"aria-label": "Open review launcher",
+				type: "button",
+			},
+		});
+		const launcherIcon = launcherButton.createSpan({ cls: "editorialist-panel__settings-icon" });
+		setIcon(launcherIcon, "rocket");
+		this.bindImmediateAction(launcherButton, () => {
+			void this.plugin.openEditorialistModal();
+		});
+
 		const settingsButton = titleRow.createEl("button", {
 			cls: "editorialist-panel__settings-button",
 			attr: {

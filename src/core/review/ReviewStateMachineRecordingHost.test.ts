@@ -245,7 +245,7 @@ describe("ReviewStateMachine production-driven replay", () => {
 		expect(host.ops).toEqual(expectedHostEffects(trace("deferSuggestion", "happy path").steps));
 	});
 
-	it("markSuggestionRewritten — preferred fallback", async () => {
+	it("markSuggestionRewritten — stays on current item (mirrors accept)", async () => {
 		const { host, sm } = run({
 			guards: { canMarkSuggestionRewritten: true },
 			session: { notePath: "n.md", suggestions: [closed("c1")] },
@@ -253,7 +253,7 @@ describe("ReviewStateMachine production-driven replay", () => {
 		});
 		await sm.markSuggestionRewritten("s0");
 		expect(host.ops).toEqual(
-			expectedHostEffects(trace("markSuggestionRewritten", "preferred fallback").steps),
+			expectedHostEffects(trace("markSuggestionRewritten", "mirrors accept").steps),
 		);
 	});
 

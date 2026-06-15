@@ -347,7 +347,7 @@ export function createReviewToolbarElement(
 			"Backup to cut file",
 			"archive",
 			() => {
-				void plugin.backupSelectionToCutFile();
+				void plugin.backupSelectionToCutFile({ preferDisplayedSuggestion: true });
 			},
 			false,
 			false,
@@ -516,7 +516,7 @@ export function createReviewToolbarElement(
 		"Backup to cut file",
 		"archive",
 		() => {
-			void plugin.backupSelectionToCutFile();
+			void plugin.backupSelectionToCutFile({ preferDisplayedSuggestion: true });
 		},
 		false,
 		false,

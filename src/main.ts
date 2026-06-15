@@ -61,6 +61,8 @@ import { openContributorReassignmentModal, type ContributorReassignmentMode } fr
 import { openContributorStrengthsModal } from "./ui/ContributorStrengthsModal";
 import { EDITORIALISM_PANEL_VIEW_TYPE, EditorialismPanel } from "./ui/EditorialismPanel";
 import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
+import { selectPanelPrimarySuggestionId } from "./ui/viewmodels/ReviewPanelViewModel";
+import { normalizeMatchText } from "./core/TextMatching";
 import { EDITORIALIST_ICON_ID, registerEditorialistIcon } from "./ui/EditorialistLogoIcon";
 import { EditorialistSettingTab } from "./ui/EditorialistSettingTab";
 import { createReviewDecorationsExtension, syncReviewDecorations } from "./ui/Decorations";
@@ -169,6 +171,19 @@ interface ReviewLaunchTarget {
 }
 
 export type { PendingEditsSummary };
+
+// Resolved source for a "Backup to cut file" action: either a manual editor
+// selection or a cut/condense suggestion's target, plus the scene file both
+// belong to so text and destination never drift apart.
+interface CutBackupSource {
+	sceneFile: TFile;
+	text: string;
+	source: CutBackupSourceType;
+	operation?: ReviewSuggestion["operation"];
+	suggestionId?: string;
+	contributor?: string;
+	reason?: string;
+}
 
 export default class EditorialistPlugin extends Plugin {
 	private readonly store = new ReviewStore();
@@ -786,11 +801,13 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	// "Backup to cut file" — a preservation-only utility. It copies the current
-	// editor selection (or, as a fallback, a selected cut/condense suggestion's
-	// resolved target) into the scene's cut file. It deliberately does NOT change
-	// any suggestion status, sweep stats, or contributor metrics.
-	async backupSelectionToCutFile(): Promise<void> {
-		const resolved = this.resolveCutBackupSource();
+	// editor selection (or a cut/condense suggestion's resolved target) into the
+	// scene's cut file. It deliberately does NOT change any suggestion status,
+	// sweep stats, or contributor metrics. `preferDisplayedSuggestion` flips the
+	// resolution order: the toolbar preserves the suggestion shown on the card,
+	// the right-click menu preserves the manual selection.
+	async backupSelectionToCutFile(options?: { preferDisplayedSuggestion?: boolean }): Promise<void> {
+		const resolved = this.resolveCutBackupSource(options?.preferDisplayedSuggestion ?? false);
 		if (!resolved) {
 			new Notice(
 				"Select text in the editor, or choose a cut or condense suggestion, to back up to the cut file.",
@@ -921,39 +938,36 @@ export default class EditorialistPlugin extends Plugin {
 		return null;
 	}
 
-	// Resolves BOTH the text and the scene file it belongs to, so the two never
-	// drift apart: a manual selection archives into the file the selection lives
-	// in; a suggestion-target fallback archives into the suggestion's own scene
-	// (the session note), never whatever happens to be the active markdown file.
-	private resolveCutBackupSource(): {
-		sceneFile: TFile;
-		text: string;
-		source: CutBackupSourceType;
-		operation?: ReviewSuggestion["operation"];
-		suggestionId?: string;
-		contributor?: string;
-		reason?: string;
-	} | null {
-		// 1. Live editor selection wins. Read it at action time (not from cached
-		//    toolbar state) so a toolbar click that doesn't steal focus still sees
-		//    the user's current selection, and archive into that file. Use the
-		//    scene editor, never the cut panel — the cut file is itself a markdown
-		//    view, so once it is open/focused it would otherwise hijack this read.
+	private resolveCutBackupSource(preferDisplayedSuggestion: boolean): CutBackupSource | null {
+		// The toolbar "Backup to cut file" preserves the suggestion shown on the
+		// card; the right-click "Backup selection" preserves the user's manual
+		// selection. Both fall back to the other when their primary is empty.
+		return preferDisplayedSuggestion
+			? this.resolveDisplayedSuggestionSource() ?? this.resolveSelectionSource()
+			: this.resolveSelectionSource() ?? this.resolveDisplayedSuggestionSource();
+	}
+
+	// Live editor selection. Read at action time (not from cached toolbar state)
+	// so a toolbar click that doesn't steal focus still sees the current
+	// selection. Use the scene editor, never the cut panel — the cut file is
+	// itself a markdown view and would otherwise hijack this read.
+	private resolveSelectionSource(): CutBackupSource | null {
 		const view = this.getSceneEditorView();
 		const selection = view?.editor.getSelection();
 		if (view?.file && selection && selection.trim()) {
 			return { sceneFile: view.file, text: selection, source: "selection" };
 		}
+		return null;
+	}
 
-		// 2. Fall back to a selected shrink-style suggestion's resolved target,
-		//    archiving into the suggestion's scene (the session note).
-		const selected = this.store.getSelectedSuggestion();
-		if (!selected || (selected.operation !== "cut" && selected.operation !== "condense")) {
-			return null;
-		}
-
+	// The shrink-style suggestion the panel actually DISPLAYS. Resolved via the
+	// same first-open fallback the panel uses — never the raw store selection,
+	// which can dangle on an already-resolved suggestion while the visible card
+	// has moved on, causing the wrong block to be archived.
+	private resolveDisplayedSuggestionSource(): CutBackupSource | null {
 		const session = this.getReviewSession();
-		if (!session) {
+		const primary = this.resolvePanelPrimarySuggestion(session);
+		if (!session || !primary || (primary.operation !== "cut" && primary.operation !== "condense")) {
 			return null;
 		}
 
@@ -962,7 +976,7 @@ export default class EditorialistPlugin extends Plugin {
 			return null;
 		}
 
-		const text = this.resolveSuggestionTargetText(sceneFile, selected.location.target);
+		const text = this.resolveSuggestionTargetText(sceneFile, primary.location.target);
 		if (!text) {
 			return null;
 		}
@@ -971,11 +985,25 @@ export default class EditorialistPlugin extends Plugin {
 			sceneFile,
 			text,
 			source: "suggestion-target",
-			operation: selected.operation,
-			suggestionId: selected.id,
-			contributor: selected.contributor.displayName,
-			reason: selected.why,
+			operation: primary.operation,
+			suggestionId: primary.id,
+			contributor: primary.contributor.displayName,
+			reason: primary.why,
 		};
+	}
+
+	// Mirrors the review panel's card selection: the selected suggestion when it
+	// is still open, otherwise the first open suggestion. Keeps Backup aligned
+	// with what the user sees rather than the raw (possibly stale) store value.
+	private resolvePanelPrimarySuggestion(session: ReviewSession | null): ReviewSuggestion | null {
+		if (!session) {
+			return null;
+		}
+		const primaryId = selectPanelPrimarySuggestionId(
+			session.suggestions,
+			this.store.getState().selectedSuggestionId,
+		);
+		return primaryId ? this.getSuggestionById(primaryId) : null;
 	}
 
 	private resolveSuggestionTargetText(sceneFile: TFile, target: ReviewTargetRef | undefined): string | null {
@@ -983,8 +1011,10 @@ export default class EditorialistPlugin extends Plugin {
 			return null;
 		}
 
-		// Prefer the live manuscript slice by offsets (freshest wording); fall back
-		// to the matched text captured on the target ref.
+		// Prefer the live manuscript slice by offsets (freshest wording), but only
+		// when it still matches the captured target text. If the offsets have gone
+		// stale (earlier edits shifted the manuscript), the slice would be a
+		// different passage — archive the captured text rather than the wrong block.
 		const context = this.getNoteContextByPath(sceneFile.path);
 		if (
 			context &&
@@ -993,7 +1023,7 @@ export default class EditorialistPlugin extends Plugin {
 			target.endOffset > target.startOffset
 		) {
 			const slice = context.text.slice(target.startOffset, target.endOffset);
-			if (slice.trim()) {
+			if (slice.trim() && (!target.text.trim() || normalizeMatchText(slice) === normalizeMatchText(target.text))) {
 				return slice;
 			}
 		}

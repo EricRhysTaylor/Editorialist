@@ -632,6 +632,19 @@
 	stroke-width: 1.9px;
 }
 
+.editorialist-panel__launcher-button {
+	/* The h2 (flex:1) already pushes the right-side controls over; without this
+	   reset the settings button's `margin-left:auto` (shared via the same class)
+	   would split free space across both buttons and float the launcher inward. */
+	margin-left: 0;
+}
+
+.editorialist-panel__launcher-button:hover,
+.editorialist-panel__launcher-button:focus-visible {
+	color: var(--interactive-accent);
+	outline: none;
+}
+
 .editorialist-panel__empty {
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);

@@ -50,11 +50,13 @@ describe("ReviewStateMachine scaffold — contract integrity", () => {
 });
 
 describe("ReviewStateMachine scaffold — ordering invariants", () => {
-	it("reject/defer/rewrite: persist decision BEFORE status update, and next computed BEFORE status update", () => {
+	it("reject/defer: persist decision BEFORE status update, and next computed BEFORE status update", () => {
+		// rewrite no longer computes a next item (it stays on the current
+		// suggestion like accept), so it is excluded from the next-before-status
+		// invariant below.
 		for (const [method, scenario] of [
 			["rejectSuggestion", "happy path, next"],
 			["deferSuggestion", "happy path"],
-			["markSuggestionRewritten", "preferred fallback"],
 		] as const) {
 			const t = trace(method, scenario);
 			const persist = idx(t, "registry.persistReviewDecision");
@@ -64,6 +66,16 @@ describe("ReviewStateMachine scaffold — ordering invariants", () => {
 			expect(persist).toBeLessThan(status);
 			expect(next).toBeLessThan(status);
 		}
+	});
+
+	it("markSuggestionRewritten: persists BEFORE status update, then stays on the current id", () => {
+		const t = trace("markSuggestionRewritten", "mirrors accept");
+		expect(idx(t, "registry.persistReviewDecision")).toBeLessThan(idx(t, "store.updateSuggestionStatus"));
+		// No advance: it neither computes the next item nor uses the old
+		// findPreferredSuggestionId fallback — it re-selects the same suggestion.
+		expect(ops(t)).not.toContain("getAdjacentRevealableSuggestionId");
+		expect(ops(t)).not.toContain("findPreferredSuggestionId");
+		expect(ops(t)).toContain("store.selectSuggestion");
 	});
 
 	it("reject single persist point: signals use persist:false, scene-inventory sync follows", () => {
@@ -82,8 +94,10 @@ describe("ReviewStateMachine scaffold — ordering invariants", () => {
 		expect(idx(t, "editor.replaceRange")).toBeLessThan(idx(t, "registry.clearPersistedReviewDecision"));
 	});
 
-	it("only markSuggestionRewritten carries the findPreferredSuggestionId fallback", () => {
-		expect(ops(trace("markSuggestionRewritten", "preferred fallback"))).toContain("findPreferredSuggestionId");
+	it("no decision path carries the findPreferredSuggestionId fallback any more", () => {
+		// rewrite previously used findPreferredSuggestionId; it now mirrors accept
+		// (select the current id), so no method should reference the fallback.
+		expect(ops(trace("markSuggestionRewritten", "mirrors accept"))).not.toContain("findPreferredSuggestionId");
 		expect(ops(trace("rejectSuggestion", "happy path, next"))).not.toContain("findPreferredSuggestionId");
 		expect(ops(trace("deferSuggestion", "happy path"))).not.toContain("findPreferredSuggestionId");
 	});

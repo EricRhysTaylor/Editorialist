@@ -9,7 +9,6 @@ import {
 	getSuggestionPrimaryTarget,
 } from "../OperationSupport";
 import {
-	findPreferredSuggestionId as findPreferredSuggestionIdShared,
 	getAdjacentRevealableSuggestionId as getAdjacentRevealableSuggestionIdShared,
 	hasLiveActionableSuggestions as hasLiveActionableSuggestionsShared,
 } from "./SuggestionTraversal";
@@ -205,7 +204,6 @@ export class ReviewStateMachine {
 				);
 			}
 
-			const nextSuggestionId = this.computeAdjacent("next", id);
 			this.host.store.updateSuggestionStatus(id, "rewritten");
 			if (previousStatus) {
 				scope.onRollback(() => this.host.store.updateSuggestionStatus(id, previousStatus));
@@ -216,20 +214,16 @@ export class ReviewStateMachine {
 				sessionStartedAt,
 			});
 			await this.host.registry.syncSceneInventoryForSession(this.host.store.getSession());
-			if (nextSuggestionId) {
-				this.host.store.selectSuggestion(nextSuggestionId);
-				await this.host.revealSelectedSuggestion();
-				return;
-			}
 
 			if (this.handoffApplies(this.host.store.getSession())) {
 				await this.host.enterGuidedSweepHandoff();
 				return;
 			}
 
-			this.host.store.selectSuggestion(
-				findPreferredSuggestionIdShared(this.host.store.getSession()?.suggestions ?? []),
-			);
+			// Stay on the current item (now showing "rewritten") rather than
+			// advancing — mirrors acceptSuggestion, which keeps the just-decided
+			// suggestion selected. The user advances with Next when ready.
+			this.host.store.selectSuggestion(id);
 			await this.host.revealSelectedSuggestion();
 		} catch {
 			await this.repairFailedDecision(scope, tracking);
