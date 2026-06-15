@@ -61,6 +61,7 @@ import { openContributorReassignmentModal, type ContributorReassignmentMode } fr
 import { openContributorStrengthsModal } from "./ui/ContributorStrengthsModal";
 import { EDITORIALISM_PANEL_VIEW_TYPE, EditorialismPanel } from "./ui/EditorialismPanel";
 import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
+import { EDITORIALIST_ICON_ID, registerEditorialistIcon } from "./ui/EditorialistLogoIcon";
 import { EditorialistSettingTab } from "./ui/EditorialistSettingTab";
 import { createReviewDecorationsExtension, syncReviewDecorations } from "./ui/Decorations";
 import { createReviewToolbarElement, type ToolbarState } from "./ui/Toolbar";
@@ -341,10 +342,13 @@ export default class EditorialistPlugin extends Plugin {
 		this.importEngine = new ImportEngine(this.app, this.parser, this.matchEngine);
 		this.pendingEdits.initialize();
 		this.registerEditorExtension(createReviewDecorationsExtension());
+		// Register the brand icon before any view can render so a restored review
+		// panel finds "editorialist-logo" already available.
+		registerEditorialistIcon();
 		this.registerView(REVIEW_PANEL_VIEW_TYPE, (leaf) => new ReviewPanel(leaf, this));
 		this.registerView(EDITORIALISM_PANEL_VIEW_TYPE, (leaf) => new EditorialismPanel(leaf, this));
 		this.addSettingTab(new EditorialistSettingTab(this.app, this));
-		this.addRibbonIcon("pen-tool", "Open review panel", () => {
+		this.addRibbonIcon(EDITORIALIST_ICON_ID, "Open review panel", () => {
 			void this.openReviewPanel();
 		});
 		this.addRibbonIcon("list-checks", "Open Editorialism panel", () => {

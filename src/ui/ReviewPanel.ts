@@ -4,6 +4,7 @@ import { getEffectiveSuggestionStatus, getSuggestionCopyBlocks, getSuggestionRea
 import type { ReviewSuggestion, SceneMemo } from "../models/ReviewSuggestion";
 import type { default as EditorialistPlugin, ReviewStateIndexEntry } from "../main";
 import { bindImmediateAction } from "./util/bindImmediateAction";
+import { EDITORIALIST_ICON_ID } from "./EditorialistLogoIcon";
 // Pure projection helpers extracted to characterize ReviewPanel before the
 // eventual file split. See src/ui/viewmodels/ReviewPanelViewModel.ts for the
 // branch-decision contract (REVIEW_PANEL_BRANCH_ORDER + selectReviewPanelBranch)
@@ -130,7 +131,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		const header = this.contentEl.createDiv({ cls: "editorialist-panel__header" });
 		const titleRow = header.createDiv({ cls: "editorialist-panel__title-row" });
 		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__title-icon" });
-		setIcon(titleIcon, "pen-tool");
+		setIcon(titleIcon, EDITORIALIST_ICON_ID);
 		titleRow.createEl("h2", { text: "Editorialist review" });
 
 		const settingsButton = titleRow.createEl("button", {
