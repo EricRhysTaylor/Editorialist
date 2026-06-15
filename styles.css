@@ -490,6 +490,14 @@
 	background: color-mix(in srgb, var(--color-red) 12%, var(--background-secondary));
 }
 
+/* "Open cut file" modifier state on the Backup-to-cut-file button (Shift held).
+   Blue reads as navigate/open, distinct from apply's green and bulk's red. */
+.editorialist-toolbar__button[data-editorialist-modifier-mode="open"] {
+	color: var(--color-blue);
+	border-color: color-mix(in srgb, var(--color-blue) 36%, var(--background-modifier-border));
+	background: color-mix(in srgb, var(--color-blue) 14%, var(--background-secondary));
+}
+
 .editorialist-toolbar__button--apply:hover:not(:disabled),
 .editorialist-toolbar__button--apply:focus-visible,
 .editorialist-toolbar__button--apply:active:not(:disabled) {

@@ -353,7 +353,7 @@ export function createReviewToolbarElement(
 			false,
 			[
 				{
-					kind: "advance",
+					kind: "open",
 					label: "Open cut file for this scene",
 					icon: "folder-open",
 					onClick: () => {
@@ -510,9 +510,28 @@ export function createReviewToolbarElement(
 	buildButton(actions, tracker, "Rewrite myself", "pen-line", () => {
 		void plugin.rewriteSelectedSuggestion();
 	}, !state.canRewrite);
-	buildButton(actions, tracker, "Backup to cut file", "archive", () => {
-		void plugin.backupSelectionToCutFile();
-	}, false);
+	buildButton(
+		actions,
+		tracker,
+		"Backup to cut file",
+		"archive",
+		() => {
+			void plugin.backupSelectionToCutFile();
+		},
+		false,
+		false,
+		[
+			{
+				kind: "open",
+				label: "Open cut file for this scene",
+				icon: "folder-open",
+				onClick: () => {
+					void plugin.openCutFileForActiveScene();
+				},
+				when: ({ modPressed, shiftPressed }) => shiftPressed && !modPressed,
+			},
+		],
+	);
 	if (state.canUndoLastAccept) {
 		buildButton(actions, tracker, "Undo", "rotate-ccw", () => {
 			void plugin.undoLastAppliedSuggestion();
@@ -650,7 +669,7 @@ function buildButton(	parent: HTMLElement,
 	disabled = false,
 	isApply = false,
 	alternateActions?: Array<{
-		kind: "advance" | "bulk";
+		kind: "advance" | "bulk" | "open";
 		label: string;
 		icon: string;
 		onClick: () => void;

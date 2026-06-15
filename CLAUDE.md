@@ -2,7 +2,7 @@
 
 ## Working directory
 
-Main repo: `/Users/ericrhystaylor/Documents/RT LLC/CodeBase/Editorialist`
+Main repo: `/Users/ericrhystaylor/Documents/RT LLC/Plugin/Editorialist`
 Primary branch: `master`
 
 ## Code standards
