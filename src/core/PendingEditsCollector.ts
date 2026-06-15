@@ -42,6 +42,27 @@ export type CollectFailureReason =
 	| "no_active_book"
 	| "no_scenes_with_pending_edits";
 
+// Radial Timeline's getSceneData currently returns `number: undefined` for
+// every Scene item, so the sweep order can't rely on it. Scene files are named
+// with a leading manuscript number (e.g. "50 Leaving Earth"), which is the
+// order the writer expects to walk. Parse that leading number from the title;
+// honor an explicit numeric `number` if a future RT version supplies one; fall
+// back to the source array index only when no number can be found.
+export function resolveSceneOrder(
+	rawNumber: number | undefined,
+	title: string,
+	fallbackIndex: number,
+): number {
+	if (typeof rawNumber === "number" && Number.isFinite(rawNumber)) {
+		return rawNumber;
+	}
+	const leadingNumber = /^\s*(\d+(?:\.\d+)?)/.exec(title)?.[1];
+	if (leadingNumber) {
+		return Number.parseFloat(leadingNumber);
+	}
+	return fallbackIndex;
+}
+
 function resolveRadialTimelinePlugin(app: App): RadialTimelinePluginSurface | null {
 	const candidate = (app as AppWithPlugins).plugins?.getPlugin?.(RADIAL_TIMELINE_PLUGIN_ID);
 	if (!candidate) {
@@ -74,12 +95,15 @@ export async function collectPendingEdits(app: App): Promise<CollectPendingEdits
 			if (scene.itemType && scene.itemType !== "Scene") return false;
 			return hasPendingEdits(scene.pendingEdits);
 		})
-		.map((scene, index) => ({
-			path: scene.path,
-			title: scene.title?.trim() || scene.path,
-			order: typeof scene.number === "number" ? scene.number : index,
-			rawField: scene.pendingEdits ?? "",
-		}));
+		.map((scene, index) => {
+			const title = scene.title?.trim() || scene.path;
+			return {
+				path: scene.path,
+				title,
+				order: resolveSceneOrder(scene.number, title, index),
+				rawField: scene.pendingEdits ?? "",
+			};
+		});
 
 	const sceneItems = buildSceneItems(sceneInputs);
 
