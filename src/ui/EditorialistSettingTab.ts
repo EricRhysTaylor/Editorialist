@@ -93,15 +93,20 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		this.renderInventorySection(coreContent, inventory, activeBook.label);
 		this.renderPendingEditsSection(coreContent);
 		this.renderActivitySection(coreContent, summary);
-		this.renderTrackingSection(coreContent, activeBook);
-		this.renderMaintenanceSection(coreContent, activeBook.label);
 
 		this.renderContributorsHero(reviewerContent);
 		this.renderContributorsSection(reviewerContent);
 		this.renderMetadataSection(reviewerContent);
 
+		// Configuration holds the knobs and admin: manuscript scope first (the
+		// most fundamental "what counts as the book" setting), then the tracking
+		// identity that scope drives, the cut-file location, and finally the
+		// destructive maintenance actions.
 		this.renderConfigurationHero(configurationContent);
+		this.renderBookFolderSection(configurationContent, activeBook);
+		this.renderTrackingSection(configurationContent, activeBook);
 		this.renderCutLocationSection(configurationContent, activeBook);
+		this.renderMaintenanceSection(configurationContent, activeBook.label);
 	}
 
 	private getInventoryVocabulary(activeBook: { label: string | null; sourceFolder: string | null }): {
@@ -233,7 +238,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		setIcon(badgeIcon, "sliders-horizontal");
 		badge.createSpan({
 			cls: "editorialist-settings__hero-intro-badge-text",
-			text: "Configuration · Cut archive",
+			text: "Configuration · Scope & data",
 		});
 		const badgeLink = badge.createEl("a", {
 			href: EditorialistSettingTab.SETTINGS_DOCS_URL,
@@ -249,22 +254,91 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const titleRow = hero.createDiv({ cls: "editorialist-settings__hero-intro-title-row" });
 		titleRow.createDiv({
 			cls: "editorialist-settings__hero-intro-title",
-			text: "Preserve strong prose before you reduce",
+			text: "Tell Editorialist where your manuscript lives",
 		});
 		hero.createDiv({
 			cls: "editorialist-settings__hero-intro-subtitle",
-			text: "When a pass calls for cutting or condensing, you often want to keep the original wording — strong lines, lore, ideas you might reuse later. “Backup to cut file” copies the selected text into a per-scene cut file without changing any review decision. Configure where those cut files live below.",
+			text: "Configuration is where you set the boundaries Editorialist works within. Point it at your manuscript folder so review tracking and imported edits stay bounded to the book — not the rest of your vault. From here you also manage stable note identity, choose where cut files are kept, and run maintenance to clean review blocks or reset history. Radial Timeline supplies the manuscript scope automatically when it is active; otherwise you set it yourself below.",
 		});
 
 		const features = hero.createDiv({ cls: "editorialist-settings__hero-features" });
 		features.createDiv({
 			cls: "editorialist-settings__hero-features-kicker",
-			text: "How cut files work:",
+			text: "What you configure here:",
 		});
 		const featureList = features.createDiv({ cls: "editorialist-settings__hero-features-list" });
-		this.createHeroFeature(featureList, "archive", "One file per scene — every backup appends to a cut file named after the scene, tagged with a Class: Cut property.");
-		this.createHeroFeature(featureList, "folder", "Predictable location — cut files default to a Cut folder beside your manuscript, or wherever you point them.");
-		this.createHeroFeature(featureList, "shield-check", "Never destructive — backing up preserves text only; accepting, rejecting, and rewriting stay your review decisions.");
+		this.createHeroFeature(featureList, "folder", "Manuscript folder — bound review tracking and imports to your book so other notes are never picked up.");
+		this.createHeroFeature(featureList, "fingerprint", "Stable identity — keep revision history attached to the right note even as titles and order change.");
+		this.createHeroFeature(featureList, "archive", "Cut files — preserve strong prose before you reduce, in a location you choose.");
+		this.createHeroFeature(featureList, "wrench", "Maintenance — clean review blocks or reset saved history without touching your writing.");
+	}
+
+	private renderBookFolderSection(
+		parent: HTMLElement,
+		activeBook: { label: string | null; sourceFolder: string | null; structured: boolean },
+	): void {
+		const body = this.createSection(
+			parent,
+			"Manuscript folder",
+			"Point Editorialist at the folder that holds your book. Review tracking and imported edits are confined to notes inside it, so content logs, briefs, and other vault notes are never picked up as review targets.",
+			"folder",
+		);
+		body.parentElement?.addClass("editorialist-settings__section--utility");
+
+		// Radial Timeline owns the scope whenever it has an active book. In that
+		// case the override is inert — surface that plainly instead of letting the
+		// author think their input is doing nothing.
+		const radialDriven = activeBook.structured && Boolean(activeBook.sourceFolder);
+
+		const fieldRow = body.createDiv({ cls: "editorialist-settings__cut-row" });
+		fieldRow.createDiv({
+			cls: "editorialist-settings__cut-label",
+			text: "Book folder override",
+		});
+
+		const input = fieldRow.createEl("input", {
+			cls: "editorialist-settings__cut-input",
+			attr: {
+				type: "text",
+				spellcheck: "false",
+				placeholder: "Manuscripts/My Book",
+			},
+		});
+		input.value = this.plugin.getBookFolderOverride();
+		if (radialDriven) {
+			input.disabled = true;
+		}
+
+		const actions = fieldRow.createDiv({ cls: "editorialist-settings__cut-actions" });
+		this.createActionButton(actions, "save", "Save", async () => {
+			await this.plugin.setBookFolderOverride(input.value);
+			new Notice(
+				input.value.trim()
+					? `Manuscript folder set to ${input.value.trim()}.`
+					: "Manuscript folder cleared — tracking spans the whole vault.",
+			);
+			void this.displayAsync(false);
+		});
+		this.createActionButton(actions, "rotate-ccw", "Clear", async () => {
+			await this.plugin.setBookFolderOverride("");
+			new Notice("Manuscript folder cleared — tracking spans the whole vault.");
+			void this.displayAsync(false);
+		});
+
+		const note = body.createDiv({ cls: "editorialist-settings__cut-note" });
+		const override = this.plugin.getBookFolderOverride();
+		let noteText: string;
+		if (radialDriven) {
+			noteText = `Radial Timeline is supplying the manuscript scope (${activeBook.sourceFolder}). This override is saved but stays inactive until Radial Timeline is not driving the active book.`;
+		} else if (override) {
+			noteText = `Scope active: review tracking and imports are confined to ${override}/.`;
+		} else {
+			noteText = "No manuscript folder set. Review tracking and imports span the whole vault. Set a folder to keep them bounded to your book.";
+		}
+		note.createDiv({
+			cls: "editorialist-settings__maintenance-note",
+			text: noteText,
+		});
 	}
 
 	private renderCutLocationSection(

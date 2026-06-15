@@ -253,3 +253,69 @@ describe("ImportEngine — fallback to active note for descriptive targets", () 
 		expect(condense?.routeStatus).toBe("unresolved");
 	});
 });
+
+describe("ImportEngine — configured book-folder scope confines Note/Path hints", () => {
+	function createScopedEngine(app: MockApp, bookFolder: string): ImportEngine {
+		const reviewers = new ContributorDirectory();
+		const parser = new SuggestionParser(reviewers);
+		const matcher = new MatchEngine();
+		return new ImportEngine(app as unknown as App, parser, matcher, () => bookFolder);
+	}
+
+	// A Note hint that uniquely names a note OUTSIDE the manuscript folder — the
+	// exact shape that let a content log get picked up.
+	const NOTE_HINT_PASTE = [
+		"Reviewer: GPT-5.4",
+		"ReviewerType: ai-editor",
+		"",
+		"=== EDIT ===",
+		"Note: Content Log",
+		"Original: A line that lives only in the log.",
+		"Revised: A revised line.",
+		"Why: x",
+	].join("\n");
+
+	function buildVault(): MockApp {
+		return createMockApp([
+			{
+				path: "Book/Scenes/37 Volcano.md",
+				body: "The volcano erupts at dawn.",
+				frontmatter: { Class: "Scene" },
+			},
+			{
+				// Outside the manuscript folder, no Class: Scene.
+				path: "Logs/Content Log.md",
+				body: "A line that lives only in the log.",
+			},
+		]);
+	}
+
+	it("resolves the Note hint vault-wide when no book folder is configured", async () => {
+		const engine = createImportEngine(buildVault());
+		const batch = await engine.inspectBatch(NOTE_HINT_PASTE);
+		expect(batch.groups.map((group) => group.filePath)).toContain("Logs/Content Log.md");
+	});
+
+	it("rejects an out-of-folder Note hint when a book folder is configured", async () => {
+		const engine = createScopedEngine(buildVault(), "Book");
+		const batch = await engine.inspectBatch(NOTE_HINT_PASTE);
+		expect(batch.groups.map((group) => group.filePath)).not.toContain("Logs/Content Log.md");
+		const edit = batch.results.find((result) => result.suggestion.operation === "edit");
+		expect(edit?.routeStatus).toBe("unresolved");
+	});
+
+	it("still resolves an in-folder note via inference under a configured folder (no Class: Scene required)", async () => {
+		// The manuscript folder is unstructured: a note inside it without
+		// Class: Scene must still be reachable for inference.
+		const app = createMockApp([
+			{
+				path: "Book/Chapter 1.md",
+				body: "A line that lives only in the log.",
+				// deliberately no Class: Scene
+			},
+		]);
+		const engine = createScopedEngine(app, "Book");
+		const batch = await engine.inspectBatch(NOTE_HINT_PASTE);
+		expect(batch.groups.map((group) => group.filePath)).toContain("Book/Chapter 1.md");
+	});
+});

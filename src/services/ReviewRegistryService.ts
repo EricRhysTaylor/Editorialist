@@ -2,6 +2,7 @@ import { TFile, type App } from "obsidian";
 import { findImportedReviewBlocks } from "../core/ReviewBlockFormat";
 import type { ReviewEngine } from "../core/ReviewEngine";
 import {
+	buildConfiguredBookScope,
 	getBookHintForPath,
 	getSceneIdForFile,
 	isPathInFolderScope,
@@ -78,6 +79,7 @@ export class ReviewRegistryService {
 	private activeBookScope: ActiveBookScopeInfo = {
 		label: null,
 		sourceFolder: null,
+		structured: false,
 	};
 	private reviewDecisionIndex: Record<string, PersistedReviewDecisionRecord> = {};
 	private reviewerSignalIndex: Record<string, ReviewerSignalRecord> = {};
@@ -110,7 +112,7 @@ export class ReviewRegistryService {
 			noteIdentitiesOf: (notePath) => this.getNoteIdentityKeys(notePath),
 		});
 		this.inventoryBuilder = new SceneInventoryBuilder({
-			getMarkdownFiles: () => this.app.vault.getMarkdownFiles(),
+			getMarkdownFiles: () => this.getScopedMarkdownFiles(),
 			resolveNoteText: async (file) =>
 				this.openNoteTextResolver(file.path) ?? (await this.app.vault.cachedRead(file)),
 			buildEngineSession: (notePath, noteText) =>
@@ -146,6 +148,20 @@ export class ReviewRegistryService {
 		this.settings = {
 			...this.settings,
 			cutFolderOverride: value.trim(),
+		};
+	}
+
+	getBookFolderOverride(): string {
+		return this.settings.bookFolderOverride;
+	}
+
+	// Stores the raw override string (trimmed). The caller persists and then
+	// calls refreshActiveBookScope() so the new scope takes effect. Has no
+	// effect while Radial Timeline is supplying the active-book scope.
+	setBookFolderOverride(value: string): void {
+		this.settings = {
+			...this.settings,
+			bookFolderOverride: value.trim(),
 		};
 	}
 
@@ -457,7 +473,13 @@ export class ReviewRegistryService {
 	}
 
 	async refreshActiveBookScope(): Promise<void> {
-		this.activeBookScope = await readRadialTimelineActiveBookScope(this.app);
+		const radialScope = await readRadialTimelineActiveBookScope(this.app);
+		// Radial Timeline wins when it supplies a book folder. Otherwise fall back
+		// to the configured manuscript folder so non-RT authors still get a
+		// bounded scope for the inventory and import routing.
+		this.activeBookScope = radialScope.sourceFolder
+			? radialScope
+			: buildConfiguredBookScope(this.settings.bookFolderOverride);
 	}
 
 	async syncOperationalMetadata(): Promise<void> {
@@ -873,6 +895,21 @@ export class ReviewRegistryService {
 		}
 
 		return getSceneIdForFile(this.app, file)?.trim() || undefined;
+	}
+
+	// Markdown files the inventory is allowed to track. When the active book has
+	// a known scope folder (Radial Timeline OR the configured manuscript folder),
+	// the inventory is confined to notes inside it, so notes elsewhere in the
+	// vault — content logs, briefs, scratch — never become review targets. With
+	// no scope folder the whole vault is scanned, preserving prior behavior for
+	// authors who have configured neither.
+	private getScopedMarkdownFiles(): TFile[] {
+		const files = this.app.vault.getMarkdownFiles();
+		const scopeFolder = this.activeBookScope.sourceFolder;
+		if (!scopeFolder) {
+			return files;
+		}
+		return files.filter((file) => isPathInFolderScope(file.path, scopeFolder));
 	}
 
 	private isSceneClassNote(notePath: string): boolean {

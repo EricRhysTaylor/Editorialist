@@ -57,6 +57,11 @@ export class ImportEngine {
 		private readonly app: App,
 		private readonly parser: SuggestionParser,
 		private readonly matchEngine: MatchEngine,
+		// The configured manuscript/book folder ("" when unset). Used as the
+		// scope root when Radial Timeline is not driving the active book, so
+		// non-RT authors get the same book-bounded routing. Defaults to unset so
+		// existing call sites and tests need no change.
+		private readonly getConfiguredBookFolder: () => string = () => "",
 	) {}
 
 	parseBatch(rawText: string): ParsedReviewDocument {
@@ -71,7 +76,8 @@ export class ImportEngine {
 		const parsedDocument = this.parseBatch(rawText);
 		const results: ReviewImportSuggestionResult[] = [];
 		const markdownFiles = this.app.vault.getMarkdownFiles();
-		const scopeFiles = await this.getActiveBookScopeFiles(options?.activeNotePath, markdownFiles);
+		const bookScope = await this.resolveBookScope();
+		const scopeFiles = this.getActiveBookScopeFiles(options?.activeNotePath, markdownFiles, bookScope);
 		const noteTextCache = new Map<string, string>();
 
 		const activeNotePath = options?.activeNotePath;
@@ -83,6 +89,7 @@ export class ImportEngine {
 					markdownFiles,
 					scopeFiles,
 					noteTextCache,
+					bookScope.declaredFolder,
 					activeNotePath,
 					correctedTargets,
 				),
@@ -130,6 +137,7 @@ export class ImportEngine {
 		markdownFiles: TFile[],
 		scopeFiles: TFile[],
 		noteTextCache: Map<string, string>,
+		declaredScopeFolder: string | null,
 		activeNotePath?: string,
 		correctedTargets?: ReadonlyMap<string, string>,
 	): Promise<ReviewImportSuggestionResult> {
@@ -138,6 +146,7 @@ export class ImportEngine {
 			markdownFiles,
 			scopeFiles,
 			noteTextCache,
+			declaredScopeFolder,
 			activeNotePath,
 			correctedTargets,
 		);
@@ -215,6 +224,7 @@ export class ImportEngine {
 		markdownFiles: TFile[],
 		scopeFiles: TFile[],
 		noteTextCache: Map<string, string>,
+		declaredScopeFolder: string | null,
 		activeNotePath?: string,
 		correctedTargets?: ReadonlyMap<string, string>,
 	): Promise<ResolvedFileMatch> {
@@ -259,8 +269,16 @@ export class ImportEngine {
 			}
 		}
 
+		// Path / Note / Scene name hints resolve against the whole vault, so they
+		// are the one route that can land a suggestion on a note outside the book
+		// (a content log, a brief, scratch). When a book scope is declared (Radial
+		// Timeline OR the configured manuscript folder), confine these hints to
+		// that folder; an out-of-book hit is rejected so the suggestion falls
+		// through to inference / the active-note fallback instead of writing a
+		// review block into an unrelated note. With no declared scope, behavior is
+		// unchanged (vault-wide).
 		const pathMatch = this.resolvePathHint(routing?.path);
-		if (pathMatch) {
+		if (pathMatch && this.isWithinDeclaredScope(pathMatch, declaredScopeFolder)) {
 			return {
 				file: pathMatch,
 				status: "resolved",
@@ -273,7 +291,7 @@ export class ImportEngine {
 		}
 
 		const noteMatch = this.resolveUniqueFileByName(routing?.note, markdownFiles);
-		if (noteMatch) {
+		if (noteMatch && this.isWithinDeclaredScope(noteMatch, declaredScopeFolder)) {
 			return {
 				file: noteMatch,
 				status: "resolved",
@@ -286,7 +304,7 @@ export class ImportEngine {
 		}
 
 		const sceneMatch = this.resolveUniqueFileByName(routing?.scene, markdownFiles);
-		if (sceneMatch) {
+		if (sceneMatch && this.isWithinDeclaredScope(sceneMatch, declaredScopeFolder)) {
 			return {
 				file: sceneMatch,
 				status: "resolved",
@@ -372,19 +390,49 @@ export class ImportEngine {
 		return `${primary} ${fallback}`;
 	}
 
-	private async getActiveBookScopeFiles(activeNotePath: string | undefined, markdownFiles: TFile[]): Promise<TFile[]> {
-		const scopeRoot = (await this.getRadialTimelineActiveBookSourceFolder()) ?? getActiveNoteScopeRoot(activeNotePath);
+	// The active book scope for this import: Radial Timeline's source folder wins
+	// (structured — guarantees Class: Scene notes); otherwise the configured
+	// manuscript folder (unstructured — folder membership only). `declaredFolder`
+	// is null when neither is set, leaving routing vault-wide as before.
+	private async resolveBookScope(): Promise<{ declaredFolder: string | null; structured: boolean }> {
+		const rtFolder = (await readRadialTimelineActiveBookScope(this.app)).sourceFolder;
+		if (rtFolder) {
+			return { declaredFolder: rtFolder, structured: true };
+		}
+		const configured = this.getConfiguredBookFolder().trim();
+		if (configured) {
+			return { declaredFolder: normalizePath(configured), structured: false };
+		}
+		return { declaredFolder: null, structured: false };
+	}
+
+	private getActiveBookScopeFiles(
+		activeNotePath: string | undefined,
+		markdownFiles: TFile[],
+		bookScope: { declaredFolder: string | null; structured: boolean },
+	): TFile[] {
+		const scopeRoot = bookScope.declaredFolder ?? getActiveNoteScopeRoot(activeNotePath);
 		if (!scopeRoot) {
 			return [];
 		}
 
+		// Scene-class is a hard filter for a structured (Radial Timeline) book and
+		// for the active-note fallback (preserving prior behavior). A configured
+		// manuscript folder is folder-only, so non-RT notes without Class: Scene
+		// still populate the scope used for inference and the active-note fallback.
+		const requireSceneClass = bookScope.declaredFolder ? bookScope.structured : true;
 		return markdownFiles.filter(
-			(file) => isPathInFolderScope(file.path, scopeRoot) && isSceneClassFile(this.app, file),
+			(file) =>
+				isPathInFolderScope(file.path, scopeRoot) &&
+				(!requireSceneClass || isSceneClassFile(this.app, file)),
 		);
 	}
 
-	private async getRadialTimelineActiveBookSourceFolder(): Promise<string | null> {
-		return (await readRadialTimelineActiveBookScope(this.app)).sourceFolder;
+	private isWithinDeclaredScope(file: TFile, declaredScopeFolder: string | null): boolean {
+		if (!declaredScopeFolder) {
+			return true;
+		}
+		return isPathInFolderScope(file.path, declaredScopeFolder);
 	}
 
 	private matchesSceneId(file: TFile, sceneId: string): boolean {

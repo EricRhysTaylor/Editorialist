@@ -144,7 +144,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 			},
 		});
 		const launcherIcon = launcherButton.createSpan({ cls: "editorialist-panel__settings-icon" });
-		setIcon(launcherIcon, "rocket");
+		setIcon(launcherIcon, "file-down");
 		this.bindImmediateAction(launcherButton, () => {
 			void this.plugin.openEditorialistModal();
 		});

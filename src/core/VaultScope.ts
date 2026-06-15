@@ -3,6 +3,26 @@ import { normalizePath, type App, type TFile } from "obsidian";
 export interface ActiveBookScopeInfo {
 	label: string | null;
 	sourceFolder: string | null;
+	// True only when the scope is supplied by Radial Timeline, which guarantees
+	// Class: Scene notes inside the book folder. A scope from the manuscript
+	// folder setting (non-RT authors) is unstructured: membership is folder-only
+	// and notes are not required to carry Class: Scene. Consumers use this to
+	// decide whether scene-class is a hard filter or just a hint.
+	structured: boolean;
+}
+
+// Scope derived from the configured manuscript/book folder. Used as the
+// fallback scope root when Radial Timeline is not supplying one. The label is
+// the folder's own basename so the UI has something to show; membership is
+// folder-only (structured: false).
+export function buildConfiguredBookScope(folderOverride: string): ActiveBookScopeInfo {
+	const trimmed = folderOverride.trim();
+	if (!trimmed) {
+		return { label: null, sourceFolder: null, structured: false };
+	}
+	const normalized = normalizePath(trimmed);
+	const basename = normalized.split("/").pop() || normalized;
+	return { label: basename, sourceFolder: normalized, structured: false };
 }
 
 export function getFrontmatterStringValues(
@@ -97,6 +117,7 @@ export async function readRadialTimelineActiveBookScope(app: App): Promise<Activ
 			return {
 				label: null,
 				sourceFolder: null,
+				structured: false,
 			};
 		}
 
@@ -112,14 +133,18 @@ export async function readRadialTimelineActiveBookScope(app: App): Promise<Activ
 		const label =
 			activeBook?.title?.trim() || activeBook?.name?.trim() || activeBook?.id?.trim() || null;
 
+		const normalizedSourceFolder = sourceFolder ? normalizePath(sourceFolder) : null;
 		return {
 			label,
-			sourceFolder: sourceFolder ? normalizePath(sourceFolder) : null,
+			sourceFolder: normalizedSourceFolder,
+			// Only a real RT book folder is a structured (scene-class) scope.
+			structured: normalizedSourceFolder !== null,
 		};
 	} catch {
 		return {
 			label: null,
 			sourceFolder: null,
+			structured: false,
 		};
 	}
 }

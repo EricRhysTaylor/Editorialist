@@ -114,6 +114,13 @@ export interface EditorialistSettings {
 	// resolution then falls back to the active book's source folder, or the
 	// scene's own folder. Stored verbatim; normalized at use time.
 	cutFolderOverride: string;
+	// Optional explicit manuscript/book folder. Empty string means "unset".
+	// When Radial Timeline is not driving the active-book scope, this folder
+	// becomes the scope root: the scene inventory and import routing are
+	// confined to notes inside it, so non-RT authors (who have no Class: Scene
+	// frontmatter) can still keep review tracking bounded to their manuscript.
+	// Ignored while Radial Timeline supplies a scope. Normalized at use time.
+	bookFolderOverride: string;
 }
 
 export interface EditorialistPluginData {

@@ -114,4 +114,39 @@ describe("formatRecentReviewSceneTitle", () => {
 			}),
 		).toBe("From Order");
 	});
+
+	it("names only in-scope scenes when a scope folder is given", () => {
+		expect(
+			formatRecentReviewSceneTitle(
+				{
+					...base,
+					sceneOrder: ["Books/One/37 Volcano.md", "Logs/Inquiry Content Log.md"],
+				},
+				"Books/One",
+			),
+		).toBe("37 Volcano");
+	});
+
+	it("names every path when no scope folder is given (back-compat)", () => {
+		expect(
+			formatRecentReviewSceneTitle({
+				...base,
+				sceneOrder: ["Books/One/37 Volcano.md", "Logs/Inquiry Content Log.md"],
+			}),
+		).toBe("37 Volcano, Inquiry Content Log");
+	});
+
+	it("falls back to unfiltered paths when the scope filter would empty the list", () => {
+		// A batch entirely outside the active book still shows its scenes rather
+		// than rendering blank.
+		expect(
+			formatRecentReviewSceneTitle(
+				{
+					...base,
+					sceneOrder: ["Books/Two/Chapter 1.md"],
+				},
+				"Books/One",
+			),
+		).toBe("Chapter 1");
+	});
 });

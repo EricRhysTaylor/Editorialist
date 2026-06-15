@@ -17,6 +17,7 @@
 import { setIcon } from "obsidian";
 import { renderContributorBrandMark, resolveContributorBrand } from "../../core/ContributorBrandMarks";
 import { formatReviewerTypeLabel } from "../../core/ContributorIdentity";
+import { isPathInFolderScope } from "../../core/VaultScope";
 import type EditorialistPlugin from "../../main";
 
 // Minimal callback surface ReviewPanel exposes to these renderers. Matches
@@ -551,12 +552,13 @@ export function renderRecentActivityBlock(
 		text: `${allEntries.length} total`,
 	});
 
+	const scopeFolder = plugin.getActiveBookScopeInfo().sourceFolder;
 	const list = section.createDiv({ cls: "editorialist-panel__history-list" });
 	for (const entry of entries) {
 		const row = list.createDiv({ cls: "editorialist-panel__history-row" });
 		const main = row.createDiv({ cls: "editorialist-panel__history-main" });
 
-		const sceneTitle = formatRecentReviewSceneTitle(entry);
+		const sceneTitle = formatRecentReviewSceneTitle(entry, scopeFolder);
 		main.createDiv({
 			cls: "editorialist-panel__history-title",
 			text: sceneTitle,
@@ -703,12 +705,25 @@ export function formatStatsTooltip(stats: {
 // Builds the row title from the scenes a batch touched. One scene shows its
 // basename. Two or three list them comma-separated. Four or more truncate
 // to the first two plus a "+N more" suffix.
-export function formatRecentReviewSceneTitle(entry: {
-	sceneOrder: readonly string[];
-	importedNotePaths: readonly string[];
-	activeBookLabel?: string;
-}): string {
-	const paths = entry.sceneOrder.length > 0 ? entry.sceneOrder : entry.importedNotePaths;
+export function formatRecentReviewSceneTitle(
+	entry: {
+		sceneOrder: readonly string[];
+		importedNotePaths: readonly string[];
+		activeBookLabel?: string;
+	},
+	// When set, only scenes inside this folder are named — so a batch that
+	// happened to touch a note outside the active book (e.g. a content log)
+	// shows just its in-scope scenes. A null scope (no Radial Timeline book and
+	// no configured manuscript folder) names every path, preserving prior
+	// behavior. If filtering would empty the list, the unfiltered paths are
+	// used so a fully out-of-scope batch never renders as a blank title.
+	scopeFolder: string | null = null,
+): string {
+	const allPaths = entry.sceneOrder.length > 0 ? entry.sceneOrder : entry.importedNotePaths;
+	const scopedPaths = scopeFolder
+		? allPaths.filter((path) => isPathInFolderScope(path, scopeFolder))
+		: allPaths;
+	const paths = scopedPaths.length > 0 ? scopedPaths : allPaths;
 	const titles = paths
 		.map((path) => path.split("/").pop()?.replace(/\.md$/i, "")?.trim())
 		.filter((title): title is string => Boolean(title));

@@ -354,7 +354,12 @@ export default class EditorialistPlugin extends Plugin {
 		await this.loadPluginData();
 		await this.persistContributorProfilesIfNeeded();
 		await this.registry.refreshActiveBookScope();
-		this.importEngine = new ImportEngine(this.app, this.parser, this.matchEngine);
+		this.importEngine = new ImportEngine(
+			this.app,
+			this.parser,
+			this.matchEngine,
+			() => this.registry.getBookFolderOverride(),
+		);
 		this.pendingEdits.initialize();
 		this.registerEditorExtension(createReviewDecorationsExtension());
 		// Register the brand icon before any view can render so a restored review
@@ -800,6 +805,20 @@ export default class EditorialistPlugin extends Plugin {
 		await this.savePluginData();
 	}
 
+	getBookFolderOverride(): string {
+		return this.registry.getBookFolderOverride();
+	}
+
+	// Persist the new manuscript-folder override, then re-resolve the active-book
+	// scope and rebuild the inventory so the change to what counts as "in the
+	// book" takes effect immediately (registry, panel, and import routing).
+	async setBookFolderOverride(value: string): Promise<void> {
+		this.registry.setBookFolderOverride(value);
+		await this.savePluginData();
+		await this.registry.syncOperationalMetadata();
+		this.refreshReviewPanel();
+	}
+
 	// "Backup to cut file" — a preservation-only utility. It copies the current
 	// editor selection (or a cut/condense suggestion's resolved target) into the
 	// scene's cut file. It deliberately does NOT change any suggestion status,
@@ -1196,7 +1215,7 @@ export default class EditorialistPlugin extends Plugin {
 		return this.registry.getTrackingIdentitySummary(options);
 	}
 
-	getActiveBookScopeInfo(): { label: string | null; sourceFolder: string | null } {
+	getActiveBookScopeInfo(): { label: string | null; sourceFolder: string | null; structured: boolean } {
 		return this.registry.getActiveBookScopeInfo();
 	}
 

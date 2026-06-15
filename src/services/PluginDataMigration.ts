@@ -45,12 +45,13 @@ const defaultLogger: MigrationLogger = {
 export function defaultEditorialistSettings(): EditorialistSettings {
 	return {
 		cutFolderOverride: "",
+		bookFolderOverride: "",
 	};
 }
 
-// Tolerant settings normalizer: a non-string or garbage cutFolderOverride
-// collapses to the empty-string "unset" default so a malformed data.json never
-// throws downstream.
+// Tolerant settings normalizer: a non-string or garbage field collapses to the
+// empty-string "unset" default so a malformed data.json never throws
+// downstream.
 export function normalizeEditorialistSettings(raw: unknown): EditorialistSettings {
 	const defaults = defaultEditorialistSettings();
 	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
@@ -60,9 +61,12 @@ export function normalizeEditorialistSettings(raw: unknown): EditorialistSetting
 	const candidate = raw as Record<string, unknown>;
 	const cutFolderOverride =
 		typeof candidate.cutFolderOverride === "string" ? candidate.cutFolderOverride : defaults.cutFolderOverride;
+	const bookFolderOverride =
+		typeof candidate.bookFolderOverride === "string" ? candidate.bookFolderOverride : defaults.bookFolderOverride;
 
 	return {
 		cutFolderOverride,
+		bookFolderOverride,
 	};
 }
 
