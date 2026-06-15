@@ -14,6 +14,7 @@ import type { ReviewSweepRegistryEntry } from "../models/ReviewImport";
 import type { SceneReviewRecord } from "../models/ContributorProfile";
 import type EditorialistPlugin from "../main";
 import { openEditorialistChoiceModal } from "./EditorialistChoiceModal";
+import { RADIAL_TIMELINE_ICON_ID } from "./RadialTimelineLogoIcon";
 
 export class EditorialistSettingTab extends PluginSettingTab {
 	private static readonly SETTINGS_DOCS_URL = "https://github.com/EricRhysTaylor/Editorialist#readme";
@@ -416,14 +417,14 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			cls: "editorialist-settings__rt-card editorialist-settings__panel",
 		});
 		const backgroundIcon = card.createDiv({ cls: "editorialist-settings__rt-card-bg-icon" });
-		setIcon(backgroundIcon, "shell");
+		setIcon(backgroundIcon, RADIAL_TIMELINE_ICON_ID);
 
 		const row = card.createDiv({ cls: "editorialist-settings__rt-card-row" });
 		const content = row.createDiv({ cls: "editorialist-settings__rt-card-content" });
 		const badgeRow = content.createDiv({ cls: "editorialist-settings__hero-intro-badge-row" });
 		const badge = badgeRow.createSpan({ cls: "editorialist-settings__hero-intro-badge editorialist-settings__rt-card-badge" });
 		const badgeIcon = badge.createSpan({ cls: "editorialist-settings__hero-intro-badge-icon" });
-		setIcon(badgeIcon, "shell");
+		setIcon(badgeIcon, RADIAL_TIMELINE_ICON_ID);
 		badge.createSpan({
 			cls: "editorialist-settings__hero-intro-badge-text",
 			text: "Radial Timeline integration",
@@ -518,7 +519,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				cls: "editorialist-settings__tracking-badge editorialist-settings__tracking-badge--rt",
 			});
 			const badgeIcon = badge.createSpan({ cls: "editorialist-settings__tracking-badge-icon" });
-			setIcon(badgeIcon, "shell");
+			setIcon(badgeIcon, RADIAL_TIMELINE_ICON_ID);
 			badge.createSpan({
 				cls: "editorialist-settings__tracking-badge-label",
 				text: "Radial Timeline",
