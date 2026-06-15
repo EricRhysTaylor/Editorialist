@@ -341,9 +341,28 @@ export function createReviewToolbarElement(
 			},
 			!state.canComplete,
 		);
-		buildButton(actions, tracker, "Backup to cut file", "archive", () => {
-			void plugin.backupSelectionToCutFile();
-		}, false);
+		buildButton(
+			actions,
+			tracker,
+			"Backup to cut file",
+			"archive",
+			() => {
+				void plugin.backupSelectionToCutFile();
+			},
+			false,
+			false,
+			[
+				{
+					kind: "advance",
+					label: "Open cut file for this scene",
+					icon: "folder-open",
+					onClick: () => {
+						void plugin.openCutFileForActiveScene();
+					},
+					when: ({ modPressed, shiftPressed }) => shiftPressed && !modPressed,
+				},
+			],
+		);
 		return overlay;
 	}
 
@@ -524,6 +543,7 @@ function renderToolbarLegend(parent: HTMLElement, applyOperationLabel: string): 
 		{ icon: "clock", keys: "Click", label: "Defer" },
 		{ icon: "pen-line", keys: "Click", label: "Rewrite myself" },
 		{ icon: "archive", keys: "Click", label: "Backup to cut file" },
+		{ icon: "folder-open", keys: "Shift", label: "Open cut file for this scene" },
 		{ icon: "circle-off", keys: "Click", label: "Reject" },
 		{ icon: "x", keys: "Click", label: "Hide toolbar" },
 	];
@@ -554,6 +574,7 @@ function bindLegendReveal(toolbar: HTMLElement, legend: HTMLElement): void {
 			closeTimer = null;
 		}
 		toolbar.classList.add("editorialist-toolbar--legend-open");
+		trigger?.setAttribute("aria-expanded", "true");
 	};
 	const scheduleClose = () => {
 		if (closeTimer !== null) {
@@ -562,6 +583,7 @@ function bindLegendReveal(toolbar: HTMLElement, legend: HTMLElement): void {
 		closeTimer = window.setTimeout(() => {
 			closeTimer = null;
 			toolbar.classList.remove("editorialist-toolbar--legend-open");
+			trigger?.setAttribute("aria-expanded", "false");
 		}, 120);
 	};
 	for (const el of [trigger, legend]) {
@@ -578,9 +600,14 @@ function bindLegendReveal(toolbar: HTMLElement, legend: HTMLElement): void {
 // unstyled, focusable icon — no button chrome.
 function buildLegendTrigger(parent: HTMLElement): void {
 	const trigger = parent.createSpan({ cls: "editorialist-toolbar__legend-trigger" });
+	// No aria-label: Obsidian renders a hover tooltip from aria-label, and the
+	// legend it reveals already names every shortcut, so a tooltip is redundant
+	// (and ghosts over the editor when the toolbar re-renders). aria-expanded +
+	// aria-controls keep it accessible without producing a tooltip; focus still
+	// reveals the legend via bindLegendReveal.
 	trigger.setAttribute("tabindex", "0");
-	trigger.setAttribute("role", "img");
-	trigger.setAttribute("aria-label", "Shortcut legend (hover or focus to show)");
+	trigger.setAttribute("role", "button");
+	trigger.setAttribute("aria-expanded", "false");
 	markAsNonEditorSurface(trigger);
 	setIcon(trigger, "asterisk");
 }

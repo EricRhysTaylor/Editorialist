@@ -810,6 +810,44 @@ export default class EditorialistPlugin extends Plugin {
 		}
 	}
 
+	// Opens the active scene's cut file for browsing/editing — the "scratch pad"
+	// companion to backupSelectionToCutFile (Click backs up, Shift opens). Resolves
+	// the scene the same way the backup path does so the two never disagree about
+	// which scene's cut file is in play.
+	async openCutFileForActiveScene(): Promise<void> {
+		const sceneFile = this.resolveActiveSceneFileForCut();
+		if (!sceneFile) {
+			new Notice("Open a scene note to view its cut file.");
+			return;
+		}
+
+		const cutFilePath = this.cutArchive.resolveCutFilePathForScene(sceneFile);
+		const cutFile = this.app.vault.getAbstractFileByPath(cutFilePath);
+		if (!(cutFile instanceof TFile)) {
+			new Notice("No cut file for this scene yet. Back up a selection to create one.");
+			return;
+		}
+
+		await this.app.workspace.openLinkText(cutFilePath, "", false);
+	}
+
+	private resolveActiveSceneFileForCut(): TFile | null {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (view?.file) {
+			return view.file;
+		}
+
+		const session = this.getReviewSession();
+		if (session) {
+			const file = this.app.vault.getAbstractFileByPath(session.notePath);
+			if (file instanceof TFile) {
+				return file;
+			}
+		}
+
+		return null;
+	}
+
 	// Resolves BOTH the text and the scene file it belongs to, so the two never
 	// drift apart: a manual selection archives into the file the selection lives
 	// in; a suggestion-target fallback archives into the suggestion's own scene
