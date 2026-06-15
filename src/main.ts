@@ -1,5 +1,5 @@
 import type { EditorView } from "@codemirror/view";
-import { MarkdownView, normalizePath, Notice, Plugin, TFile, type App } from "obsidian";
+import { MarkdownView, normalizePath, Notice, Plugin, TFile, type App, type WorkspaceLeaf } from "obsidian";
 import type {
 	PendingEditSegment,
 	PendingEditsSession,
@@ -187,6 +187,10 @@ export default class EditorialistPlugin extends Plugin {
 		getCutFolderOverride: () => this.registry.getCutFolderOverride(),
 		getActiveBookScope: () => this.registry.getActiveBookScopeInfo(),
 	});
+	// The lower "cut file" pane (a plain markdown leaf split below the review
+	// panel). Validated against the live layout before reuse so a closed pane is
+	// dropped rather than reopened on a detached leaf.
+	private cutViewLeaf: WorkspaceLeaf | null = null;
 	private readonly editorialismService = new EditorialismService(this.app);
 	private readonly workflow = new ReviewWorkflowService(this.store, this.registry, {
 		clearReviewSelection: async () => {
@@ -828,7 +832,45 @@ export default class EditorialistPlugin extends Plugin {
 			return;
 		}
 
-		await this.app.workspace.openLinkText(cutFilePath, "", false);
+		const leaf = this.resolveCutViewLeaf();
+		if (!leaf) {
+			new Notice("Could not open the cut file panel.");
+			return;
+		}
+
+		this.cutViewLeaf = leaf;
+		await leaf.openFile(cutFile, { active: true }); // SAFE: openLinkText cannot target a specific pre-created leaf; the cut file must open in the lower split we resolved.
+		await this.app.workspace.revealLeaf(leaf);
+	}
+
+	// Returns the lower cut pane: the existing one if it is still open, otherwise
+	// a fresh markdown leaf split directly below the review panel. Falls back to a
+	// new right-sidebar leaf when the review panel itself is closed, so the action
+	// still works outside a review.
+	private resolveCutViewLeaf(): WorkspaceLeaf | null {
+		if (this.cutViewLeaf && this.isLeafInLayout(this.cutViewLeaf)) {
+			return this.cutViewLeaf;
+		}
+		this.cutViewLeaf = null;
+
+		const reviewLeaf = this.app.workspace.getLeavesOfType(REVIEW_PANEL_VIEW_TYPE)[0];
+		if (reviewLeaf) {
+			// "horizontal" = horizontal divider = a pane stacked below the review
+			// panel; before=false places the new pane after (beneath) it.
+			return this.app.workspace.createLeafBySplit(reviewLeaf, "horizontal", false);
+		}
+
+		return this.app.workspace.getRightLeaf(true);
+	}
+
+	private isLeafInLayout(target: WorkspaceLeaf): boolean {
+		let found = false;
+		this.app.workspace.iterateAllLeaves((leaf) => {
+			if (leaf === target) {
+				found = true;
+			}
+		});
+		return found;
 	}
 
 	private resolveActiveSceneFileForCut(): TFile | null {
