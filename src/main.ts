@@ -875,7 +875,7 @@ export default class EditorialistPlugin extends Plugin {
 
 	private resolveActiveSceneFileForCut(): TFile | null {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-		if (view?.file) {
+		if (view?.file && view.leaf !== this.cutViewLeaf) {
 			return view.file;
 		}
 
@@ -887,6 +887,33 @@ export default class EditorialistPlugin extends Plugin {
 			}
 		}
 
+		return null;
+	}
+
+	// The scene's editor view, never the cut panel. The cut file is itself a
+	// markdown view, so getActiveViewOfType can return it once it is open or
+	// focused; in that case we look past it to the scene being reviewed (matched
+	// by the review session's note path), reading the selection from that editor
+	// even though it is not the active one.
+	private getSceneEditorView(): MarkdownView | null {
+		const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (active?.file && active.leaf !== this.cutViewLeaf) {
+			return active;
+		}
+
+		const session = this.getReviewSession();
+		if (!session) {
+			return null;
+		}
+		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+			if (leaf === this.cutViewLeaf) {
+				continue;
+			}
+			const view = leaf.view;
+			if (view instanceof MarkdownView && view.file?.path === session.notePath) {
+				return view;
+			}
+		}
 		return null;
 	}
 
@@ -905,8 +932,10 @@ export default class EditorialistPlugin extends Plugin {
 	} | null {
 		// 1. Live editor selection wins. Read it at action time (not from cached
 		//    toolbar state) so a toolbar click that doesn't steal focus still sees
-		//    the user's current selection, and archive into that file.
-		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		//    the user's current selection, and archive into that file. Use the
+		//    scene editor, never the cut panel — the cut file is itself a markdown
+		//    view, so once it is open/focused it would otherwise hijack this read.
+		const view = this.getSceneEditorView();
 		const selection = view?.editor.getSelection();
 		if (view?.file && selection && selection.trim()) {
 			return { sceneFile: view.file, text: selection, source: "selection" };

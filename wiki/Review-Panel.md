@@ -27,7 +27,7 @@ Starting a workflow card (or importing a review batch) begins a **guided review 
 
 ### The suggestion toolbar
 
-<!-- Screenshot still needed: the inline suggestion toolbar in the editor (images/toolbar.png) -->
+<p align="center"><img src="images/toolbar.png" alt="Inline suggestion toolbar over highlighted manuscript text, with the matching review card selected in the side panel" width="720"></p>
 
 Each highlighted suggestion gets an inline toolbar in the editor:
 
@@ -41,6 +41,12 @@ Each highlighted suggestion gets an inline toolbar in the editor:
 | **Backup to cut file** | Click | Archive the target text to the [cut file](Settings-Reference.md#configuration-tab) before deciding |
 | **Reject** | Click | Decline the suggestion |
 | **Hide toolbar** | Click | Dismiss the overlay without deciding |
+
+### Cut-file preview
+
+<p align="center"><img src="images/panel-side-cut.png" alt="Cut file opened in the side pane after backing up selected manuscript text" width="720"></p>
+
+When you use **Backup to cut file**, Editorialist writes the selected passage to the scene's cut file before you decide what to do with the suggestion. The cut file keeps the archived text with source metadata, while the review suggestion stays active until you accept, reject, rewrite, or defer it.
 
 ### Suggestion statuses
 
