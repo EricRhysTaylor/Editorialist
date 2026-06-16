@@ -169,7 +169,7 @@ export class EditorialismPanel extends ItemView {
 		const path = book ? `${folder}/${book}/` : `${folder}/<book>/`;
 		empty.createDiv({
 			cls: "editorialist-editorialism-panel__empty-copy",
-			text: `Create a markdown file under ${path} with frontmatter type: editorialism to start an agenda.`,
+			text: `Paste an AI reply containing an editorialism file into the review launcher and Editorialist saves it here automatically. You can also create a markdown file under ${path} by hand with frontmatter type: editorialism.`,
 		});
 	}
 

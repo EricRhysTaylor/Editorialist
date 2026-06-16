@@ -52,6 +52,7 @@ import { DebouncedSaver } from "./state/DebouncedSaver";
 import { TrailingDebouncer } from "./state/TrailingDebouncer";
 import { ContributorDirectory } from "./state/ContributorDirectory";
 import { EditorialismService } from "./services/EditorialismService";
+import { extractEditorialismFileFromText } from "./core/EditorialismImport";
 import { migratePluginData } from "./services/PluginDataMigration";
 import { ReviewRegistryService } from "./services/ReviewRegistryService";
 import { ReviewWorkflowService } from "./services/ReviewWorkflowService";
@@ -487,6 +488,8 @@ export default class EditorialistPlugin extends Plugin {
 			onCopyTemplate: async () => {
 				await this.copyReviewTemplateToClipboard(selectedText);
 			},
+			detectEditorialism: (rawText) => this.detectEditorialismInText(rawText),
+			onSaveEditorialism: async (rawText) => this.saveEditorialismFromText(rawText),
 			onImportBatch: async (batch, startReview) => {
 				await this.batchProcessor.importReviewBatch(batch, startReview);
 			},
@@ -555,6 +558,33 @@ export default class EditorialistPlugin extends Plugin {
 
 	getEditorialismFolder(): string {
 		return this.editorialismService.getRootFolderName();
+	}
+
+	// True when pasted launcher text carries a Format B editorialism file, so the
+	// modal can offer the "Save editorialism file" action.
+	detectEditorialismInText(rawText: string): boolean {
+		return extractEditorialismFileFromText(rawText) !== null;
+	}
+
+	// Extract the Format B editorialism file from pasted text, write it to
+	// Editorialist/<Book>/<Title>.md, open the Editorialisms panel, and reveal
+	// the new file. Returns true when a file was saved.
+	async saveEditorialismFromText(rawText: string): Promise<boolean> {
+		const extracted = extractEditorialismFileFromText(rawText);
+		if (!extracted) {
+			new Notice("No editorialism file found in the pasted text.");
+			return false;
+		}
+		const result = await this.editorialismService.saveEditorialismFile(extracted);
+		new Notice(
+			`${result.created ? "Saved" : "Updated"} editorialism “${extracted.title}” at ${result.filePath}.`,
+		);
+		await this.openEditorialismPanel();
+		const file = this.app.vault.getAbstractFileByPath(result.filePath);
+		if (file instanceof TFile) {
+			this.refreshReviewPanel();
+		}
+		return true;
 	}
 
 	async listEditorialismsForActiveBook(bookLabel: string | null): Promise<

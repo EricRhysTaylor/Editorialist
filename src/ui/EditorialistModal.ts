@@ -22,6 +22,10 @@ export interface EditorialistModalOptions {
 	nextNoteLabel?: string;
 	noteUnitLabel?: "note" | "scene";
 	onCopyTemplate: () => Promise<void>;
+	// True when the given text carries a Format B editorialism file.
+	detectEditorialism: (rawText: string) => boolean;
+	// Save the editorialism file embedded in the text; resolves true on success.
+	onSaveEditorialism: (rawText: string) => Promise<boolean>;
 	onImportBatch: (batch: ReviewImportBatch, startReview: boolean) => Promise<void>;
 	onImportRawToActiveNote: (rawText: string, startReview: boolean) => Promise<void>;
 	onInspectBatch: (
@@ -262,41 +266,72 @@ export class EditorialistModal extends Modal {
 			|| this.manualValidationState === "error";
 		const importLabel = this.getImportButtonLabel();
 
-		buildModalFooter(section, {
-			className: "editorialist-control-modal__actions",
-			buttons: [
-				this.makeActionButtonSpec({
-					text: importLabel,
-					cta: true,
-					disabled: importDisabled,
-					icon: this.manualValidationState === "error" ? "alert-triangle" : "download",
-					onClick: async () => {
-						const batch = await this.ensureManualBatch();
-						if (!batch) {
-							return;
-						}
+		// Format B detection runs independently of the review-batch (Format A)
+		// validation: a paste may carry an editorialism file, a review block, or
+		// both, and each gets its own action.
+		const hasEditorialism = hasText && this.options.detectEditorialism(this.manualText);
+		if (hasEditorialism) {
+			const banner = section.createDiv({ cls: "editorialist-control-modal__editorialism-note" });
+			const bannerIcon = banner.createSpan({ cls: "editorialist-control-modal__editorialism-note-icon" });
+			setIcon(bannerIcon, "list-checks");
+			banner.createSpan({
+				text: "Editorialism file detected — save it to your Editorialist folder and open the Editorialisms panel.",
+			});
+		}
 
-						await this.options.onImportBatch(batch, true);
-						this.close();
-					},
-				}),
+		const buttons = [
+			this.makeActionButtonSpec({
+				text: importLabel,
+				cta: true,
+				disabled: importDisabled,
+				icon: this.manualValidationState === "error" ? "alert-triangle" : "download",
+				onClick: async () => {
+					const batch = await this.ensureManualBatch();
+					if (!batch) {
+						return;
+					}
+
+					await this.options.onImportBatch(batch, true);
+					this.close();
+				},
+			}),
+			this.makeActionButtonSpec({
+				text: "Preview destinations",
+				disabled: !hasText || this.manualValidationState === "pending",
+				icon: "navigation",
+				subtle: true,
+				onClick: async () => {
+					const batch = await this.ensureManualBatch();
+					if (!batch) {
+						return;
+					}
+
+					this.manualBatch = batch;
+					this.showAssignments = true;
+					this.render();
+				},
+			}),
+		];
+
+		if (hasEditorialism) {
+			buttons.push(
 				this.makeActionButtonSpec({
-					text: "Preview destinations",
-					disabled: !hasText || this.manualValidationState === "pending",
-					icon: "navigation",
+					text: "Save editorialism file",
+					icon: "list-checks",
 					subtle: true,
 					onClick: async () => {
-						const batch = await this.ensureManualBatch();
-						if (!batch) {
-							return;
+						const saved = await this.options.onSaveEditorialism(this.manualText);
+						if (saved) {
+							this.close();
 						}
-
-						this.manualBatch = batch;
-						this.showAssignments = true;
-						this.render();
 					},
 				}),
-			],
+			);
+		}
+
+		buildModalFooter(section, {
+			className: "editorialist-control-modal__actions",
+			buttons,
 		});
 	}
 

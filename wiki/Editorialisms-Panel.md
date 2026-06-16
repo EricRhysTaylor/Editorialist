@@ -25,6 +25,10 @@ created: 2026-06-10
 
 Files without `type: editorialism` are ignored. The full file format — section headings, task items, `[scope:: …]` and `[tags:: …]` metadata — is documented in [Importing Reviews § Format B](Importing-Reviews.md#format-b--the-editorialism-file). Reviewers (human or AI) can produce these files directly; the launcher's template includes the format.
 
+**Getting a file into the panel.** The fastest path is the [review launcher](Importing-Reviews.md): paste an AI reply that contains an editorialism file (a ```` ```editorialism ```` fenced block, or just the `type: editorialism` frontmatter) and click **Save editorialism file**. Editorialist writes it to `Editorialist/<Book>/<Title>.md`, creating the folder, and opens this panel. Re-saving the same `title:` overwrites in place. Creating the file by hand works too.
+
+> Only files whose `book:` matches the active book label appear while that book is active. If a saved file doesn't show up, check that its `book:` value matches exactly.
+
 ## The panel
 
 - **Header** — the active book label and sync status.

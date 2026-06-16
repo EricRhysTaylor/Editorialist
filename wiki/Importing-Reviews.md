@@ -134,7 +134,7 @@ created: 2026-06-10
 - [ ] Arc-level work [scope:: arc:Shail IT subplot]
 ```
 
-Save it under `Editorialist/<Book>/<Title>.md` and the [Editorialisms Panel](Editorialisms-Panel.md) picks it up.
+Paste the reply into the review launcher: when it contains an editorialism file, the launcher shows a **Save editorialism file** action that writes it to `Editorialist/<Book>/<Title>.md` (creating the folder), then opens the [Editorialisms Panel](Editorialisms-Panel.md). Re-saving the same `title:` overwrites the prior version in place. You can still create the file by hand if you prefer — the panel picks up any `type: editorialism` file under `Editorialist/`.
 
 **Required:**
 - Frontmatter `type: editorialism` — files without this are ignored.
