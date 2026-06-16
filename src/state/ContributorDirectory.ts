@@ -48,6 +48,12 @@ export class ContributorDirectory {
 				return left.isStarred ? -1 : 1;
 			}
 
+			const leftContributions = left.stats?.totalSuggestions ?? 0;
+			const rightContributions = right.stats?.totalSuggestions ?? 0;
+			if (leftContributions !== rightContributions) {
+				return rightContributions - leftContributions;
+			}
+
 			return left.displayName.localeCompare(right.displayName);
 		});
 	}
