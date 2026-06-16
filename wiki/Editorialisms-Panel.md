@@ -31,7 +31,7 @@ Files without `type: editorialism` are ignored. The full file format — section
 
 ## The panel
 
-- **Header** — the active book label and sync status.
+- **Header** — the active book label (or "No active book selected").
 - **Document list** — every Editorialism for the active book, each showing its completion (done items / total items).
 - **Detail view** — select a document to see its items grouped by section.
 

@@ -232,12 +232,15 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 			text: headerDetails.summary,
 		});
 
+		// Pending edits lead during a batch: they're a book-level backlog that can
+		// sit for days/weeks and are independent of the scene in front of you.
+		// Keeping the always-present row at the top stops it from splitting the
+		// active batch (its Comments and its suggestion/handoff cards) down the
+		// middle, and keeps the workflow reachable even on a scene with no pending
+		// items of its own.
+		this.renderPendingEditsBatchRow(session.notePath);
 		const memos = session.memos ?? [];
 		this.renderCommentsCard(memos);
-		// Pending edits get their own always-present row during a batch (not
-		// folded into the memo card), so the workflow stays reachable even on a
-		// scene that has no pending items of its own.
-		this.renderPendingEditsBatchRow(session.notePath);
 
 		if (session.suggestions.length === 0) {
 			if (memos.length === 0) {

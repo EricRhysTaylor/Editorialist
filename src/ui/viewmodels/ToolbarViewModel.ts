@@ -33,7 +33,9 @@ function buildReviewState(hasReviewBlock: boolean, review: ReviewBranchInputs): 
 		rewrittenCount: countStatus(effectiveStatuses, "rewritten"),
 		sceneProgressLabel: review.sceneProgressLabel,
 		selectedIndexLabel:
-			selectedIndex === -1 ? `${suggestionsLength} total` : `${selectedIndex + 1} of ${suggestionsLength}`,
+			selectedIndex === -1
+				? `${suggestionsLength} ${suggestionsLength === 1 ? "entry" : "entries"}`
+				: `Entry ${selectedIndex + 1}/${suggestionsLength}`,
 		unresolvedCount: unresolvedPositions.length,
 		unresolvedDetails:
 			unresolvedPositions.length > 0 ? `Unresolved items: ${unresolvedPositions.join(", ")}` : undefined,

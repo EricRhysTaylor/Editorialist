@@ -2131,7 +2131,7 @@ export default class EditorialistPlugin extends Plugin {
 			const unitLabel = this.getSweepUnitLabel(guidedSweep?.notePaths.length ?? 0, session.notePath);
 			const sceneProgressLabel =
 				guidedSweep && guidedSweep.notePaths.length > 1
-					? `${this.toTitleCase(unitLabel.slice(0, -1))} ${guidedSweep.currentNoteIndex + 1} of ${guidedSweep.notePaths.length}`
+					? `${this.toTitleCase(unitLabel.slice(0, -1))} ${guidedSweep.currentNoteIndex + 1}/${guidedSweep.notePaths.length}`
 					: undefined;
 			review = {
 				hasReviewBlock,
