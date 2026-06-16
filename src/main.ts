@@ -16,7 +16,7 @@ import {
 	getSuggestionPrimaryTarget,
 	isSuggestionOpen as isSuggestionOpenShared,
 } from "./core/OperationSupport";
-import { isSweepComplete as isSweepCompleteShared } from "./core/review/SweepCompletion";
+import { isBatchReadyToClean, isSweepComplete as isSweepCompleteShared } from "./core/review/SweepCompletion";
 import {
 	canRevealSuggestionInManuscript as canRevealSuggestionInManuscriptShared,
 	getAdjacentRevealableSuggestionId as getAdjacentRevealableSuggestionIdShared,
@@ -1216,6 +1216,43 @@ export default class EditorialistPlugin extends Plugin {
 
 	getSweepRegistryEntries(): ReviewSweepRegistryEntry[] {
 		return this.registry.getSweepRegistryEntries();
+	}
+
+	// Sweep batches in the active book that are fully decided and still carry a
+	// review block — i.e. cleanable right now. Powers the panel header's Clean
+	// action so the user never has to hunt for per-card clean links.
+	getCleanableBatchIds(): string[] {
+		const scopeFolder = this.registry.getActiveBookScopeInfo().sourceFolder;
+		const inActiveBook = (entry: ReviewSweepRegistryEntry): boolean => {
+			if (!scopeFolder) {
+				return true;
+			}
+			const paths = entry.sceneOrder.length > 0 ? entry.sceneOrder : entry.importedNotePaths;
+			return paths.length === 0 || paths.some((path) => isPathInFolderScope(path, scopeFolder));
+		};
+		return this.registry
+			.getSweepRegistryEntries()
+			.filter((entry) => inActiveBook(entry) && isBatchReadyToClean(entry, this.getBatchDecisionStats(entry.batchId)))
+			.map((entry) => entry.batchId);
+	}
+
+	// Remove the review blocks of every cleanable batch in one pass — one sync,
+	// one summary notice, one panel refresh. Returns the batch count cleaned.
+	async cleanReadyBatches(): Promise<number> {
+		const batchIds = this.getCleanableBatchIds();
+		if (batchIds.length === 0) {
+			new Notice("No resolved batches are ready to clean.");
+			return 0;
+		}
+		let blocksRemoved = 0;
+		for (const batchId of batchIds) {
+			blocksRemoved += await this.batchProcessor.cleanupReviewBatchById(batchId, { notify: false });
+		}
+		this.refreshReviewPanel();
+		new Notice(
+			`Cleaned ${batchIds.length} batch${batchIds.length === 1 ? "" : "es"} (${blocksRemoved} review block${blocksRemoved === 1 ? "" : "s"}) from their scenes.`,
+		);
+		return batchIds.length;
 	}
 
 	// Aggregates per-suggestion decisions across scenes that participated in a

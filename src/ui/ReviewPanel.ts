@@ -134,6 +134,30 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		setIcon(titleIcon, EDITORIALIST_ICON_ID);
 		titleRow.createEl("h2", { text: "Editorialist review" });
 
+		// Clean-batches header action: a single persistent control so cleanup is
+		// always reachable without hunting for per-card links. Accent + enabled
+		// when fully-resolved batches exist; muted + disabled (with an explanatory
+		// label) when there is nothing to clean.
+		const cleanableBatchIds = this.plugin.getCleanableBatchIds();
+		const cleanableCount = cleanableBatchIds.length;
+		const cleanButton = titleRow.createEl("button", {
+			cls: `editorialist-panel__settings-button editorialist-panel__clean-button${cleanableCount > 0 ? " is-active" : ""}`,
+			attr: {
+				"aria-label": cleanableCount > 0
+					? `Clean ${cleanableCount} resolved batch${cleanableCount === 1 ? "" : "es"} from their scenes`
+					: "No resolved batches to clean",
+				type: "button",
+				...(cleanableCount === 0 ? { disabled: "true" } : {}),
+			},
+		});
+		const cleanIcon = cleanButton.createSpan({ cls: "editorialist-panel__settings-icon" });
+		setIcon(cleanIcon, "eraser");
+		if (cleanableCount > 0) {
+			this.bindImmediateAction(cleanButton, () => {
+				void this.plugin.cleanReadyBatches();
+			});
+		}
+
 		const launcherButton = titleRow.createEl("button", {
 			cls: "editorialist-panel__settings-button editorialist-panel__launcher-button",
 			attr: {

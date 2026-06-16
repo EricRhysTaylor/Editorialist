@@ -645,6 +645,30 @@
 	outline: none;
 }
 
+.editorialist-panel__clean-button {
+	/* Same flex reset as the launcher button: only the trailing settings button
+	   keeps margin-left:auto, so the right-side controls stay grouped. */
+	margin-left: 0;
+	color: var(--text-faint);
+}
+
+.editorialist-panel__clean-button:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+.editorialist-panel__clean-button.is-active {
+	color: var(--color-green);
+	border-color: color-mix(in srgb, var(--color-green) 45%, var(--background-modifier-border));
+}
+
+.editorialist-panel__clean-button.is-active:hover,
+.editorialist-panel__clean-button.is-active:focus-visible {
+	border-color: var(--color-green);
+	background: color-mix(in srgb, var(--color-green) 12%, transparent);
+	outline: none;
+}
+
 .editorialist-panel__empty {
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);

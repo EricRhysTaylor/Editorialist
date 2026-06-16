@@ -18,7 +18,11 @@ import { setIcon } from "obsidian";
 import { renderContributorBrandMark, resolveContributorBrand } from "../../core/ContributorBrandMarks";
 import { formatReviewerTypeLabel } from "../../core/ContributorIdentity";
 import { isPathInFolderScope } from "../../core/VaultScope";
+import { isBatchReadyToClean } from "../../core/review/SweepCompletion";
 import type EditorialistPlugin from "../../main";
+
+// Re-exported for callers that historically imported it from this module.
+export { isBatchReadyToClean };
 
 // Minimal callback surface ReviewPanel exposes to these renderers. Matches
 // what was previously reached via `this.*` inside the moved methods.
@@ -721,30 +725,6 @@ export function formatStatsTooltip(stats: {
 // Builds the row title from the scenes a batch touched. One scene shows its
 // basename. Two or three list them comma-separated. Four or more truncate
 // to the first two plus a "+N more" suffix.
-// Whether a Recent Reviews batch can be cleaned from its scene right now.
-//
-// Deliberately NOT keyed on entry.status: that is "completed" only when every
-// scene the batch touched is clear across ALL batches on those scenes, so a
-// second batch on a shared scene pins the first at "in_progress" indefinitely.
-// Instead we compare the batch's own terminal decisions to its suggestion
-// count — a batch whose every suggestion is accepted/rejected/rewritten (and
-// none deferred) is finished and cleanable regardless of unrelated batches.
-// `cleaned` entries have already had their block removed, so there is nothing
-// left to clean.
-export function isBatchReadyToClean(
-	entry: { status: string; totalSuggestions: number },
-	stats: { accepted: number; rejected: number; rewritten: number; deferred: number },
-): boolean {
-	if (entry.status === "cleaned") {
-		return false;
-	}
-	if (entry.totalSuggestions <= 0 || stats.deferred > 0) {
-		return false;
-	}
-	const decidedCount = stats.accepted + stats.rejected + stats.rewritten;
-	return decidedCount >= entry.totalSuggestions;
-}
-
 export function formatRecentReviewSceneTitle(
 	entry: {
 		sceneOrder: readonly string[];

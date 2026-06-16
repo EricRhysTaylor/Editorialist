@@ -81,6 +81,29 @@ export function isSweepCompleteFromTally(tally: ReviewStatusTally): boolean {
 	});
 }
 
+// Whether a single sweep-registry batch can have its review block removed now.
+//
+// Deliberately NOT keyed on the entry's `status`: that is "completed" only when
+// every scene the batch touched is clear across ALL batches on those scenes, so
+// a second batch sharing a scene pins the first at "in_progress" indefinitely.
+// Comparing the batch's own terminal decisions to its suggestion count sidesteps
+// that — a batch whose every suggestion is accepted/rejected/rewritten (and none
+// deferred) is finished and cleanable regardless of unrelated batches. A
+// `cleaned` batch has already had its block removed, so there is nothing left.
+export function isBatchReadyToClean(
+	entry: { status: string; totalSuggestions: number },
+	stats: { accepted: number; rejected: number; rewritten: number; deferred: number },
+): boolean {
+	if (entry.status === "cleaned") {
+		return false;
+	}
+	if (entry.totalSuggestions <= 0 || stats.deferred > 0) {
+		return false;
+	}
+	const decidedCount = stats.accepted + stats.rejected + stats.rewritten;
+	return decidedCount >= entry.totalSuggestions;
+}
+
 /** Suggestion-list entrypoint (used by the toolbar/panel + main.ts). */
 export function isSweepComplete(suggestions: readonly ReviewSuggestion[]): boolean {
 	return isSweepCompleteFromTally(tallySuggestionStatuses(suggestions));

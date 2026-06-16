@@ -303,8 +303,8 @@ export class ReviewBatchProcessor {
 		}
 	}
 
-	async cleanupReviewBatchById(batchId: string): Promise<void> {
-		await this.cleanupReviewBatch(batchId);
+	async cleanupReviewBatchById(batchId: string, options?: { notify?: boolean }): Promise<number> {
+		return this.cleanupReviewBatch(batchId, options);
 	}
 
 	async cleanupCompletedSweepReviewBlocks(): Promise<void> {
@@ -354,11 +354,14 @@ export class ReviewBatchProcessor {
 		new Notice(`Removed ${removed.removedCount} imported review block${removed.removedCount === 1 ? "" : "s"} from this note.`);
 	}
 
-	async cleanupReviewBatch(batchId: string): Promise<void> {
+	async cleanupReviewBatch(batchId: string, options?: { notify?: boolean }): Promise<number> {
+		const notify = options?.notify ?? true;
 		const entry = this.host.getSweepRegistryEntry(batchId);
 		if (!entry) {
-			new Notice("Review batch registry entry not found.");
-			return;
+			if (notify) {
+				new Notice("Review batch registry entry not found.");
+			}
+			return 0;
 		}
 
 		let removedCount = 0;
@@ -400,10 +403,13 @@ export class ReviewBatchProcessor {
 		}
 		await this.host.syncSceneInventory();
 		this.host.resyncSessionForActiveNote();
-		new Notice(
-			removedCount > 0
-				? `Cleaned ${removedCount} imported review block${removedCount === 1 ? "" : "s"}.`
-				: "No imported review blocks were found for this batch.",
-		);
+		if (notify) {
+			new Notice(
+				removedCount > 0
+					? `Cleaned ${removedCount} imported review block${removedCount === 1 ? "" : "s"}.`
+					: "No imported review blocks were found for this batch.",
+			);
+		}
+		return removedCount;
 	}
 }
