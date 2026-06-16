@@ -3621,16 +3621,16 @@
 }
 
 .editorialist-settings__contributor-use-icon--inline {
-	width: 1.05rem;
-	height: 1.05rem;
+	width: 1.5rem;
+	height: 1.5rem;
 	border-radius: var(--editorialist-radius-xs);
 	border-color: color-mix(in srgb, var(--background-modifier-border) 58%, transparent);
 	background: color-mix(in srgb, var(--background-primary) 84%, transparent);
 }
 
 .editorialist-settings__contributor-use-icon--inline svg {
-	width: 0.7rem;
-	height: 0.7rem;
+	width: 1rem;
+	height: 1rem;
 }
 
 .editorialist-settings__star-button {
@@ -3901,8 +3901,8 @@
 }
 
 .editorialist-contributor-modal__identity-icon {
-	width: 1rem;
-	height: 1rem;
+	width: 2rem;
+	height: 2rem;
 	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 60%, transparent);
 	border-radius: var(--editorialist-radius-xs);
 	background: color-mix(in srgb, var(--background-primary) 82%, transparent);
@@ -3910,8 +3910,8 @@
 }
 
 .editorialist-contributor-modal__identity-icon svg {
-	width: 0.68rem;
-	height: 0.68rem;
+	width: 1.36rem;
+	height: 1.36rem;
 	stroke-width: 1.9;
 }
 
@@ -4067,6 +4067,10 @@
 .editorialist-contributor-modal__control select,
 .editorialist-contributor-modal__input {
 	width: 100%;
+}
+
+.editorialist-contributor-modal__input {
+	padding: 0.45rem 0.65rem;
 }
 
 .editorialist-contributor-modal__rename-link {
