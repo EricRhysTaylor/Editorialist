@@ -209,6 +209,10 @@ export default class EditorialistPlugin extends Plugin {
 	// panel). Validated against the live layout before reuse so a closed pane is
 	// dropped rather than reopened on a detached leaf.
 	private cutViewLeaf: WorkspaceLeaf | null = null;
+	// The last real scene the user focused, by path. Lets the cut-file controls
+	// stay anchored to that scene even once focus moves to the cut pane itself
+	// (which is what otherwise makes the panel's cut button mute after opening).
+	private lastSceneFilePathForCut: string | null = null;
 	private readonly editorialismService = new EditorialismService(this.app);
 	private readonly workflow = new ReviewWorkflowService(this.store, this.registry, {
 		clearReviewSelection: async () => {
@@ -393,6 +397,7 @@ export default class EditorialistPlugin extends Plugin {
 				if (this.workflow.isTransitioning()) {
 					return;
 				}
+				this.rememberActiveSceneForCut();
 				this.resyncSessionForActiveNote();
 				this.syncActiveEditorDecorations();
 			}),
@@ -403,6 +408,7 @@ export default class EditorialistPlugin extends Plugin {
 				if (this.workflow.isTransitioning()) {
 					return;
 				}
+				this.rememberActiveSceneForCut();
 				this.resyncSessionForActiveNote();
 				this.syncActiveEditorDecorations();
 				void this.pendingEdits.refreshPendingEditsSummary();
@@ -988,7 +994,27 @@ export default class EditorialistPlugin extends Plugin {
 			return activeFile;
 		}
 
+		// Focus is on the cut pane itself (so every live signal above resolves to
+		// the cut file, which we skip). Fall back to the last scene the user had
+		// open so the cut controls stay anchored to it.
+		if (this.lastSceneFilePathForCut) {
+			const remembered = this.app.vault.getAbstractFileByPath(this.lastSceneFilePathForCut);
+			if (remembered instanceof TFile) {
+				return remembered;
+			}
+		}
+
 		return null;
+	}
+
+	// Records the focused scene whenever it is a real editor leaf (not the cut
+	// pane), so resolveActiveSceneFileForCut can recover it once focus moves to
+	// the cut file. Called from the active-leaf-change / file-open handlers.
+	private rememberActiveSceneForCut(): void {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (view?.file && view.leaf !== this.cutViewLeaf && !this.isActiveCutFile(view.file)) {
+			this.lastSceneFilePathForCut = view.file.path;
+		}
 	}
 
 	private isActiveCutFile(file: TFile): boolean {
