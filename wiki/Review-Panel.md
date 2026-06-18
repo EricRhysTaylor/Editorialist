@@ -39,6 +39,7 @@ Each highlighted suggestion gets an inline toolbar in the editor:
 | **Defer** | Click | Skip for now; the sweep can finish later |
 | **Rewrite myself** | Click | Take the suggestion as a prompt and write your own version |
 | **Backup to cut file** | Click | Archive the target text to the [cut file](Settings-Reference.md#configuration-tab) before deciding |
+| **Open cut file** | Shift + click Backup to cut file | Open the scene's cut file |
 | **Reject** | Click | Decline the suggestion |
 | **Hide toolbar** | Click | Dismiss the overlay without deciding |
 
@@ -64,7 +65,7 @@ Decisions are undoable during the session. Suggestions whose target text can't b
 
 ### Sweep completion
 
-A sweep finishes only when every suggestion in the batch has a resolved status (accepted, rejected, or rewritten). If pending, unresolved, or deferred items remain, Editorialist pauses and tells you what's left. On completion, the batch is recorded: per-scene polish frontmatter (`Editorialist:revision`, `Editorialist:revision_updated`), contributor acceptance stats, and the activity history all update.
+A sweep finishes only when every suggestion in the batch has a resolved status (accepted, rejected, or rewritten). If pending, unresolved, or deferred items remain, Editorialist pauses and tells you what's left. On completion, the batch is recorded: per-scene polish frontmatter (`Editorialist.revision`, `Editorialist.revision_updated`), contributor acceptance stats, and the activity history all update.
 
 ## Pending-edits review
 

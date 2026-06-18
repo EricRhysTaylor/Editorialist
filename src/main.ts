@@ -406,6 +406,11 @@ export default class EditorialistPlugin extends Plugin {
 				this.resyncSessionForActiveNote();
 				this.syncActiveEditorDecorations();
 				void this.pendingEdits.refreshPendingEditsSummary();
+				// Keep the header cut-file button in step with the scene now in
+				// focus: its active/muted state is per-scene, and navigating between
+				// scenes need not change the review session (which is what otherwise
+				// drives a panel re-render via the store subscription).
+				this.refreshReviewPanel();
 			}),
 		);
 
@@ -884,6 +889,20 @@ export default class EditorialistPlugin extends Plugin {
 			console.error("Editorialist: failed to back up text to cut file", error);
 			new Notice("Could not write to the cut file. Check the cut folder path in settings.");
 		}
+	}
+
+	// Whether the active scene already has a cut file on disk. Drives the panel
+	// header's cut-file button: active when there is one to open, muted otherwise.
+	// Resolves the scene the same way openCutFileForActiveScene does so the button
+	// never claims a file the open action would fail to find.
+	activeSceneHasCutFile(): boolean {
+		const sceneFile = this.resolveActiveSceneFileForCut();
+		if (!sceneFile) {
+			return false;
+		}
+
+		const cutFilePath = this.cutArchive.resolveCutFilePathForScene(sceneFile);
+		return this.app.vault.getAbstractFileByPath(cutFilePath) instanceof TFile;
 	}
 
 	// Opens the active scene's cut file for browsing/editing — the "scratch pad"

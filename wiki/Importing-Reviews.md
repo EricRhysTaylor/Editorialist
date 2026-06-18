@@ -88,7 +88,7 @@ The CONDENSE target uses a two-anchor format:
 Target: "<verbatim opening fragment>" → "<verbatim closing fragment>"
 ```
 
-Both fragments must be copied **byte-for-byte** from the manuscript (≤12 words each is plenty — they're anchors, not the whole passage). Editorialist locates the passage between them by exact text match; a paraphrased description routes the suggestion to "Passage not located" and you can't act on it.
+Both fragments should be copied from the manuscript (≤12 words each is plenty — they're anchors, not the whole passage). Editorialist tries exact matching first, then a quote/dash/whitespace-tolerant match. A paraphrased description still routes the suggestion to "Passage not located" and you can't act on it.
 
 ### EXPAND: direct vs. advisory
 
@@ -104,7 +104,7 @@ Every operation entry targets one scene via `SceneId:`. Items in the same block 
 
 ### Matching against the manuscript
 
-`Original:` and `Target:` text is matched **conservatively** against the live note: exact text match only. Each suggestion gets a match type — exact, multiple matches, not found, or already applied — surfaced in the review UI so you know what you're acting on.
+`Original:` and `Target:` text is matched **conservatively** against the live note: exact text first, then a quote/dash/whitespace-tolerant fallback. Editorialist also checks whether the suggested replacement already appears to be applied. Each suggestion gets a match type — exact, multiple matches, not found, or already applied — surfaced in the review UI so you know what you're acting on.
 
 ---
 

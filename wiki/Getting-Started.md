@@ -9,7 +9,7 @@ Install from the Obsidian Community Plugins directory:
 
 (To install a specific version manually, grab `manifest.json`, `main.js`, and `styles.css` from the [latest release](https://github.com/EricRhysTaylor/Editorialist/releases) and place them in `<your-vault>/.obsidian/plugins/editorialist/`.)
 
-If you also use [Radial Timeline](Radial-Timeline-Integration.md), Editorialist detects it automatically and scopes review tools to the active book. It is optional; everything below works without it.
+If you also use [Radial Timeline](Radial-Timeline-Integration.md), Editorialist detects it automatically and scopes review tools to the active book. The regular review-batch workflow works without it; the active-book pending-edits review depends on Radial Timeline.
 
 ## Commands
 
@@ -19,7 +19,7 @@ Editorialist registers these commands in the command palette:
 |---|---|
 | **Open review launcher** | Opens the launcher modal to import a review batch or start a pending-edits review |
 | **Open review panel** | Opens the [Review Panel](Review-Panel.md) in the sidebar |
-| **Review pending edits in active book** | Starts the pending-edits review flow across the active book |
+| **Review pending edits in active book** | Starts the pending-edits review flow across the active Radial Timeline book |
 | **Backup selection to cut file** | Copies selected text to the scene's cut file without changing the manuscript |
 
 Editorialist ships **no default hotkeys** — assign your own under **Settings → Hotkeys** if you want them.
