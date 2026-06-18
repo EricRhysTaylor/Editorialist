@@ -978,7 +978,25 @@ export default class EditorialistPlugin extends Plugin {
 			}
 		}
 
+		// Focus may have left the editor — e.g. the user clicked the panel's
+		// cut-file button, which makes the side-panel leaf active, so
+		// getActiveViewOfType(MarkdownView) above returns null. The workspace still
+		// tracks the main-area file across sidebar focus, so fall back to it,
+		// skipping the cut file itself when that is what happens to be active.
+		const activeFile = this.app.workspace.getActiveFile();
+		if (activeFile instanceof TFile && !this.isActiveCutFile(activeFile)) {
+			return activeFile;
+		}
+
 		return null;
+	}
+
+	private isActiveCutFile(file: TFile): boolean {
+		if (!this.cutViewLeaf) {
+			return false;
+		}
+		const view = this.cutViewLeaf.view;
+		return view instanceof MarkdownView && view.file?.path === file.path;
 	}
 
 	// The scene's editor view, never the cut panel. The cut file is itself a
