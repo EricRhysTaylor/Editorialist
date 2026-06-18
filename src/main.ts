@@ -897,18 +897,19 @@ export default class EditorialistPlugin extends Plugin {
 		}
 	}
 
-	// Whether the active scene already has a cut file on disk. Drives the panel
-	// header's cut-file button: active when there is one to open, muted otherwise.
-	// Resolves the scene the same way openCutFileForActiveScene does so the button
-	// never claims a file the open action would fail to find.
-	activeSceneHasCutFile(): boolean {
+	// Cut-file status for the active scene, driving the panel header's cut button:
+	// the scene's display name (null when no scene is detected) and whether its cut
+	// file exists on disk. Resolves the scene the same way openCutFileForActiveScene
+	// does so the button never claims a file the open action would fail to find.
+	getActiveSceneCutStatus(): { sceneName: string | null; hasCutFile: boolean } {
 		const sceneFile = this.resolveActiveSceneFileForCut();
 		if (!sceneFile) {
-			return false;
+			return { sceneName: null, hasCutFile: false };
 		}
 
 		const cutFilePath = this.cutArchive.resolveCutFilePathForScene(sceneFile);
-		return this.app.vault.getAbstractFileByPath(cutFilePath) instanceof TFile;
+		const hasCutFile = this.app.vault.getAbstractFileByPath(cutFilePath) instanceof TFile;
+		return { sceneName: sceneFile.basename, hasCutFile };
 	}
 
 	// Opens the active scene's cut file for browsing/editing — the "scratch pad"

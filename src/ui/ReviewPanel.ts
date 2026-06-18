@@ -178,15 +178,21 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		// cut file to open; muted + disabled (with an explanatory label) when none
 		// exists yet. Opens it in the lower split beneath this panel, same as the
 		// toolbar's Shift-open — see openCutFileForActiveScene.
-		const hasCutFile = this.plugin.activeSceneHasCutFile();
+		// Name the detected scene in the label so there's no ambiguity about which
+		// scene the button acts on. Falls back to generic wording only when no
+		// scene is detected at all.
+		const { sceneName, hasCutFile } = this.plugin.getActiveSceneCutStatus();
+		const cutLabel = sceneName
+			? hasCutFile
+				? `Open cut file for “${sceneName}”`
+				: `No cut file for “${sceneName}” yet`
+			: "Open a scene note to view its cut file";
 		const cutButton = titleRow.createEl("button", {
 			cls: `editorialist-panel__settings-button editorialist-panel__cut-button${hasCutFile ? " is-active" : ""}`,
 			attr: {
 				// aria-label only — see the note on the settings button below for why
 				// we avoid a native `title` on these re-rendered header controls.
-				"aria-label": hasCutFile
-					? "Open cut file for the active scene"
-					: "No cut file for the active scene yet",
+				"aria-label": cutLabel,
 				type: "button",
 				...(hasCutFile ? {} : { disabled: "true" }),
 			},
