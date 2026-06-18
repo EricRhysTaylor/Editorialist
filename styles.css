@@ -669,6 +669,30 @@
 	outline: none;
 }
 
+.editorialist-panel__cut-button {
+	/* Same flex reset as the clean/launcher buttons: only the trailing settings
+	   button keeps margin-left:auto so the right-side controls stay grouped. */
+	margin-left: 0;
+	color: var(--text-faint);
+}
+
+.editorialist-panel__cut-button:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+.editorialist-panel__cut-button.is-active {
+	color: var(--interactive-accent);
+	border-color: color-mix(in srgb, var(--interactive-accent) 45%, var(--background-modifier-border));
+}
+
+.editorialist-panel__cut-button.is-active:hover,
+.editorialist-panel__cut-button.is-active:focus-visible {
+	border-color: var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+	outline: none;
+}
+
 .editorialist-panel__empty {
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
