@@ -132,7 +132,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		const titleRow = header.createDiv({ cls: "editorialist-panel__title-row" });
 		const titleIcon = titleRow.createSpan({ cls: "editorialist-panel__title-icon" });
 		setIcon(titleIcon, EDITORIALIST_ICON_ID);
-		titleRow.createEl("h2", { text: "Editorialist review" });
+		titleRow.createEl("h2", { text: "Editorialist" });
 
 		// Clean-batches header action: a single persistent control so cleanup is
 		// always reachable without hunting for per-card links. Accent + enabled
@@ -541,6 +541,12 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 			cls: `editorialist-panel__comments${this.commentsCollapsed ? " is-collapsed" : ""}`,
 		});
 
+		// Author queries pin above passive memos: they carry an answer the author
+		// asked for, so they lead the card.
+		const queries = memos.filter((memo) => memo.kind === "query");
+		const plainMemos = memos.filter((memo) => memo.kind !== "query");
+		const ordered = [...queries, ...plainMemos];
+
 		const header = card.createDiv({ cls: "editorialist-panel__comments-header" });
 		const titleIcon = header.createSpan({ cls: "editorialist-panel__comments-title-icon" });
 		setIcon(titleIcon, "message-square-text");
@@ -550,7 +556,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		});
 		header.createSpan({
 			cls: "editorialist-panel__comments-summary",
-			text: `${memos.length} memo${memos.length === 1 ? "" : "s"}`,
+			text: this.formatCommentsSummary(queries.length, plainMemos.length),
 		});
 
 		const toggle = header.createEl("button", {
@@ -574,9 +580,67 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 
 		const body = card.createDiv({ cls: "editorialist-panel__comments-body" });
 
-		memos.forEach((memo) => {
-			this.renderMemoEntry(body, memo);
+		ordered.forEach((memo) => {
+			if (memo.kind === "query") {
+				this.renderQueryEntry(body, memo);
+			} else {
+				this.renderMemoEntry(body, memo);
+			}
 		});
+	}
+
+	private formatCommentsSummary(queryCount: number, memoCount: number): string {
+		const parts: string[] = [];
+		if (queryCount > 0) {
+			parts.push(`${queryCount} question${queryCount === 1 ? "" : "s"}`);
+		}
+		if (memoCount > 0 || parts.length === 0) {
+			parts.push(`${memoCount} memo${memoCount === 1 ? "" : "s"}`);
+		}
+		return parts.join(" · ");
+	}
+
+	private renderQueryEntry(parent: HTMLElement, memo: SceneMemo): void {
+		const entry = parent.createDiv({
+			cls: "editorialist-panel__comment-entry editorialist-panel__comment-entry--query",
+		});
+
+		const header = entry.createDiv({ cls: "editorialist-panel__comment-entry-header" });
+		const kindBadge = header.createSpan({
+			cls: "editorialist-panel__comment-entry-kind editorialist-panel__comment-entry-kind--query",
+		});
+		kindBadge.setText("Author question");
+		header.createSpan({
+			cls: "editorialist-panel__comment-entry-contributor",
+			text: formatContributorIdentityLabel(memo.contributor),
+		});
+
+		if (memo.question) {
+			const block = entry.createDiv({ cls: "editorialist-panel__comment-entry-block" });
+			block.createDiv({
+				cls: "editorialist-panel__comment-entry-block-label editorialist-panel__comment-entry-block-label--question",
+				text: "Question",
+			});
+			block.createDiv({ cls: "editorialist-panel__comment-entry-block-text", text: memo.question });
+		}
+
+		if (memo.answer) {
+			const block = entry.createDiv({ cls: "editorialist-panel__comment-entry-block" });
+			block.createDiv({
+				cls: "editorialist-panel__comment-entry-block-label editorialist-panel__comment-entry-block-label--answer",
+				text: "Answer",
+			});
+			block.createDiv({ cls: "editorialist-panel__comment-entry-block-text", text: memo.answer });
+		}
+
+		if (memo.recommendation) {
+			const block = entry.createDiv({ cls: "editorialist-panel__comment-entry-block" });
+			block.createDiv({
+				cls: "editorialist-panel__comment-entry-block-label editorialist-panel__comment-entry-block-label--recommendation",
+				text: "Recommendation",
+			});
+			block.createDiv({ cls: "editorialist-panel__comment-entry-block-text", text: memo.recommendation });
+		}
 	}
 
 	// Always-present pending-edits affordance during a batch. Scene-scoped when

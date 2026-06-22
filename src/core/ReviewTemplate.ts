@@ -240,6 +240,72 @@ function buildSceneIdContextSection(context: ReviewTemplateContext): string | nu
 	return lines.join("\n");
 }
 
+// Hidden author queries: `%%ai: <question>%%` markers the author leaves inline
+// in the prose. Obsidian renders `%% … %%` as an invisible comment, so the
+// question never ships to a reader. The `ai:` prefix is required so ordinary
+// `%% note-to-self %%` comments and Editorialist's own `%% editorialist-cut … %%`
+// archive blocks are left untouched. Case-insensitive, tolerant of internal
+// whitespace and newlines, non-greedy to the closing `%%`.
+const AUTHOR_QUERY_PATTERN = /%%\s*ai\s*:\s*([\s\S]*?)%%/gi;
+
+const SECTION_BAR = "━".repeat(75);
+
+interface ExtractedAuthorQueries {
+	cleanedText: string;
+	questions: string[];
+}
+
+// Pull every `%%ai: …%%` out of the passage and return the prose with the
+// markers removed. The vault note is never touched — this operates only on the
+// copy sent to the model, so the author's source keeps its comments.
+function extractAuthorQueries(passage: string): ExtractedAuthorQueries {
+	const questions: string[] = [];
+	const cleanedText = passage.replace(AUTHOR_QUERY_PATTERN, (_match, body: string) => {
+		const question = body.replace(/\s+/g, " ").trim();
+		if (question) {
+			questions.push(question);
+		}
+		return "";
+	});
+	return { cleanedText, questions };
+}
+
+// The query answer contract. SceneId is embedded in both the prompt and the
+// required output so routing is self-describing across the copy-out/paste-back
+// gap — there is no temporary map to carry the question→scene link.
+function buildAuthorQueriesSection(questions: string[], activeSceneId?: string | null): string {
+	const sceneId = activeSceneId?.trim();
+	const lines: string[] = [
+		SECTION_BAR,
+		"AUTHOR QUERIES — answer each directly; do not treat as prose.",
+		SECTION_BAR,
+		"",
+		"The author embedded these questions inline in the passage below. They have",
+		"been removed from the prose so you do not edit them. Answer every one in its",
+		`own === QUERY === block, echoing its Id${sceneId ? " and SceneId" : ""} so Editorialist can route the`,
+		"answer back to the right scene. Give a direct recommendation, not an",
+		"acknowledgement:",
+		"",
+		"=== QUERY ===",
+		"Id: Q1",
+	];
+	if (sceneId) {
+		lines.push(`SceneId: ${sceneId}`);
+	}
+	lines.push(
+		"Question: <repeat the question being answered>",
+		"Answer: <direct answer with a recommendation>",
+		"Recommendation: <optional one-line takeaway>",
+		"",
+		"Queries:",
+	);
+	questions.forEach((question, index) => {
+		const id = `Q${index + 1}`;
+		lines.push(sceneId ? `[${id}] SceneId: ${sceneId} — ${question}` : `[${id}] ${question}`);
+	});
+	return lines.join("\n");
+}
+
 export function buildReviewTemplate(
 	selectedText?: string,
 	context?: ReviewTemplateContext,
@@ -260,7 +326,11 @@ export function buildReviewTemplate(
 	}
 
 	if (selectedText?.trim()) {
-		parts.push("", "Passage:", selectedText);
+		const { cleanedText, questions } = extractAuthorQueries(selectedText);
+		if (questions.length > 0) {
+			parts.push("", buildAuthorQueriesSection(questions, context?.activeSceneId));
+		}
+		parts.push("", "Passage:", cleanedText);
 	}
 
 	return parts.join("\n");

@@ -24,7 +24,7 @@ import {
 } from "./ReviewBlockGrammar";
 import { getLinesWithOffsets, type LineWithOffsets } from "./TextOffsets";
 
-type SectionKind = SupportedReviewOperationType | "memo";
+type SectionKind = SupportedReviewOperationType | "memo" | "query";
 
 interface SectionBuffer {
 	entryIndex: number;
@@ -80,6 +80,7 @@ const OPERATION_HEADERS: Record<string, SupportedReviewOperationType> = {
 const SECTION_KINDS: Record<string, SectionKind> = {
 	...OPERATION_HEADERS,
 	MEMO: "memo",
+	QUERY: "query",
 };
 
 export class SuggestionParser {
@@ -113,6 +114,14 @@ export class SuggestionParser {
 					const memo = this.parseMemoSection(section, blockIndex, metadata);
 					if (memo) {
 						memos.push(memo);
+					}
+					return;
+				}
+
+				if (section.kind === "query") {
+					const query = this.parseQuerySection(section, blockIndex, metadata);
+					if (query) {
+						memos.push(query);
 					}
 					return;
 				}
@@ -226,7 +235,7 @@ export class SuggestionParser {
 	}
 
 	private parseSection(section: SectionBuffer, blockIndex: number, metadata: BlockMetadata): ReviewSuggestion | null {
-		if (section.kind === "memo") {
+		if (section.kind === "memo" || section.kind === "query") {
 			return null;
 		}
 		const fields = this.collectFields(section.lines);
@@ -258,6 +267,7 @@ export class SuggestionParser {
 			}
 			return {
 				id: `memo-${blockIndex + 1}-${section.entryIndex}`,
+				kind: "memo",
 				contributor: this.reviewerDirectory.resolveContributor(metadata.rawReviewer),
 				source: {
 					blockIndex,
@@ -272,6 +282,7 @@ export class SuggestionParser {
 
 		return {
 			id: `memo-${blockIndex + 1}-${section.entryIndex}`,
+			kind: "memo",
 			contributor: this.reviewerDirectory.resolveContributor(metadata.rawReviewer),
 			source: {
 				blockIndex,
@@ -283,6 +294,41 @@ export class SuggestionParser {
 			strengths,
 			issues,
 			body,
+		};
+	}
+
+	// An === QUERY === block is the model's answer to an author's `%%ai: …%%`
+	// question. It routes by SceneId like any memo (the contract embeds SceneId
+	// in the query so routing survives the copy-out/paste-back gap — there is no
+	// in-memory map to rely on). The Id field (Q1, Q2…) only disambiguates the
+	// model's own output; routing is SceneId-based, so it is not parsed here.
+	private parseQuerySection(section: SectionBuffer, blockIndex: number, metadata: BlockMetadata): SceneMemo | null {
+		const fields = this.collectFields(section.lines);
+		const question = this.cleanField(fields.get("question"));
+		const answer = this.cleanField(fields.get("answer"));
+		const recommendation = this.cleanField(fields.get("recommendation"));
+		// The answer is the whole point of a query — a QUERY block the model left
+		// unanswered is dropped rather than rendered as a dead card. Id is never
+		// required (routing is SceneId-based); a missing/unknown SceneId yields no
+		// routing and falls back to the same unrouted path as a plain memo.
+		if (!answer) {
+			return null;
+		}
+
+		return {
+			id: `query-${blockIndex + 1}-${section.entryIndex}`,
+			kind: "query",
+			contributor: this.reviewerDirectory.resolveContributor(metadata.rawReviewer),
+			source: {
+				blockIndex,
+				entryIndex: section.entryIndex - 1,
+				startOffset: section.startOffset,
+				endOffset: section.endOffset,
+			},
+			routing: this.parseRouting(fields),
+			question,
+			answer,
+			recommendation,
 		};
 	}
 

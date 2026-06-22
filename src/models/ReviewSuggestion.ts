@@ -142,14 +142,25 @@ export type ExpandSuggestion = ReviewSuggestionBase<"expand", ExpandSuggestionPa
 
 export type ReviewSuggestion = EditSuggestion | MoveSuggestion | CutSuggestion | CondenseSuggestion | ExpandSuggestion;
 
+// A SceneMemo is advisory, non-mutating commentary rendered in the Comments
+// card — it has no accept/apply lifecycle, unlike a ReviewSuggestion. `kind`
+// discriminates passive editorial notes ("memo") from author queries
+// ("query"): a hidden `%%ai: …%%` marker the author left in the prose, stripped
+// before review and answered by the model. Query memos carry question/answer/
+// recommendation instead of strengths/issues/body, and pin to the top of the
+// card. Routing (scene attachment) is shared by both kinds.
 export interface SceneMemo {
 	id: string;
+	kind: "memo" | "query";
 	contributor: ReviewContributor;
 	source: ReviewSourceRef;
 	routing?: ReviewSuggestionRouting;
 	strengths?: string;
 	issues?: string;
 	body?: string;
+	question?: string;
+	answer?: string;
+	recommendation?: string;
 }
 
 export interface ReviewSession {

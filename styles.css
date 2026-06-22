@@ -1682,6 +1682,19 @@
 	background: color-mix(in srgb, var(--color-green) 14%, transparent);
 }
 
+/* Author queries pin to the top of the Comments card and read as an active
+   prompt the author raised, so they get a stronger accent edge than passive
+   memos. */
+.editorialist-panel__comment-entry--query {
+	border-left: 2px solid color-mix(in srgb, var(--color-purple) 55%, transparent);
+	padding-left: 0.55rem;
+}
+
+.editorialist-panel__comment-entry--query .editorialist-panel__comment-entry-kind--query {
+	color: color-mix(in srgb, var(--color-purple) 70%, var(--text-normal));
+	background: color-mix(in srgb, var(--color-purple) 16%, transparent);
+}
+
 .editorialist-panel__comment-entry-contributor {
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
@@ -1707,6 +1720,18 @@
 
 .editorialist-panel__comment-entry-block-label--issues {
 	color: color-mix(in srgb, var(--color-orange) 65%, var(--text-normal));
+}
+
+.editorialist-panel__comment-entry-block-label--question {
+	color: color-mix(in srgb, var(--color-purple) 65%, var(--text-normal));
+}
+
+.editorialist-panel__comment-entry-block-label--answer {
+	color: color-mix(in srgb, var(--text-accent) 80%, var(--text-normal));
+}
+
+.editorialist-panel__comment-entry-block-label--recommendation {
+	color: color-mix(in srgb, var(--color-green) 65%, var(--text-normal));
 }
 
 .editorialist-panel__comment-entry-block-text {

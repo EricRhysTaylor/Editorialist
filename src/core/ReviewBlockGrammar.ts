@@ -4,7 +4,11 @@
 // independently. This module is the single source so the paste-in format and
 // the re-parse format can never disagree.
 
-export const REVIEW_OPERATION_KEYWORDS = ["EDIT", "MOVE", "CUT", "CONDENSE", "EXPAND", "MEMO"] as const;
+// MEMO and QUERY are not editable operations (they never apply to the prose),
+// but they are section-header keywords the grammar must recognize so the parser
+// and paste-normalizer route them. QUERY carries an author's `%%ai: …%%`
+// question and the model's answer; see SceneMemo.kind.
+export const REVIEW_OPERATION_KEYWORDS = ["EDIT", "MOVE", "CUT", "CONDENSE", "EXPAND", "MEMO", "QUERY"] as const;
 export type ReviewOperationKeyword = (typeof REVIEW_OPERATION_KEYWORDS)[number];
 
 const OPS = REVIEW_OPERATION_KEYWORDS.join("|");

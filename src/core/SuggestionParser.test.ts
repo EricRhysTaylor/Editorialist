@@ -237,3 +237,78 @@ describe("SuggestionParser — EXPAND", () => {
 		expect(parsed.suggestions).toHaveLength(0);
 	});
 });
+
+describe("SuggestionParser — QUERY section", () => {
+	it("parses a query into a kind:\"query\" memo with question/answer/recommendation", () => {
+		const parser = makeParser();
+		const note = fenced([
+			"Reviewer: Caroline",
+			"ReviewerType: ai",
+			"",
+			"=== QUERY ===",
+			"Id: Q1",
+			"SceneId: scn_abc123",
+			"Question: Is this beat too abrupt after the reveal?",
+			"Answer: Yes — give Trisan one more line before the cut so the reveal lands.",
+			"Recommendation: Add a beat of silence, then her reaction.",
+		].join("\n"));
+
+		const parsed = parser.parse(note);
+		expect(parsed.suggestions).toHaveLength(0);
+		expect(parsed.memos).toHaveLength(1);
+		const query = parsed.memos[0];
+		expect(query.kind).toBe("query");
+		expect(query.question).toContain("too abrupt");
+		expect(query.answer).toContain("one more line");
+		expect(query.recommendation).toContain("beat of silence");
+		expect(query.routing?.sceneId).toBe("scn_abc123");
+	});
+
+	it("routes a query by SceneId and coexists with memos and edits", () => {
+		const parser = makeParser();
+		const note = fenced([
+			"Reviewer: Caroline",
+			"ReviewerType: ai",
+			"",
+			"=== MEMO ===",
+			"Issues: Watch the pacing in the back half.",
+			"",
+			"=== QUERY ===",
+			"Id: Q1",
+			"SceneId: scn_xyz",
+			"Question: Should the bridge motif return here?",
+			"Answer: No — it would over-signal. Leave it implied.",
+			"",
+			"=== EDIT ===",
+			"Original: He sat down.",
+			"Revised: He sank into the chair.",
+		].join("\n"));
+
+		const parsed = parser.parse(note);
+		expect(parsed.suggestions).toHaveLength(1);
+		expect(parsed.memos).toHaveLength(2);
+		const kinds = parsed.memos.map((m) => m.kind).sort();
+		expect(kinds).toEqual(["memo", "query"]);
+		const query = parsed.memos.find((m) => m.kind === "query");
+		expect(query?.routing?.sceneId).toBe("scn_xyz");
+	});
+
+	it("drops a query that has a question but no answer", () => {
+		const parser = makeParser();
+		const note = fenced(
+			["=== QUERY ===", "Id: Q1", "SceneId: scn_x", "Question: Is this abrupt?"].join("\n"),
+		);
+		expect(parser.parse(note).memos).toHaveLength(0);
+	});
+
+	it("keeps a query with an answer but no Id", () => {
+		const parser = makeParser();
+		const note = fenced(
+			["=== QUERY ===", "SceneId: scn_x", "Question: Is this abrupt?", "Answer: No, it lands."].join("\n"),
+		);
+		const memos = parser.parse(note).memos;
+		expect(memos).toHaveLength(1);
+		expect(memos[0].kind).toBe("query");
+		expect(memos[0].answer).toContain("it lands");
+	});
+});

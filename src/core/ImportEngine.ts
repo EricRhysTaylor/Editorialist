@@ -863,6 +863,26 @@ export class ImportEngine {
 
 		for (const memo of group.memos) {
 			lines.push("");
+			if (memo.kind === "query") {
+				// Round-trip an author query as === QUERY === so re-parsing the
+				// scene note reconstructs it (a plain === MEMO === with no
+				// strengths/issues/body would serialize an empty memo). SceneId
+				// keeps the query self-routing.
+				lines.push("=== QUERY ===");
+				if (memo.routing?.sceneId) {
+					lines.push(`SceneId: ${memo.routing.sceneId}`);
+				}
+				if (memo.question) {
+					lines.push(`Question: ${memo.question}`);
+				}
+				if (memo.answer) {
+					lines.push(`Answer: ${memo.answer}`);
+				}
+				if (memo.recommendation) {
+					lines.push(`Recommendation: ${memo.recommendation}`);
+				}
+				continue;
+			}
 			lines.push("=== MEMO ===");
 			if (memo.strengths) {
 				lines.push(`Strengths: ${memo.strengths}`);
