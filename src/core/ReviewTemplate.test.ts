@@ -21,8 +21,10 @@ describe("buildReviewTemplate — author queries", () => {
 		const out = buildReviewTemplate(passage, { activeSceneId: "scn_abc123" });
 
 		// The marker must not survive into the prose the model edits against.
-		expect(out).not.toContain("%%ai:");
+		// (The template documentation legitimately mentions %%ai: — scope the
+		// check to the Passage section.)
 		const body = passageSection(out);
+		expect(body).not.toContain("%%ai:");
 		expect(body).toContain("She crossed the bridge.");
 		expect(body).toContain("The lights went out.");
 		expect(body).not.toContain("Is this beat too abrupt?");
@@ -54,10 +56,20 @@ describe("buildReviewTemplate — author queries", () => {
 		expect(queriesSection(out)).toContain("[Q1] SceneId: scn_x — Should the motif return here?");
 	});
 
-	it("adds no AUTHOR QUERIES block when the passage has no markers", () => {
+	it("adds no enumerated AUTHOR QUERIES block when the passage has no markers", () => {
 		const out = buildReviewTemplate("Just ordinary prose with no markers.", { activeSceneId: "scn_x" });
 		expect(out).not.toContain("AUTHOR QUERIES");
 		expect(out).toContain("Passage:");
+	});
+
+	it("always documents the === QUERY === contract so the export path is covered", () => {
+		// The Radial Timeline export is pasted straight into the AI and never
+		// passes through Editorialist, so the standing template instruction is the
+		// only thing that tells the AI to answer `%%ai:%%` markers it finds there.
+		const out = buildReviewTemplate("Plain prose, no selection markers.");
+		expect(out).toContain("=== QUERY ===");
+		expect(out).toContain("%%ai:");
+		expect(out).toMatch(/hidden `%%ai: <question>%%` markers/);
 	});
 
 	it("ignores plain comments and editorialist-cut archive blocks", () => {
