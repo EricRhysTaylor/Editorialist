@@ -5538,7 +5538,6 @@
 	justify-content: center;
 	width: 1.6rem;
 	height: 1.6rem;
-	margin-top: 2px; /* center on the first line of multi-line item text */
 	padding: 0;
 	border: none;
 	background: transparent;
@@ -5562,7 +5561,14 @@
 	color: color-mix(in srgb, var(--color-purple) 75%, var(--text-normal));
 }
 
+.editorialist-editorialism-panel__item-status-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
 .editorialist-editorialism-panel__item-status-icon svg {
+	display: block;
 	width: 1.05rem;
 	height: 1.05rem;
 }
