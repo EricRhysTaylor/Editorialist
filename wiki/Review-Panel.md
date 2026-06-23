@@ -12,6 +12,21 @@ Between sessions the panel shows:
 - **Contributors** — a compact view of who has been suggesting what.
 - **Onboarding** — a collapsible getting-started disclosure for new vaults.
 
+### Panel controls
+
+<p align="center"><img src="images/ui-side-panel-buttons.png" alt="Editorialist side-panel controls: toggle modes, clean imported review notes, import batch, insert author query, back up selected text to a cut file, and settings" width="720"></p>
+
+The header controls keep the most common actions close to the review panel:
+
+| Control | What it does |
+|---|---|
+| **Toggle modes** | Switch between the review panel and [Editorialisms](Editorialisms-Panel.md). |
+| **Clean imported notes** | Remove review notes after you are done with them. |
+| **Import batch** | Paste in a formatted review batch and route it into matching scenes. |
+| **Insert author query** | Add a hidden inline question for the next review pass. |
+| **Back up selection** | Copy selected manuscript text into the scene's cut file. |
+| **Settings** | Open Editorialist settings. |
+
 ## Review sessions
 
 Starting a workflow card (or importing a review batch) begins a **guided review sweep**. The imported batch has already been split into review blocks at the bottom of the targeted scene notes; the panel reads those blocks and walks their suggestions scene by scene.
