@@ -9,7 +9,7 @@ import { getLinesWithOffsets } from "./TextOffsets";
 
 export const REVIEW_BLOCK_FENCE = "editorialist-review";
 const REVIEW_METADATA_PATTERN =
-	/^(BatchId|ImportedBy|Template|TemplateYear|SupportedOperations|SceneIdSource|Reviewer|ReviewerType|Provider|Model)\s*:/im;
+	/^(BatchId|ImportedBy|ImportedAt|Template|TemplateYear|SupportedOperations|SceneIdSource|Reviewer|ReviewerType|Provider|Model)\s*:/im;
 // Decorative dividers some LLMs emit between sections (e.g. `⸻`, `---`, `***`,
 // `═══`). Detected as a line of punctuation/symbol characters with no letters
 // or digits — skipped without terminating the raw block.
@@ -282,7 +282,12 @@ function extractRawTopReviewBlock(noteText: string): ExtractedReviewBlock | null
 
 			const fieldMatch = trimmed.match(GENERAL_FIELD_PATTERN);
 			if (!sawSection) {
-				if (fieldMatch && REVIEW_METADATA_KEYS.has(normalizeReviewFieldKey(fieldMatch[1] ?? ""))) {
+				// Any leading `Key: value` line counts as block header — recognized
+				// metadata or not. An unknown header key (e.g. ImportedAt, or a future
+				// addition) must not truncate the header and drop BatchId/ImportedBy;
+				// a real block still has to reach a === SECTION === to be returned
+				// (the sawSection guard below), so this stays conservative.
+				if (fieldMatch) {
 					lastIncludedIndex = index;
 					endOffset = line.endOffset;
 					continue;

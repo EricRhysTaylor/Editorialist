@@ -28,6 +28,12 @@ export const REVIEW_FIELD_PATTERN = /^([A-Za-z][A-Za-z ]+):\s*(.*)$/;
 export const REVIEW_METADATA_KEYS: ReadonlySet<string> = new Set([
 	"batchid",
 	"importedby",
+	// ImportEngine stamps ImportedAt on every serialized block. It MUST be a
+	// recognized header key: the raw-block scanner stops at the first leading
+	// field it doesn't know, so an unrecognized ImportedAt truncated the block
+	// header (dropping BatchId/ImportedBy) and made imported blocks undetectable
+	// — orphaning them so cleanup could never see them.
+	"importedat",
 	"template",
 	"templateyear",
 	"supportedoperations",

@@ -124,9 +124,13 @@ describe("SweepRegistryManager — updateEntry meaningful-change gate", () => {
 
 describe("SweepRegistryManager — updatedAt idempotency (Pass-2 fix)", () => {
 	it("does NOT churn updatedAt when buildFromSceneInventory sees no material change", () => {
+		// Status must match what the scene counts derive (zero blocking → completed)
+		// so the reconciliation sees no material change and leaves updatedAt alone.
 		const scene = sceneRecord({ acceptedCount: 0, rejectedCount: 0, rewrittenCount: 0, deferredCount: 0 });
 		const m = makeManager({ "s1.md": scene });
-		const reg = { b1: entry({ updatedAt: 100, acceptedCount: 0, rejectedCount: 0, rewrittenCount: 0, deferredCount: 0 }) };
+		const reg = {
+			b1: entry({ status: "completed", updatedAt: 100, acceptedCount: 0, rejectedCount: 0, rewrittenCount: 0, deferredCount: 0 }),
+		};
 		const presence = new Map([["b1", new Set(["s1.md"])]]);
 
 		const next = m.buildFromSceneInventory(reg, presence, { "s1.md": scene }, 777);
@@ -142,6 +146,20 @@ describe("SweepRegistryManager — updatedAt idempotency (Pass-2 fix)", () => {
 		const next = m.buildFromSceneInventory(reg, presence, { "s1.md": scene }, 777);
 		expect(next.b1.acceptedCount).toBe(5);
 		expect(next.b1.updatedAt).toBe(777);
+	});
+
+	it("resurrects a stale 'cleaned' entry when its block reappears in a scene", () => {
+		// A block that reappears (re-import, or a detection bug that hid it) must
+		// pull the entry out of "cleaned" so the clean button can act on it again.
+		const scene = sceneRecord({ acceptedCount: 3, pendingCount: 0 });
+		const m = makeManager({ "s1.md": scene });
+		const reg = { b1: entry({ status: "cleaned", cleanedAt: 50, updatedAt: 100, acceptedCount: 0 }) };
+		const presence = new Map([["b1", new Set(["s1.md"])]]);
+
+		const next = m.buildFromSceneInventory(reg, presence, { "s1.md": scene }, 777);
+		expect(next.b1.status).toBe("completed");
+		expect(next.b1.cleanedAt).toBeUndefined();
+		expect(next.b1.acceptedCount).toBe(3);
 	});
 
 	it("marks a batch with no remaining scenes as cleaned", () => {

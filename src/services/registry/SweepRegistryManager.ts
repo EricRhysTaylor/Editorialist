@@ -20,7 +20,7 @@ import type {
 	ReviewSweepStatus,
 } from "../../models/ReviewImport";
 import type { ActiveBookScopeInfo } from "../../core/VaultScope";
-import { isSweepCompleteFromCounts } from "../../core/review/SweepCompletion";
+import { getSweepStatus, isSweepCompleteFromCounts } from "../../core/review/SweepCompletion";
 
 function sameJsonValue(left: unknown, right: unknown): boolean {
 	return JSON.stringify(left) === JSON.stringify(right);
@@ -222,11 +222,19 @@ export class SweepRegistryManager {
 			let rejectedCount = entry.rejectedCount;
 			let rewrittenCount = entry.rewrittenCount;
 			let deferredCount = entry.deferredCount;
+			// Status is re-derived from live scene counts when scenes still carry the
+			// block. Preserving entry.status would pin a stale "cleaned" forever: a
+			// block that reappears (re-import, or a detection bug that hid it) must
+			// resurrect to completed/in_progress, or cleanup — which bails on
+			// "cleaned" — could never act on it again.
+			let nextStatus: ReviewSweepStatus = currentPaths.length === 0 ? "cleaned" : entry.status;
 			if (currentPaths.length > 0) {
 				let accepted = 0;
 				let rejected = 0;
 				let rewritten = 0;
 				let deferred = 0;
+				let pending = 0;
+				let unresolved = 0;
 				for (const path of currentPaths) {
 					const record = sceneIndex[path];
 					if (!record) continue;
@@ -234,11 +242,18 @@ export class SweepRegistryManager {
 					rejected += record.rejectedCount;
 					rewritten += record.rewrittenCount;
 					deferred += record.deferredCount;
+					pending += record.pendingCount;
+					unresolved += record.unresolvedCount;
 				}
 				acceptedCount = accepted;
 				rejectedCount = rejected;
 				rewrittenCount = rewritten;
 				deferredCount = deferred;
+				nextStatus = getSweepStatus({
+					pendingCount: pending,
+					unresolvedCount: unresolved,
+					deferredCount: deferred,
+				});
 			}
 
 			const candidate: ReviewSweepRegistryEntry = {
@@ -250,7 +265,7 @@ export class SweepRegistryManager {
 				importedNotePaths: currentPaths,
 				currentNotePath,
 				sceneOrder: nextSceneOrder,
-				status: currentPaths.length === 0 ? "cleaned" : entry.status,
+				status: nextStatus,
 				updatedAt: entry.updatedAt,
 				acceptedCount,
 				rejectedCount,
