@@ -12,7 +12,7 @@ Example: highlight a paragraph and add `Should this flashback move earlier?` bef
 
 ### One Ed panel for edits and Editorialisms
 
-The side panel now switches between review work and Editorialisms without opening a second tool surface.
+The side panel now switches between review work and Editorialisms without opening a second tool surface. The top controls also keep import, cleanup, author queries, cut-file backup, and settings close at hand.
 
 Example: work through line edits, switch to the Editorialisms mode, then check whether the same scene also serves a larger structural note.
 
@@ -41,6 +41,10 @@ Example: save a selected paragraph to the scene's cut file before rewriting it, 
 - Editorialism status controls are tighter and better aligned in the panel.
 
 ## Screenshots
+
+**Side-panel controls**
+
+<img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/ui-side-panel-buttons.png" alt="Editorialist side-panel controls for mode switching, cleanup, import, author queries, cut-file backup, and settings">
 
 **Editorialisms mode**
 
