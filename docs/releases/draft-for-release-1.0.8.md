@@ -42,8 +42,12 @@ Example: save a selected paragraph to the scene's cut file before rewriting it, 
 
 ## Screenshots
 
-| Editorialisms mode | Right-click cut backup |
-|---|---|
-| <img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/release-1-0-8-editorialisms-preview-570.png" alt="Editorialisms mode in the Ed side panel"> | <img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/release-1-0-8-cut-menu-preview-570.png" alt="Right-click menu showing backup selection to cut file"> |
+**Editorialisms mode**
+
+<img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/release-1-0-8-editorialisms-preview-570.png" alt="Editorialisms mode in the Ed side panel">
+
+**Right-click cut backup**
+
+<img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/release-1-0-8-cut-menu-preview-570.png" alt="Right-click menu showing backup selection to cut file">
 
 The wiki has also been refreshed for Radial Timeline integration, manuscript folder scope, import matching, cut-file controls, and settings behavior.
