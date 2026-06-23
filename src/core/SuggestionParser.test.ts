@@ -301,6 +301,36 @@ describe("SuggestionParser — QUERY section", () => {
 		expect(parser.parse(note).memos).toHaveLength(0);
 	});
 
+	it("does not let QUERY sections swallow later EDIT suggestions in a mixed batch", () => {
+		// Regression: a batch with MEMO + QUERY + EDIT sections must still yield
+		// every EDIT as a suggestion (cleanup gates on totalSuggestions = edits).
+		const parser = makeParser();
+		const note = fenced(
+			[
+				"=== MEMO ===",
+				"Strengths: opener works",
+				"=== QUERY ===",
+				"SceneId: scn_x",
+				"Question: add a puzzle?",
+				"Answer: no",
+				"=== QUERY ===",
+				"SceneId: scn_x",
+				"Question: right stage label?",
+				"Answer: stage 4",
+				"=== EDIT ===",
+				"Original: the 5th-stage platform",
+				"Revised: the Stage 4 platform",
+				"=== EDIT ===",
+				"Original: stage three platform",
+				"Revised: Stage 3 platform",
+			].join("\n"),
+		);
+		const parsed = parser.parse(note);
+		expect(parsed.suggestions).toHaveLength(2);
+		expect(parsed.suggestions.every((s) => s.operation === "edit")).toBe(true);
+		expect(parsed.memos.filter((m) => m.kind === "query")).toHaveLength(2);
+	});
+
 	it("keeps a query with an answer but no Id", () => {
 		const parser = makeParser();
 		const note = fenced(
