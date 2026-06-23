@@ -173,6 +173,22 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 			void this.plugin.openEditorialistModal();
 		});
 
+		// Author-query header action: drop a hidden %%ai:…%% question into the
+		// active scene without hand-typing the marker. Inserts into the scene
+		// editor, or copies to the clipboard when no manuscript is in view.
+		const authorQueryButton = titleRow.createEl("button", {
+			cls: "editorialist-panel__settings-button editorialist-panel__author-query-button",
+			attr: {
+				"aria-label": "Insert author query",
+				type: "button",
+			},
+		});
+		const authorQueryIcon = authorQueryButton.createSpan({ cls: "editorialist-panel__settings-icon" });
+		setIcon(authorQueryIcon, "message-square-plus");
+		this.bindImmediateAction(authorQueryButton, () => {
+			void this.plugin.insertAuthorQuery();
+		});
+
 		// Cut-file header action: a quick way to pull up the active scene's cut
 		// file without selecting text first. Active + accented when the scene has a
 		// cut file to open; muted + disabled (with an explanatory label) when none

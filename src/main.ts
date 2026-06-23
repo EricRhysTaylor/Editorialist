@@ -61,6 +61,7 @@ import { openEditorialistChoiceModal } from "./ui/EditorialistChoiceModal";
 import { openContributorReassignmentModal, type ContributorReassignmentMode } from "./ui/ContributorReassignmentModal";
 import { openContributorStrengthsModal } from "./ui/ContributorStrengthsModal";
 import { EDITORIALISM_PANEL_VIEW_TYPE, EditorialismPanel } from "./ui/EditorialismPanel";
+import { AuthorQueryModal } from "./ui/modals/AuthorQueryModal";
 import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
 import { selectPanelPrimarySuggestionId } from "./ui/viewmodels/ReviewPanelViewModel";
 import { normalizeMatchText } from "./core/TextMatching";
@@ -422,6 +423,18 @@ export default class EditorialistPlugin extends Plugin {
 
 		this.registerEvent(
 			this.app.workspace.on("editor-menu", (menu, editor) => {
+				// Insert-author-query is offered regardless of selection — an author
+				// can drop a query at the cursor. "Ed —" text prefix: macOS native
+				// menus drop Obsidian's item icons, so the brand mark lives in the
+				// title itself.
+				menu.addItem((item) => {
+					item.setTitle("Ed — insert author query")
+						.setIcon("message-square-plus")
+						.onClick(() => {
+							void this.insertAuthorQuery();
+						});
+				});
+
 				// Offered whenever text is selected — backupSelectionToCutFile
 				// resolves the cut file from the note itself, so it works with or
 				// without an active review batch.
@@ -429,8 +442,6 @@ export default class EditorialistPlugin extends Plugin {
 					return;
 				}
 				menu.addItem((item) => {
-					// "Ed —" text prefix: macOS native menus drop Obsidian's item
-					// icons, so the brand mark has to live in the title itself.
 					item.setTitle("Ed — backup selection to cut file")
 						.setIcon("archive")
 						.onClick(() => {
@@ -1051,6 +1062,41 @@ export default class EditorialistPlugin extends Plugin {
 			}
 		}
 		return null;
+	}
+
+	// Shared author-query insertion flow behind all three entry points (command,
+	// editor right-click, panel button). Prompts for the question, then writes a
+	// hidden `%%ai: …%%` marker into the scene editor at the cursor — or after the
+	// selection, never replacing it — so the next review picks it up. Falls back
+	// to the clipboard when no scene editor is in view (e.g. the panel is focused
+	// with no manuscript open).
+	async insertAuthorQuery(): Promise<void> {
+		// Resolve the target editor BEFORE the modal opens — once it is open the
+		// modal leaf is active, so getSceneEditorView would no longer see the
+		// scene. getSceneEditorView still recovers the review session's note when
+		// focus is on the panel.
+		const view = this.getSceneEditorView();
+		const question = await new AuthorQueryModal(this.app).present();
+		if (!question) {
+			return;
+		}
+
+		const marker = `%%ai: ${question}%%`;
+		const editor = view?.editor;
+		if (editor) {
+			// Insert at the cursor, or immediately after the selection — never
+			// replace selected prose, which would delete the passage the author is
+			// asking about.
+			editor.replaceRange(marker, editor.getCursor("to"));
+			editor.focus();
+			return;
+		}
+
+		await this.copyTextToClipboard(
+			marker,
+			"Author query copied — paste it into the scene.",
+			"Could not copy the author query.",
+		);
 	}
 
 	private resolveCutBackupSource(preferDisplayedSuggestion: boolean): CutBackupSource | null {

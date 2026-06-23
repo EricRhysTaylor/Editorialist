@@ -1734,6 +1734,18 @@
 	color: color-mix(in srgb, var(--color-green) 65%, var(--text-normal));
 }
 
+/* Author-query insertion modal */
+.editorialist-author-query__hint {
+	margin-top: 0;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.editorialist-author-query__input {
+	width: 100%;
+	resize: vertical;
+}
+
 .editorialist-panel__comment-entry-block-text {
 	font-family: var(--font-text);
 	font-size: var(--font-ui-small);

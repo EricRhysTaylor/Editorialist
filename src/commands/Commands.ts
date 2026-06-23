@@ -34,4 +34,14 @@ export function registerCommands(plugin: EditorialistPlugin): void {
 			void plugin.backupSelectionToCutFile();
 		},
 	});
+
+	plugin.addCommand({
+		id: "insert-author-query",
+		name: "Insert author query",
+		// editorCallback: only offered while editing a scene — exactly when an
+		// author would annotate one. No default hotkey; the user can assign one.
+		editorCallback: () => {
+			void plugin.insertAuthorQuery();
+		},
+	});
 }
