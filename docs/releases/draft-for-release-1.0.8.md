@@ -1,6 +1,6 @@
 ## Editorialist 1.0.8
 
-This release makes Editorialist easier to use during an actual revision pass: questions can live beside the prose, structural Editorialisms sit in the main Ed panel, and cleanup is better at finding imported notes that were already written into scenes.
+This release makes Editorialist easier to use during an actual revision pass: questions can live beside the prose, structural Editorialisms sit in the main Ed panel, and review progress stays more reliable as you move through scenes.
 
 ## What's new
 
@@ -22,11 +22,11 @@ Editorialisms now show a rough time estimate based on configurable drafting and 
 
 Example: a structural note that adds two scenes and twenty directives can show whether it is an evening of work or a multi-session revision.
 
-### Better recovery and cleanup
+### More reliable review progress
 
-New rescan and cleanup handling finds imported review blocks more reliably, including blocks with newer `ImportedAt:` metadata.
+Editorialist is better at recognizing review notes it has already added to the manuscript.
 
-Example: if a sweep looks finished but old review blocks are still sitting in scenes, rescan can recover them instead of leaving the manuscript in a half-clean state.
+Example: when you return to a scene later, the panel is less likely to lose track of what is pending, resolved, or ready to continue.
 
 ### Faster cut-file backup
 
@@ -36,8 +36,8 @@ Example: save a selected paragraph to the scene's cut file before rewriting it, 
 
 ## Fixes
 
-- Imported blocks with `ImportedAt:` metadata are now detected correctly.
-- Orphaned review blocks are easier to recover and clean.
+- Review progress is tracked more consistently across imported notes.
+- Review notes written by the current import flow are recognized more reliably.
 - Editorialism status controls are tighter and better aligned in the panel.
 
 ## Screenshots
