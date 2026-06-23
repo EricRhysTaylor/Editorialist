@@ -5600,6 +5600,7 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	transform: translateY(1px);
 }
 
 .editorialist-editorialism-panel__item-status-icon svg {
