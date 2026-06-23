@@ -188,9 +188,27 @@ describe("migratePluginData", () => {
 		expect(JSON.stringify(second)).toBe(JSON.stringify(first));
 	});
 
-	it("defaults settings to empty folder overrides when absent", () => {
+	it("defaults settings to empty folder overrides + default effort when absent", () => {
 		const out = migratePluginData({}, makeRecorder());
-		expect(out.settings).toEqual({ cutFolderOverride: "", bookFolderOverride: "" });
+		expect(out.settings).toEqual({
+			cutFolderOverride: "",
+			bookFolderOverride: "",
+			effort: {
+				wordsPerNewScene: 1500,
+				draftRateWordsPerHour: 750,
+				minutesPerDirective: 12,
+				dailyWritingHours: 2,
+			},
+		});
+	});
+
+	it("clamps a garbage effort value to its default", () => {
+		const out = migratePluginData(
+			{ settings: { effort: { draftRateWordsPerHour: -10, wordsPerNewScene: 2000 } } },
+			makeRecorder(),
+		);
+		expect(out.settings.effort.draftRateWordsPerHour).toBe(750);
+		expect(out.settings.effort.wordsPerNewScene).toBe(2000);
 	});
 
 	it("preserves a valid cut folder override and survives round-trip", () => {
@@ -215,20 +233,24 @@ describe("migratePluginData", () => {
 	});
 
 	it("falls back to defaults for a malformed settings object", () => {
-		expect(migratePluginData({ settings: 42 }, makeRecorder()).settings).toEqual({
+		const defaults = {
 			cutFolderOverride: "",
 			bookFolderOverride: "",
-		});
-		expect(migratePluginData({ settings: [1, 2] }, makeRecorder()).settings).toEqual({
-			cutFolderOverride: "",
-			bookFolderOverride: "",
-		});
+			effort: {
+				wordsPerNewScene: 1500,
+				draftRateWordsPerHour: 750,
+				minutesPerDirective: 12,
+				dailyWritingHours: 2,
+			},
+		};
+		expect(migratePluginData({ settings: 42 }, makeRecorder()).settings).toEqual(defaults);
+		expect(migratePluginData({ settings: [1, 2] }, makeRecorder()).settings).toEqual(defaults);
 		expect(
 			migratePluginData(
 				{ settings: { cutFolderOverride: 7, bookFolderOverride: 9 } },
 				makeRecorder(),
 			).settings,
-		).toEqual({ cutFolderOverride: "", bookFolderOverride: "" });
+		).toEqual(defaults);
 	});
 });
 

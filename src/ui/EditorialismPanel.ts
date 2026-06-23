@@ -1,5 +1,7 @@
 import { ItemView, TFile, setIcon, type WorkspaceLeaf } from "obsidian";
 import type EditorialistPlugin from "../main";
+import { EDITORIALIST_ICON_ID } from "./EditorialistLogoIcon";
+import { formatEffortDuration } from "../core/EffortEstimate";
 import type {
 	Editorialism,
 	EditorialismItem,
@@ -32,6 +34,14 @@ const STATUS_ICON: Record<EditorialismItemStatus, string> = {
 	"deferred": "circle-slash",
 	"question": "circle-help",
 };
+
+function formatWords(words: number): string {
+	if (words < 1000) {
+		return `${words} words`;
+	}
+	const thousands = (words / 1000).toFixed(1).replace(/\.0$/, "");
+	return `${thousands}k words`;
+}
 
 export class EditorialismPanel extends ItemView {
 	private summaries: EditorialismSummary[] = [];
@@ -111,11 +121,30 @@ export class EditorialismPanel extends ItemView {
 	}
 
 	private renderHeader(parent: HTMLElement): void {
-		const header = parent.createDiv({ cls: "editorialist-editorialism-panel__header" });
-		const titleRow = header.createDiv({ cls: "editorialist-editorialism-panel__title-row" });
-		const icon = titleRow.createSpan({ cls: "editorialist-editorialism-panel__title-icon" });
-		setIcon(icon, "list-checks");
+		// Shared header chrome with the review panel (logo + title + controls), so
+		// the swatch-book toggle reads as one panel changing modes.
+		const header = parent.createDiv({ cls: "editorialist-panel__header" });
+		const titleRow = header.createDiv({ cls: "editorialist-panel__title-row" });
+		setIcon(titleRow.createSpan({ cls: "editorialist-panel__title-icon" }), EDITORIALIST_ICON_ID);
 		titleRow.createEl("h2", { text: "Editorialisms" });
+
+		const modeToggle = titleRow.createEl("button", {
+			cls: "editorialist-panel__settings-button editorialist-panel__mode-toggle",
+			attr: { "aria-label": "Switch to review", type: "button" },
+		});
+		setIcon(modeToggle.createSpan({ cls: "editorialist-panel__settings-icon" }), "swatch-book");
+		modeToggle.addEventListener("click", () => {
+			void this.plugin.togglePanelMode(this.leaf);
+		});
+
+		const settingsButton = titleRow.createEl("button", {
+			cls: "editorialist-panel__settings-button",
+			attr: { "aria-label": "Open Editorialist settings", type: "button" },
+		});
+		setIcon(settingsButton.createSpan({ cls: "editorialist-panel__settings-icon" }), "settings");
+		settingsButton.addEventListener("click", () => {
+			this.plugin.openSettings();
+		});
 
 		const book = this.plugin.getActiveBookScopeInfo().label;
 		header.createDiv({
@@ -225,6 +254,8 @@ export class EditorialismPanel extends ItemView {
 			});
 		}
 
+		this.renderEstimateCard(detail, editorialism);
+
 		for (const section of editorialism.sections) {
 			const sectionEl = detail.createDiv({ cls: "editorialist-editorialism-panel__section" });
 			sectionEl.createDiv({
@@ -235,6 +266,49 @@ export class EditorialismPanel extends ItemView {
 				this.renderItem(sectionEl, editorialism, item);
 			}
 		}
+	}
+
+	// Compact revision-effort estimate for the open directives in this
+	// editorialism — authoring time + schedule impact at the author's daily pace.
+	private renderEstimateCard(parent: HTMLElement, editorialism: Editorialism): void {
+		const estimate = this.plugin.estimateEditorialism(editorialism);
+		if (estimate.actionableItems === 0 || estimate.totalMinutes === 0) {
+			return;
+		}
+
+		const card = parent.createDiv({ cls: "editorialist-editorialism-panel__estimate" });
+		const head = card.createDiv({ cls: "editorialist-editorialism-panel__estimate-head" });
+		setIcon(head.createSpan({ cls: "editorialist-editorialism-panel__estimate-icon" }), "clock");
+		head.createSpan({
+			cls: "editorialist-editorialism-panel__estimate-total",
+			text: `~${formatEffortDuration(estimate.totalMinutes)} of revision`,
+		});
+		if (estimate.sessions > 0) {
+			const hours = this.plugin.getEffortDailyWritingHours();
+			head.createSpan({
+				cls: "editorialist-editorialism-panel__estimate-sessions",
+				text: `≈ ${estimate.sessions} session${estimate.sessions === 1 ? "" : "s"} at ${hours}h/day`,
+			});
+		}
+
+		const parts: string[] = [];
+		if (estimate.newScenes > 0) {
+			parts.push(`${estimate.newScenes} new scene${estimate.newScenes === 1 ? "" : "s"} (~${formatWords(estimate.newWords)})`);
+		}
+		if (estimate.directiveItems > 0) {
+			parts.push(`${estimate.directiveItems} directive${estimate.directiveItems === 1 ? "" : "s"}`);
+		}
+		if (parts.length > 0) {
+			card.createDiv({
+				cls: "editorialist-editorialism-panel__estimate-breakdown",
+				text: parts.join(" · "),
+			});
+		}
+
+		card.createDiv({
+			cls: "editorialist-editorialism-panel__estimate-note",
+			text: "Estimate — drafting rate and scene size are configurable in settings.",
+		});
 	}
 
 	private renderItem(parent: HTMLElement, editorialism: Editorialism, item: EditorialismItem): void {

@@ -48,7 +48,19 @@ export function defaultEditorialistSettings(): EditorialistSettings {
 	return {
 		cutFolderOverride: "",
 		bookFolderOverride: "",
+		effort: {
+			wordsPerNewScene: 1500,
+			draftRateWordsPerHour: 750,
+			minutesPerDirective: 12,
+			dailyWritingHours: 2,
+		},
 	};
+}
+
+// Clamp a persisted numeric setting to a positive value, falling back to the
+// default when missing or garbage.
+function positiveNumber(value: unknown, fallback: number): number {
+	return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 // Tolerant settings normalizer: a non-string or garbage field collapses to the
@@ -66,9 +78,21 @@ export function normalizeEditorialistSettings(raw: unknown): EditorialistSetting
 	const bookFolderOverride =
 		typeof candidate.bookFolderOverride === "string" ? candidate.bookFolderOverride : defaults.bookFolderOverride;
 
+	const rawEffort =
+		typeof candidate.effort === "object" && candidate.effort !== null
+			? (candidate.effort as Record<string, unknown>)
+			: {};
+	const effort = {
+		wordsPerNewScene: positiveNumber(rawEffort.wordsPerNewScene, defaults.effort.wordsPerNewScene),
+		draftRateWordsPerHour: positiveNumber(rawEffort.draftRateWordsPerHour, defaults.effort.draftRateWordsPerHour),
+		minutesPerDirective: positiveNumber(rawEffort.minutesPerDirective, defaults.effort.minutesPerDirective),
+		dailyWritingHours: positiveNumber(rawEffort.dailyWritingHours, defaults.effort.dailyWritingHours),
+	};
+
 	return {
 		cutFolderOverride,
 		bookFolderOverride,
+		effort,
 	};
 }
 

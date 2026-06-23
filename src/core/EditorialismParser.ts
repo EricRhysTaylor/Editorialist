@@ -1,5 +1,6 @@
 import type {
 	Editorialism,
+	EditorialismItemEffort,
 	EditorialismItem,
 	EditorialismItemScope,
 	EditorialismItemStatus,
@@ -65,9 +66,15 @@ export function parseScope(raw: string): EditorialismItemScope {
 	return { kind: "unknown", raw: trimmed };
 }
 
-function parseTaskLine(body: string): { text: string; scope: EditorialismItemScope | null; tags: string[] } {
+function parseTaskLine(body: string): {
+	text: string;
+	scope: EditorialismItemScope | null;
+	tags: string[];
+	effort?: EditorialismItemEffort;
+} {
 	const tags: string[] = [];
 	let scope: EditorialismItemScope | null = null;
+	const effort: EditorialismItemEffort = {};
 	const stripped = body.replace(INLINE_METADATA_PATTERN, (_match, key: string, value: string) => {
 		const lowerKey = key.toLowerCase();
 		const trimmedValue = value.trim();
@@ -80,10 +87,26 @@ function parseTaskLine(body: string): { text: string; scope: EditorialismItemSco
 					tags.push(value);
 				}
 			}
+		} else if (lowerKey === "words") {
+			const n = Number.parseInt(trimmedValue, 10);
+			if (Number.isFinite(n) && n > 0) {
+				effort.words = n;
+			}
+		} else if (lowerKey === "scenes" || lowerKey === "scene-count") {
+			const n = Number.parseInt(trimmedValue, 10);
+			if (Number.isFinite(n) && n > 0) {
+				effort.scenes = n;
+			}
+		} else if (lowerKey === "effort") {
+			const tier = trimmedValue.toLowerCase();
+			if (tier === "light" || tier === "medium" || tier === "heavy") {
+				effort.tier = tier;
+			}
 		}
 		return "";
 	}).trim();
-	return { text: stripped, scope, tags };
+	const hasEffort = effort.words !== undefined || effort.scenes !== undefined || effort.tier !== undefined;
+	return { text: stripped, scope, tags, effort: hasEffort ? effort : undefined };
 }
 
 interface FrontmatterParseResult {
@@ -158,6 +181,7 @@ export function parseEditorialism(filePath: string, contents: string): Editorial
 			text: parsed.text,
 			scope: parsed.scope,
 			tags: parsed.tags,
+			effort: parsed.effort,
 		};
 		currentSection.items.push(item);
 	}

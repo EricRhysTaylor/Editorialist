@@ -43,6 +43,7 @@ import { CutArchiveService, type CutBackupSourceType } from "./core/CutArchiveSe
 import type {
 	ParsedContributorReference,
 	ContributorProfile,
+	EditorialistEffortSettings,
 	ReviewerResolutionStatus,
 	SceneReviewRecord,
 	ReviewerStats,
@@ -63,6 +64,12 @@ import { openContributorStrengthsModal } from "./ui/ContributorStrengthsModal";
 import { EDITORIALISM_PANEL_VIEW_TYPE, EditorialismPanel } from "./ui/EditorialismPanel";
 import { AuthorQueryModal } from "./ui/modals/AuthorQueryModal";
 import { buildAuthorQueryMarkerPattern } from "./core/AuthorQueryMarker";
+import {
+	effortParamsFromSettings,
+	estimateEditorialismEffort,
+	type EffortEstimate,
+} from "./core/EffortEstimate";
+import type { Editorialism } from "./models/Editorialism";
 import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
 import { selectPanelPrimarySuggestionId } from "./ui/viewmodels/ReviewPanelViewModel";
 import { normalizeMatchText } from "./core/TextMatching";
@@ -601,6 +608,53 @@ export default class EditorialistPlugin extends Plugin {
 
 	getEditorialismFolder(): string {
 		return this.editorialismService.getRootFolderName();
+	}
+
+	// Estimate the authoring effort for one editorialism's open directives, using
+	// the author's configured effort settings.
+	estimateEditorialism(editorialism: Editorialism): EffortEstimate {
+		return estimateEditorialismEffort(
+			editorialism,
+			effortParamsFromSettings(this.registry.getSettings().effort),
+		);
+	}
+
+	getEffortDailyWritingHours(): number {
+		return this.registry.getSettings().effort.dailyWritingHours;
+	}
+
+	getEffortSettings(): EditorialistEffortSettings {
+		return this.registry.getSettings().effort;
+	}
+
+	async setEffortSettings(patch: Partial<EditorialistEffortSettings>): Promise<void> {
+		this.registry.setEffortSettings(patch);
+		await this.savePluginData();
+	}
+
+	// Swap a side-panel leaf between the review (standard) and editorialism modes
+	// in place, so the toggle feels like one panel changing modes rather than two
+	// separate views. Workspace state persists the leaf's view type across reload.
+	async togglePanelMode(leaf: WorkspaceLeaf): Promise<void> {
+		const next =
+			leaf.view.getViewType() === REVIEW_PANEL_VIEW_TYPE
+				? EDITORIALISM_PANEL_VIEW_TYPE
+				: REVIEW_PANEL_VIEW_TYPE;
+		await leaf.setViewState({ type: next, active: true });
+		await this.app.workspace.revealLeaf(leaf);
+	}
+
+	// Command entry point: toggle the existing panel's mode, or open the review
+	// panel when neither is present.
+	async toggleEditorialismMode(): Promise<void> {
+		const leaf =
+			this.app.workspace.getLeavesOfType(REVIEW_PANEL_VIEW_TYPE)[0] ??
+			this.app.workspace.getLeavesOfType(EDITORIALISM_PANEL_VIEW_TYPE)[0];
+		if (leaf) {
+			await this.togglePanelMode(leaf);
+		} else {
+			await this.openReviewPanel();
+		}
 	}
 
 	// True when pasted launcher text carries a Format B editorialism file, so the

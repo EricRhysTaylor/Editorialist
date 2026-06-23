@@ -20,6 +20,7 @@ import type {
 import type { AuthorQueryStatus, ReviewSession, ReviewSuggestion } from "../models/ReviewSuggestion";
 import type {
 	AuthorQueryDecisionRecord,
+	EditorialistEffortSettings,
 	EditorialistPluginData,
 	EditorialistSettings,
 	PersistedReviewDecisionRecord,
@@ -153,6 +154,14 @@ export class ReviewRegistryService {
 		this.settings = {
 			...this.settings,
 			cutFolderOverride: value.trim(),
+		};
+	}
+
+	// Merge a partial effort-settings patch. Caller persists via savePluginData().
+	setEffortSettings(patch: Partial<EditorialistEffortSettings>): void {
+		this.settings = {
+			...this.settings,
+			effort: { ...this.settings.effort, ...patch },
 		};
 	}
 

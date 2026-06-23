@@ -134,6 +134,17 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		setIcon(titleIcon, EDITORIALIST_ICON_ID);
 		titleRow.createEl("h2", { text: "Editorialist" });
 
+		// Mode switch: small toggle beside the title that swaps this leaf to the
+		// editorialism view in place. Smaller than the action buttons.
+		const modeToggle = titleRow.createEl("button", {
+			cls: "editorialist-panel__settings-button editorialist-panel__mode-toggle",
+			attr: { "aria-label": "Switch to Editorialisms", type: "button" },
+		});
+		setIcon(modeToggle.createSpan({ cls: "editorialist-panel__settings-icon" }), "swatch-book");
+		this.bindImmediateAction(modeToggle, () => {
+			void this.plugin.togglePanelMode(this.leaf);
+		});
+
 		// Clean-batches header action: a single persistent control so cleanup is
 		// always reachable without hunting for per-card links. Accent + enabled
 		// when fully-resolved batches exist; muted + disabled (with an explanatory

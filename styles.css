@@ -586,9 +586,78 @@
 	margin-bottom: 0.35rem;
 }
 
+/* Size to content so the mode toggle can sit beside the title; the first action
+   button's margin-left:auto anchors the action cluster to the right. */
 .editorialist-panel__title-row h2 {
 	margin: 0;
-	flex: 1 1 auto;
+	flex: 0 1 auto;
+}
+
+/* Mode switch: a smaller control beside the title. margin-left:0 keeps it next
+   to the title rather than joining the right-floated action cluster. */
+.editorialist-panel__mode-toggle {
+	margin-left: 0;
+	width: 1.7rem;
+	height: 1.7rem;
+}
+
+.editorialist-panel__mode-toggle svg {
+	width: 0.9rem;
+	height: 0.9rem;
+}
+
+.editorialist-panel__mode-toggle:hover,
+.editorialist-panel__mode-toggle:focus-visible {
+	color: color-mix(in srgb, var(--color-purple) 70%, var(--text-normal));
+	outline: none;
+}
+
+/* Revision-effort estimate card (editorialism detail) */
+.editorialist-editorialism-panel__estimate {
+	margin: 0.5rem 0 0.85rem;
+	padding: 0.6rem 0.75rem;
+	border: 1px solid color-mix(in srgb, var(--color-purple) 30%, var(--background-modifier-border));
+	border-radius: var(--editorialist-radius-card);
+	background: color-mix(in srgb, var(--color-purple) 8%, transparent);
+}
+
+.editorialist-editorialism-panel__estimate-head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.35rem 0.6rem;
+}
+
+.editorialist-editorialism-panel__estimate-icon {
+	display: inline-flex;
+	color: color-mix(in srgb, var(--color-purple) 70%, var(--text-normal));
+}
+
+.editorialist-editorialism-panel__estimate-icon svg {
+	width: 0.95rem;
+	height: 0.95rem;
+}
+
+.editorialist-editorialism-panel__estimate-total {
+	font-weight: 700;
+	color: var(--text-normal);
+}
+
+.editorialist-editorialism-panel__estimate-sessions {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.editorialist-editorialism-panel__estimate-breakdown {
+	margin-top: 0.3rem;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.editorialist-editorialism-panel__estimate-note {
+	margin-top: 0.3rem;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
 }
 
 .editorialist-panel__title-icon {

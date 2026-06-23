@@ -109,6 +109,16 @@ export interface SceneReviewRecord {
 // User-tunable plugin settings persisted alongside the review indices. Kept as
 // a discrete object (rather than loose top-level fields) so the Configuration
 // tab can grow without churning the EditorialistPluginData surface.
+// Author-tunable inputs to the revision-effort estimate (editorialism mode).
+// Drafting rate is creative words/hour, NOT typing speed. The scope/tier
+// weighting lives in code defaults; these are the knobs authors actually vary.
+export interface EditorialistEffortSettings {
+	wordsPerNewScene: number;
+	draftRateWordsPerHour: number;
+	minutesPerDirective: number;
+	dailyWritingHours: number;
+}
+
 export interface EditorialistSettings {
 	// Optional explicit cut-folder path. Empty string means "unset" — cut-file
 	// resolution then falls back to the active book's source folder, or the
@@ -121,6 +131,8 @@ export interface EditorialistSettings {
 	// frontmatter) can still keep review tracking bounded to their manuscript.
 	// Ignored while Radial Timeline supplies a scope. Normalized at use time.
 	bookFolderOverride: string;
+	// Inputs to the editorialism revision-effort estimate.
+	effort: EditorialistEffortSettings;
 }
 
 // A resolved/dismissed decision on a query memo (kind:"query"). Keyed by

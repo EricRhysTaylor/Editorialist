@@ -26,6 +26,14 @@ export function registerCommands(plugin: EditorialistPlugin): void {
 	});
 
 	plugin.addCommand({
+		id: "toggle-editorialism-mode",
+		name: "Toggle editorialism mode",
+		callback: () => {
+			void plugin.toggleEditorialismMode();
+		},
+	});
+
+	plugin.addCommand({
 		id: "review-pending-edits",
 		name: "Review pending edits in active book",
 		callback: () => {

@@ -11,7 +11,7 @@ import {
 } from "../core/ContributorStrengths";
 import { getFrontmatterStringValues } from "../core/VaultScope";
 import type { ReviewSweepRegistryEntry } from "../models/ReviewImport";
-import type { SceneReviewRecord } from "../models/ContributorProfile";
+import type { EditorialistEffortSettings, SceneReviewRecord } from "../models/ContributorProfile";
 import type EditorialistPlugin from "../main";
 import { openEditorialistChoiceModal } from "./EditorialistChoiceModal";
 import { RADIAL_TIMELINE_ICON_ID } from "./RadialTimelineLogoIcon";
@@ -107,6 +107,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		this.renderBookFolderSection(configurationContent, activeBook);
 		this.renderTrackingSection(configurationContent, activeBook);
 		this.renderCutLocationSection(configurationContent, activeBook);
+		this.renderEffortSection(configurationContent);
 		this.renderMaintenanceSection(configurationContent, activeBook.label);
 	}
 
@@ -394,6 +395,43 @@ export class EditorialistSettingTab extends PluginSettingTab {
 				? `Override active: cut files write under ${this.plugin.getCutFolderOverride()}/.`
 				: `No override set. Cut files default to ${defaultFolder}/ — falling back to the scene’s own folder when it sits outside the active book.`,
 		});
+	}
+
+	private renderEffortSection(parent: HTMLElement): void {
+		const body = this.createSection(
+			parent,
+			"Revision effort estimate",
+			"Tune how editorialism mode estimates revision time. Drafting rate is creative words per hour, not typing speed — fiction first drafts run far slower than transcription.",
+			"clock",
+		);
+
+		const effort = this.plugin.getEffortSettings();
+		const fields: Array<{ key: keyof EditorialistEffortSettings; label: string }> = [
+			{ key: "wordsPerNewScene", label: "Words per new scene" },
+			{ key: "draftRateWordsPerHour", label: "Drafting rate (words / hour)" },
+			{ key: "minutesPerDirective", label: "Minutes per directive" },
+			{ key: "dailyWritingHours", label: "Daily writing hours" },
+		];
+
+		for (const field of fields) {
+			const row = body.createDiv({ cls: "editorialist-settings__cut-row" });
+			row.createDiv({ cls: "editorialist-settings__cut-label", text: field.label });
+			const input = row.createEl("input", {
+				cls: "editorialist-settings__cut-input",
+				attr: { type: "number", min: "1", step: "1", inputmode: "numeric" },
+			});
+			input.value = String(effort[field.key]);
+			input.addEventListener("change", () => {
+				const value = Number.parseFloat(input.value);
+				if (Number.isFinite(value) && value > 0) {
+					const patch: Partial<EditorialistEffortSettings> = {};
+					patch[field.key] = value;
+					void this.plugin.setEffortSettings(patch);
+				} else {
+					input.value = String(this.plugin.getEffortSettings()[field.key]);
+				}
+			});
+		}
 	}
 
 	private isRadialTimelineInstalled(): boolean {

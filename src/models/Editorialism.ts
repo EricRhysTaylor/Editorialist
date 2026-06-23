@@ -20,12 +20,24 @@ export interface EditorialismItemScope {
 	raw: string;
 }
 
+// Optional effort hints an item can declare via inline metadata, used by the
+// revision-effort estimate. `[words:: 1500]`, `[scenes:: 2]`, `[effort:: heavy]`.
+// When absent, the estimator falls back to scope-weighted heuristics.
+export type EditorialismEffortTier = "light" | "medium" | "heavy";
+
+export interface EditorialismItemEffort {
+	words?: number;
+	scenes?: number;
+	tier?: EditorialismEffortTier;
+}
+
 export interface EditorialismItem {
 	lineIndex: number;
 	status: EditorialismItemStatus;
 	text: string;
 	scope: EditorialismItemScope | null;
 	tags: string[];
+	effort?: EditorialismItemEffort;
 }
 
 export interface EditorialismSection {
