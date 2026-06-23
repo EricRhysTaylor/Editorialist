@@ -131,11 +131,11 @@ export class EditorialismPanel extends ItemView {
 
 		const modeToggle = titleRow.createEl("button", {
 			cls: "editorialist-panel__mode-toggle",
-			attr: { "aria-label": "Switch to review", type: "button" },
+			attr: { "aria-label": "Switch panel mode", type: "button" },
 		});
 		setIcon(modeToggle.createSpan({ cls: "editorialist-panel__settings-icon" }), "swatch-book");
-		modeToggle.addEventListener("click", () => {
-			void this.plugin.togglePanelMode(this.leaf);
+		modeToggle.addEventListener("click", (event) => {
+			this.plugin.showPanelModeMenu(event, EDITORIALISM_PANEL_VIEW_TYPE);
 		});
 
 		const settingsButton = titleRow.createEl("button", {

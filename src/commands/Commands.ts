@@ -26,10 +26,10 @@ export function registerCommands(plugin: EditorialistPlugin): void {
 	});
 
 	plugin.addCommand({
-		id: "toggle-editorialism-mode",
-		name: "Toggle editorialism mode",
+		id: "open-pending-edits-panel",
+		name: "Open pending edits panel",
 		callback: () => {
-			void plugin.toggleEditorialismMode();
+			void plugin.openPendingEditsPanel();
 		},
 	});
 

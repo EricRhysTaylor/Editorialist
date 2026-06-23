@@ -1,5 +1,5 @@
 import type { EditorView } from "@codemirror/view";
-import { MarkdownView, normalizePath, Notice, Plugin, TFile, type App, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, Menu, normalizePath, Notice, Plugin, TFile, type App, type WorkspaceLeaf } from "obsidian";
 import type {
 	PendingEditSegment,
 	PendingEditsSession,
@@ -62,6 +62,7 @@ import { openEditorialistChoiceModal } from "./ui/EditorialistChoiceModal";
 import { openContributorReassignmentModal, type ContributorReassignmentMode } from "./ui/ContributorReassignmentModal";
 import { openContributorStrengthsModal } from "./ui/ContributorStrengthsModal";
 import { EDITORIALISM_PANEL_VIEW_TYPE, EditorialismPanel } from "./ui/EditorialismPanel";
+import { PENDING_EDITS_PANEL_VIEW_TYPE, PendingEditsPanel } from "./ui/PendingEditsPanel";
 import { AuthorQueryModal } from "./ui/modals/AuthorQueryModal";
 import { buildAuthorQueryMarkerPattern } from "./core/AuthorQueryMarker";
 import {
@@ -383,6 +384,7 @@ export default class EditorialistPlugin extends Plugin {
 		registerRadialTimelineIcon();
 		this.registerView(REVIEW_PANEL_VIEW_TYPE, (leaf) => new ReviewPanel(leaf, this));
 		this.registerView(EDITORIALISM_PANEL_VIEW_TYPE, (leaf) => new EditorialismPanel(leaf, this));
+		this.registerView(PENDING_EDITS_PANEL_VIEW_TYPE, (leaf) => new PendingEditsPanel(leaf, this));
 		this.addSettingTab(new EditorialistSettingTab(this.app, this));
 		// One ribbon for the single Ed panel. Editorialism mode is reached by the
 		// in-panel swatch toggle or the "Toggle editorialism mode" command — no
@@ -552,6 +554,7 @@ export default class EditorialistPlugin extends Plugin {
 		const existing = [
 			...this.app.workspace.getLeavesOfType(REVIEW_PANEL_VIEW_TYPE),
 			...this.app.workspace.getLeavesOfType(EDITORIALISM_PANEL_VIEW_TYPE),
+			...this.app.workspace.getLeavesOfType(PENDING_EDITS_PANEL_VIEW_TYPE),
 		];
 		const [primary, ...duplicates] = existing;
 		for (const duplicate of duplicates) {
@@ -632,29 +635,34 @@ export default class EditorialistPlugin extends Plugin {
 		await this.savePluginData();
 	}
 
-	// Swap a side-panel leaf between the review (standard) and editorialism modes
-	// in place, so the toggle feels like one panel changing modes rather than two
-	// separate views. Workspace state persists the leaf's view type across reload.
-	async togglePanelMode(leaf: WorkspaceLeaf): Promise<void> {
-		const next =
-			leaf.view.getViewType() === REVIEW_PANEL_VIEW_TYPE
-				? EDITORIALISM_PANEL_VIEW_TYPE
-				: REVIEW_PANEL_VIEW_TYPE;
-		await leaf.setViewState({ type: next, active: true });
-		await this.app.workspace.revealLeaf(leaf);
+	async openPendingEditsPanel(): Promise<void> {
+		await this.openEditorialistPanel(PENDING_EDITS_PANEL_VIEW_TYPE);
 	}
 
-	// Command entry point: toggle the existing panel's mode, or open the review
-	// panel when neither is present.
-	async toggleEditorialismMode(): Promise<void> {
-		const leaf =
-			this.app.workspace.getLeavesOfType(REVIEW_PANEL_VIEW_TYPE)[0] ??
-			this.app.workspace.getLeavesOfType(EDITORIALISM_PANEL_VIEW_TYPE)[0];
-		if (leaf) {
-			await this.togglePanelMode(leaf);
-		} else {
-			await this.openReviewPanel();
+	// The swatch mode switcher: a small menu of the three panel modes, the
+	// current one checked. Direct selection (no blind cycling) and it swaps the
+	// single Ed leaf in place. Each mode also has its own command.
+	showPanelModeMenu(event: MouseEvent, currentViewType: string): void {
+		const modes: Array<{ type: string; label: string; icon: string }> = [
+			{ type: REVIEW_PANEL_VIEW_TYPE, label: "Review", icon: "messages-square" },
+			{ type: PENDING_EDITS_PANEL_VIEW_TYPE, label: "Pending edits", icon: "clipboard-list" },
+			{ type: EDITORIALISM_PANEL_VIEW_TYPE, label: "Editorialisms", icon: "list-checks" },
+		];
+		const menu = new Menu();
+		for (const mode of modes) {
+			menu.addItem((item) => {
+				item
+					.setTitle(mode.label)
+					.setIcon(mode.icon)
+					.setChecked(mode.type === currentViewType)
+					.onClick(() => {
+						if (mode.type !== currentViewType) {
+							void this.openEditorialistPanel(mode.type);
+						}
+					});
+			});
 		}
+		menu.showAtMouseEvent(event);
 	}
 
 	// True when pasted launcher text carries a Format B editorialism file, so the

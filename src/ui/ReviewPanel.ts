@@ -21,7 +21,6 @@ import {
 	renderContinueReviewCard,
 	renderContributorsBlock,
 	renderIdleStateCard,
-	renderPendingEditsWorkspaceBlock,
 	renderRecentActivityBlock,
 	renderWorkflowsDisclosure,
 	type IdleSectionsHost,
@@ -138,11 +137,11 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		// editorialism view in place. Smaller than the action buttons.
 		const modeToggle = titleRow.createEl("button", {
 			cls: "editorialist-panel__mode-toggle",
-			attr: { "aria-label": "Switch to Editorialisms", type: "button" },
+			attr: { "aria-label": "Switch panel mode", type: "button" },
 		});
 		setIcon(modeToggle.createSpan({ cls: "editorialist-panel__settings-icon" }), "swatch-book");
-		this.bindImmediateAction(modeToggle, () => {
-			void this.plugin.togglePanelMode(this.leaf);
+		modeToggle.addEventListener("click", (event) => {
+			this.plugin.showPanelModeMenu(event, REVIEW_PANEL_VIEW_TYPE);
 		});
 
 		// Clean-batches header action: a single persistent control so cleanup is
@@ -281,13 +280,12 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 				this.renderUpNextPendingScenes(overview.pending, launchTarget?.notePath ?? null, Boolean(launchTarget));
 			}
 
-			// 2. Pending edits — a formal, expandable block (header + per-scene
-			// rows with an excerpt of the first item). Still surfaces the
-			// "Review N pending edit items…" action; only appears when there are
-			// actual pending edit segments.
+			// 2. Pending edits — the full browsable queue now lives in its own
+			// Pending mode; here we keep only a compact pointer so the count stays
+			// discoverable from review without duplicating the workflow.
 			const pendingSummary = this.plugin.getPendingEditsSummary();
 			if (pendingSummary && pendingSummary.segmentCount > 0) {
-				renderPendingEditsWorkspaceBlock(this, this.plugin, this.contentEl, pendingSummary);
+				this.renderPendingPointer(pendingSummary.segmentCount, pendingSummary.sceneCount);
 			}
 
 			// 3. Recent review sessions.
@@ -691,6 +689,26 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 				text: status === "resolved" ? "Resolved · marker removed" : "Dismissed",
 			});
 		}
+	}
+
+	// Compact review-mode pointer to the standalone Pending edits panel — keeps
+	// the count visible without re-rendering the full queue here.
+	private renderPendingPointer(segmentCount: number, sceneCount: number): void {
+		const itemNoun = segmentCount === 1 ? "item" : "items";
+		const sceneNoun = sceneCount === 1 ? "scene" : "scenes";
+		const pointer = this.contentEl.createDiv({
+			cls: "editorialist-panel__pending-pointer",
+			attr: { "aria-label": "Open the pending edits panel" },
+		});
+		setIcon(pointer.createSpan({ cls: "editorialist-panel__pending-pointer-icon" }), "clipboard-list");
+		pointer.createSpan({
+			cls: "editorialist-panel__pending-pointer-text",
+			text: `${segmentCount} pending edit ${itemNoun} across ${sceneCount} ${sceneNoun}`,
+		});
+		setIcon(pointer.createSpan({ cls: "editorialist-panel__pending-pointer-arrow" }), "chevron-right");
+		this.bindImmediateAction(pointer, () => {
+			void this.plugin.openPendingEditsPanel();
+		});
 	}
 
 	// Always-present pending-edits affordance during a batch. Scene-scoped when

@@ -5317,6 +5317,173 @@
 	padding: 0.85rem;
 }
 
+/* Pending edits panel */
+.editorialist-pending-panel {
+	padding: 0.85rem;
+}
+
+.editorialist-pending-panel__shell {
+	display: flex;
+	flex-direction: column;
+	gap: 0.85rem;
+}
+
+.editorialist-pending-panel__summary {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	padding: 0.7rem 0.8rem;
+	border: 1px solid color-mix(in srgb, var(--color-green) 30%, var(--background-modifier-border));
+	border-radius: var(--editorialist-radius-card);
+	background: color-mix(in srgb, var(--color-green) 7%, transparent);
+}
+
+.editorialist-pending-panel__summary-total {
+	color: var(--text-normal);
+	font-weight: 700;
+}
+
+.editorialist-pending-panel__review-all {
+	display: inline-flex;
+	align-items: center;
+	align-self: flex-start;
+	gap: 0.4rem;
+	padding: 0.35rem 0.7rem;
+	border: none;
+	border-radius: var(--editorialist-radius-card);
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-size: var(--font-ui-small);
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.editorialist-pending-panel__review-all:hover {
+	background: var(--interactive-accent-hover);
+}
+
+.editorialist-pending-panel__review-all-icon {
+	display: inline-flex;
+	align-items: center;
+}
+
+.editorialist-pending-panel__review-all-icon svg {
+	width: 0.9rem;
+	height: 0.9rem;
+}
+
+.editorialist-pending-panel__list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+
+.editorialist-pending-panel__row {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	padding: 0.55rem var(--editorialist-space-md);
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 70%, transparent);
+	border-radius: var(--editorialist-radius-card);
+	background: color-mix(in srgb, var(--background-secondary) 75%, var(--background-primary) 25%);
+	cursor: pointer;
+	transition: border-color var(--editorialist-transition-base) ease, transform var(--editorialist-transition-base) ease;
+}
+
+.editorialist-pending-panel__row:hover {
+	border-color: var(--interactive-accent);
+	transform: translateY(-1px);
+}
+
+.editorialist-pending-panel__row-head {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.editorialist-pending-panel__row-title {
+	flex: 1 1 auto;
+	min-width: 0;
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	font-weight: 600;
+}
+
+.editorialist-pending-panel__row-count {
+	flex: 0 0 auto;
+	padding: 0.05rem 0.4rem;
+	border-radius: var(--editorialist-radius-pill);
+	background: color-mix(in srgb, var(--color-green) 18%, transparent);
+	color: color-mix(in srgb, var(--color-green) 70%, var(--text-normal));
+	font-size: var(--font-ui-smaller);
+	font-weight: 700;
+}
+
+.editorialist-pending-panel__row-excerpt {
+	overflow: hidden;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.editorialist-pending-panel__empty {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	padding: 1rem 0.5rem;
+}
+
+.editorialist-pending-panel__empty-title {
+	color: var(--text-normal);
+	font-weight: 700;
+}
+
+.editorialist-pending-panel__empty-copy {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
+}
+
+/* Compact review-mode pointer to the Pending panel */
+.editorialist-panel__pending-pointer {
+	display: flex;
+	align-items: center;
+	gap: 0.45rem;
+	padding: 0.45rem var(--editorialist-space-md);
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 70%, transparent);
+	border-radius: var(--editorialist-radius-card);
+	background: color-mix(in srgb, var(--background-secondary) 70%, transparent);
+	cursor: pointer;
+}
+
+.editorialist-panel__pending-pointer:hover {
+	border-color: var(--interactive-accent);
+}
+
+.editorialist-panel__pending-pointer-icon {
+	display: inline-flex;
+	color: color-mix(in srgb, var(--color-green) 65%, var(--text-normal));
+}
+
+.editorialist-panel__pending-pointer-icon svg,
+.editorialist-panel__pending-pointer-arrow svg {
+	width: 0.9rem;
+	height: 0.9rem;
+}
+
+.editorialist-panel__pending-pointer-text {
+	flex: 1 1 auto;
+	min-width: 0;
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+}
+
+.editorialist-panel__pending-pointer-arrow {
+	display: inline-flex;
+	color: var(--text-muted);
+}
+
 .editorialist-editorialism-panel__shell {
 	display: flex;
 	flex-direction: column;
