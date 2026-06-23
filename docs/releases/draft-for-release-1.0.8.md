@@ -1,24 +1,49 @@
-## Summary
+## Editorialist 1.0.8
 
-Editorialist 1.0.8 brings the author-query workflow into the day-to-day review loop, folds Editorialisms into the main side panel, adds revision-effort estimates, and strengthens cleanup/recovery for imported review blocks. The wiki is current for this release, including new screenshots for the Editorialisms side-panel mode and right-click cut-file backup.
+This release makes Editorialist easier to use during an actual revision pass: questions can live beside the prose, structural Editorialisms sit in the main Ed panel, and cleanup is better at finding imported notes that were already written into scenes.
 
-## New features
+## What's new
 
-- Add author-query insertion from the editor, command palette, and right-click menu, with hidden `%%ai: ...%%` markers preserved for manual review handoff.
-- Add author-query Resolve/Dismiss handling so review passes can mark embedded author questions as handled.
-- Unify the review and Editorialisms surfaces under one Ed side panel, with a compact mode switch beside the `Editorialist` title.
-- Add revision-effort estimates for Editorialisms, backed by configurable drafting/editing assumptions.
-- Add panel and rescan commands for finding recoverable review blocks in active manuscript notes.
+### Ask questions in the manuscript
 
-## Major bugs fixed
+Mark an uncertainty exactly where it appears, then include it in the next review handoff.
 
-- Recover imported review blocks whose headers include `ImportedAt:` before `BatchId` / `ImportedBy`, so cleanup and rescan can see blocks created by the current import flow.
-- Heal orphaned review blocks and improve sweep status detection so completed or stale imports do not get stranded in scenes.
-- Center and tighten Editorialism status controls in the side panel.
+Example: highlight a paragraph and add `Should this flashback move earlier?` before sending the scene out for feedback. Later, Resolve or Dismiss the question when the issue is handled.
 
-## Documentation and screenshots
+### One Ed panel for edits and Editorialisms
 
-- Updated wiki guidance for Radial Timeline integration, manuscript folder scope, import matching, cut-file controls, and settings behavior.
-- Published the new release screenshots:
-  - ![Editorialisms panel mode](https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/panel-side-editorialisms.png)
-  - ![Right-click cut-file backup](https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/right-click-menu-cut.png)
+The side panel now switches between review work and Editorialisms without opening a second tool surface.
+
+Example: work through line edits, switch to the Editorialisms mode, then check whether the same scene also serves a larger structural note.
+
+### Revision-effort estimates
+
+Editorialisms now show a rough time estimate based on configurable drafting and editing assumptions.
+
+Example: a structural note that adds two scenes and twenty directives can show whether it is an evening of work or a multi-session revision.
+
+### Better recovery and cleanup
+
+New rescan and cleanup handling finds imported review blocks more reliably, including blocks with newer `ImportedAt:` metadata.
+
+Example: if a sweep looks finished but old review blocks are still sitting in scenes, rescan can recover them instead of leaving the manuscript in a half-clean state.
+
+### Faster cut-file backup
+
+The right-click menu now exposes the cut-file backup path directly.
+
+Example: save a selected paragraph to the scene's cut file before rewriting it, without accepting a formal review suggestion first.
+
+## Fixes
+
+- Imported blocks with `ImportedAt:` metadata are now detected correctly.
+- Orphaned review blocks are easier to recover and clean.
+- Editorialism status controls are tighter and better aligned in the panel.
+
+## Screenshots
+
+| Editorialisms mode | Right-click cut backup |
+|---|---|
+| <img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/release-1-0-8-editorialisms-preview.png" alt="Editorialisms mode in the Ed side panel" width="360"> | <img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/release-1-0-8-cut-menu-preview.png" alt="Right-click menu showing backup selection to cut file" width="360"> |
+
+The wiki has also been refreshed for Radial Timeline integration, manuscript folder scope, import matching, cut-file controls, and settings behavior.
