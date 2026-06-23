@@ -137,7 +137,7 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		// Mode switch: small toggle beside the title that swaps this leaf to the
 		// editorialism view in place. Smaller than the action buttons.
 		const modeToggle = titleRow.createEl("button", {
-			cls: "editorialist-panel__settings-button editorialist-panel__mode-toggle",
+			cls: "editorialist-panel__mode-toggle",
 			attr: { "aria-label": "Switch to Editorialisms", type: "button" },
 		});
 		setIcon(modeToggle.createSpan({ cls: "editorialist-panel__settings-icon" }), "swatch-book");

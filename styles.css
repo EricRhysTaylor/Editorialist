@@ -593,22 +593,35 @@
 	flex: 0 1 auto;
 }
 
-/* Mode switch: a smaller control beside the title. margin-left:0 keeps it next
-   to the title rather than joining the right-floated action cluster. */
+/* Mode switch: a small, chrome-free icon that sits immediately beside the title
+   (margin-left:0 keeps it out of the right-floated action cluster). Deliberately
+   NOT a full-size settings-button. */
 .editorialist-panel__mode-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.35rem;
+	height: 1.35rem;
 	margin-left: 0;
-	width: 1.7rem;
-	height: 1.7rem;
+	padding: 0;
+	border: none;
+	border-radius: var(--editorialist-radius-pill);
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-faint);
+	cursor: pointer;
 }
 
 .editorialist-panel__mode-toggle svg {
-	width: 0.9rem;
-	height: 0.9rem;
+	width: 0.95rem;
+	height: 0.95rem;
+	stroke-width: 1.9px;
 }
 
 .editorialist-panel__mode-toggle:hover,
 .editorialist-panel__mode-toggle:focus-visible {
-	color: color-mix(in srgb, var(--color-purple) 70%, var(--text-normal));
+	color: color-mix(in srgb, var(--color-purple) 75%, var(--text-normal));
+	background: color-mix(in srgb, var(--color-purple) 12%, transparent);
 	outline: none;
 }
 

@@ -129,7 +129,7 @@ export class EditorialismPanel extends ItemView {
 		titleRow.createEl("h2", { text: "Editorialisms" });
 
 		const modeToggle = titleRow.createEl("button", {
-			cls: "editorialist-panel__settings-button editorialist-panel__mode-toggle",
+			cls: "editorialist-panel__mode-toggle",
 			attr: { "aria-label": "Switch to review", type: "button" },
 		});
 		setIcon(modeToggle.createSpan({ cls: "editorialist-panel__settings-icon" }), "swatch-book");
