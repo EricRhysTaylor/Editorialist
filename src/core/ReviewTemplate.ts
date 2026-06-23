@@ -1,4 +1,5 @@
 import { REVIEW_BLOCK_FENCE } from "./ReviewBlockFormat";
+import { AUTHOR_QUERY_PATTERN } from "./AuthorQueryMarker";
 import { EDITORIALISM_TYPE_VALUE } from "../services/EditorialismService";
 import {
 	SUPPORTED_REVIEW_OPERATION_LABELS,
@@ -254,14 +255,6 @@ function buildSceneIdContextSection(context: ReviewTemplateContext): string | nu
 	);
 	return lines.join("\n");
 }
-
-// Hidden author queries: `%%ai: <question>%%` markers the author leaves inline
-// in the prose. Obsidian renders `%% … %%` as an invisible comment, so the
-// question never ships to a reader. The `ai:` prefix is required so ordinary
-// `%% note-to-self %%` comments and Editorialist's own `%% editorialist-cut … %%`
-// archive blocks are left untouched. Case-insensitive, tolerant of internal
-// whitespace and newlines, non-greedy to the closing `%%`.
-const AUTHOR_QUERY_PATTERN = /%%\s*ai\s*:\s*([\s\S]*?)%%/gi;
 
 const SECTION_BAR = "━".repeat(75);
 

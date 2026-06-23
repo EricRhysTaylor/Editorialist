@@ -17,8 +17,9 @@ import type {
 	ReviewSweepRegistryEntry,
 	ReviewSweepStatus,
 } from "../models/ReviewImport";
-import type { ReviewSession, ReviewSuggestion } from "../models/ReviewSuggestion";
+import type { AuthorQueryStatus, ReviewSession, ReviewSuggestion } from "../models/ReviewSuggestion";
 import type {
+	AuthorQueryDecisionRecord,
 	EditorialistPluginData,
 	EditorialistSettings,
 	PersistedReviewDecisionRecord,
@@ -30,11 +31,13 @@ import type { ContributorDirectory } from "../state/ContributorDirectory";
 import { ReviewerStatsProjector } from "./registry/ReviewerStatsProjector";
 import { ReviewDecisionIndex } from "./registry/ReviewDecisionIndex";
 import {
+	normalizeAuthorQueryDecisions,
 	normalizeReviewDecisionIndex,
 	normalizeReviewerSignalIndex,
 	normalizeSceneReviewIndex,
 	normalizeSweepRegistry,
 } from "./registry/ReviewRegistryNormalization";
+import { authorQueryKey } from "../core/AuthorQueryMarker";
 import { SweepRegistryManager } from "./registry/SweepRegistryManager";
 import { SceneInventoryBuilder } from "./registry/SceneInventoryBuilder";
 import { tallyReviewStatuses } from "../core/review/SweepCompletion";
@@ -82,6 +85,7 @@ export class ReviewRegistryService {
 		structured: false,
 	};
 	private reviewDecisionIndex: Record<string, PersistedReviewDecisionRecord> = {};
+	private authorQueryDecisions: Record<string, AuthorQueryDecisionRecord> = {};
 	private reviewerSignalIndex: Record<string, ReviewerSignalRecord> = {};
 	private sceneReviewIndex: Record<string, SceneReviewRecord> = {};
 	private sweepRegistry: Record<string, ReviewSweepRegistryEntry> = {};
@@ -128,6 +132,7 @@ export class ReviewRegistryService {
 
 	load(savedData: Partial<EditorialistPluginData> | null): void {
 		this.reviewDecisionIndex = normalizeReviewDecisionIndex(savedData?.reviewDecisionIndex);
+		this.authorQueryDecisions = normalizeAuthorQueryDecisions(savedData?.authorQueryDecisions);
 		this.reviewerSignalIndex = normalizeReviewerSignalIndex(savedData?.reviewerSignalIndex);
 		this.sceneReviewIndex = normalizeSceneReviewIndex(savedData?.sceneReviewIndex);
 		this.sweepRegistry = normalizeSweepRegistry(savedData?.sweepRegistry);
@@ -175,6 +180,7 @@ export class ReviewRegistryService {
 			reviewerProfiles,
 			reviewerSignalIndex: this.reviewerSignalIndex,
 			reviewDecisionIndex: this.reviewDecisionIndex,
+			authorQueryDecisions: this.authorQueryDecisions,
 			sceneReviewIndex: this.sceneReviewIndex,
 			sweepRegistry: this.sweepRegistry,
 			settings: { ...this.settings },
@@ -392,7 +398,39 @@ export class ReviewRegistryService {
 	}
 
 	applyPersistedReviewState(session: ReviewSession): ReviewSession {
-		return this.decisionIndex.applyTo(this.reviewDecisionIndex, session);
+		const hydrated = this.decisionIndex.applyTo(this.reviewDecisionIndex, session);
+		// Reconcile query-memo lifecycle from the separate authorQueryDecisions
+		// index. Plain memos are untouched; queries default to "open" when there
+		// is no stored decision. Every session-build path calls this method, so
+		// query status survives reload everywhere for free.
+		const memos = hydrated.memos.map((memo) => {
+			if (memo.kind !== "query" || !memo.question) {
+				return memo;
+			}
+			const record = this.authorQueryDecisions[authorQueryKey(hydrated.notePath, memo.question)];
+			const status: AuthorQueryStatus = record?.status ?? "open";
+			return { ...memo, status };
+		});
+		return { ...hydrated, memos };
+	}
+
+	// Persists a resolve/dismiss decision for a query memo. "open" is never
+	// stored — callers don't reopen in the current UI, but if they did, clearing
+	// the key would suffice. Idempotent: re-persisting the same status is a no-op.
+	async persistAuthorQueryDecision(
+		notePath: string,
+		question: string,
+		status: Exclude<AuthorQueryStatus, "open">,
+		options?: { persist?: boolean },
+	): Promise<void> {
+		const key = authorQueryKey(notePath, question);
+		if (this.authorQueryDecisions[key]?.status === status) {
+			return;
+		}
+		this.authorQueryDecisions[key] = { key, status, updatedAt: Date.now() };
+		if (options?.persist !== false) {
+			await this.persistData();
+		}
 	}
 
 	async persistReviewDecision(

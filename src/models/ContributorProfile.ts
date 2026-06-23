@@ -123,11 +123,23 @@ export interface EditorialistSettings {
 	bookFolderOverride: string;
 }
 
+// A resolved/dismissed decision on a query memo (kind:"query"). Keyed by
+// note path + question (see authorQueryKey). "open" is never stored — absence
+// of a record means open. Separate from reviewDecisionIndex because queries
+// have no operation/contributor signature to key on, and the suggestion index
+// is guarded by invariants that require every key to resolve to a suggestion.
+export interface AuthorQueryDecisionRecord {
+	key: string;
+	status: "resolved" | "dismissed";
+	updatedAt: number;
+}
+
 export interface EditorialistPluginData {
 	version: number;
 	reviewerProfiles: ContributorProfile[];
 	reviewerSignalIndex: Record<string, ReviewerSignalRecord>;
 	reviewDecisionIndex: Record<string, PersistedReviewDecisionRecord>;
+	authorQueryDecisions: Record<string, AuthorQueryDecisionRecord>;
 	sceneReviewIndex: Record<string, SceneReviewRecord>;
 	sweepRegistry: Record<string, ReviewSweepRegistryEntry>;
 	settings: EditorialistSettings;

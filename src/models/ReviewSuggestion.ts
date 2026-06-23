@@ -19,6 +19,12 @@ export const SUPPORTED_REVIEW_OPERATION_LABELS: Record<SupportedReviewOperationT
 
 export type ReviewStatus = "pending" | "accepted" | "rejected" | "deferred" | "unresolved" | "rewritten";
 
+// Lifecycle for a query memo (kind:"query"). "open" is the implicit default
+// (no persisted decision). "resolved" also strips the %%ai:…%% marker from the
+// scene note; "dismissed" leaves the note untouched. Persisted in data.json's
+// authorQueryDecisions index, reconciled onto the parsed memo at session build.
+export type AuthorQueryStatus = "open" | "resolved" | "dismissed";
+
 export type MatchType = "exact" | "multiple" | "none" | "already_applied";
 
 export type ReviewPlacement = "before" | "after";
@@ -161,6 +167,9 @@ export interface SceneMemo {
 	question?: string;
 	answer?: string;
 	recommendation?: string;
+	// Query lifecycle (kind:"query" only); undefined on plain memos and treated
+	// as "open". Reconciled from the persisted authorQueryDecisions index.
+	status?: AuthorQueryStatus;
 }
 
 export interface ReviewSession {

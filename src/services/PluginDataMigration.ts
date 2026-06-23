@@ -15,6 +15,7 @@
 // continues to handle within-version field-level legacy values.
 
 import type {
+	AuthorQueryDecisionRecord,
 	ContributorProfile,
 	EditorialistPluginData,
 	EditorialistSettings,
@@ -24,6 +25,7 @@ import type {
 } from "../models/ContributorProfile";
 import type { ReviewSweepRegistryEntry } from "../models/ReviewImport";
 import {
+	normalizeAuthorQueryDecisions,
 	normalizeReviewDecisionIndex,
 	normalizeReviewerSignalIndex,
 	normalizeSceneReviewIndex,
@@ -76,6 +78,7 @@ export function emptyPluginData(): EditorialistPluginData {
 		reviewerProfiles: [],
 		reviewerSignalIndex: {},
 		reviewDecisionIndex: {},
+		authorQueryDecisions: {},
 		sceneReviewIndex: {},
 		sweepRegistry: {},
 		settings: defaultEditorialistSettings(),
@@ -130,6 +133,11 @@ function normalizeIntoCurrent(raw: Record<string, unknown>): EditorialistPluginD
 		reviewDecisionIndex: normalizeReviewDecisionIndex(
 			pickObject(raw.reviewDecisionIndex) as
 				| Partial<Record<string, Partial<PersistedReviewDecisionRecord> & { status?: PersistedReviewDecisionRecord["status"] | "later" }>>
+				| undefined,
+		),
+		authorQueryDecisions: normalizeAuthorQueryDecisions(
+			pickObject(raw.authorQueryDecisions) as
+				| Partial<Record<string, Partial<AuthorQueryDecisionRecord>>>
 				| undefined,
 		),
 		sceneReviewIndex: normalizeSceneReviewIndex(

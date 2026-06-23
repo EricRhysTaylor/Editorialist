@@ -1,4 +1,4 @@
-import type { ReviewSession, ReviewSuggestion, ReviewStatus } from "../models/ReviewSuggestion";
+import type { AuthorQueryStatus, ReviewSession, ReviewSuggestion, ReviewStatus } from "../models/ReviewSuggestion";
 
 export interface GuidedSweepState {
 	batchId: string;
@@ -322,6 +322,20 @@ export class ReviewStore {
 					: suggestion,
 			),
 		);
+	}
+
+	updateMemoStatus(id: string, status: AuthorQueryStatus): void {
+		if (!this.state.session) {
+			return;
+		}
+		const memos = this.state.session.memos.map((memo) =>
+			memo.id === id ? { ...memo, status } : memo,
+		);
+		this.state = {
+			...this.state,
+			session: { ...this.state.session, memos },
+		};
+		this.emit();
 	}
 
 	batch(fn: () => void): void {

@@ -165,6 +165,7 @@ describe("migratePluginData", () => {
 		const out = migratePluginData({}, makeRecorder());
 		expect(Object.keys(out).sort()).toEqual(
 			[
+				"authorQueryDecisions",
 				"reviewDecisionIndex",
 				"reviewerProfiles",
 				"reviewerSignalIndex",

@@ -62,6 +62,7 @@ import { openContributorReassignmentModal, type ContributorReassignmentMode } fr
 import { openContributorStrengthsModal } from "./ui/ContributorStrengthsModal";
 import { EDITORIALISM_PANEL_VIEW_TYPE, EditorialismPanel } from "./ui/EditorialismPanel";
 import { AuthorQueryModal } from "./ui/modals/AuthorQueryModal";
+import { buildAuthorQueryMarkerPattern } from "./core/AuthorQueryMarker";
 import { REVIEW_PANEL_VIEW_TYPE, ReviewPanel } from "./ui/ReviewPanel";
 import { selectPanelPrimarySuggestionId } from "./ui/viewmodels/ReviewPanelViewModel";
 import { normalizeMatchText } from "./core/TextMatching";
@@ -1097,6 +1098,43 @@ export default class EditorialistPlugin extends Plugin {
 			"Author query copied — paste it into the scene.",
 			"Could not copy the author query.",
 		);
+	}
+
+	// Mark an answered query resolved: persist the decision and strip the
+	// matching %%ai:…%% marker from the scene note so it is not re-asked on the
+	// next export/review.
+	async resolveAuthorQuery(id: string): Promise<void> {
+		await this.applyAuthorQueryDecision(id, "resolved");
+	}
+
+	// Dismiss a query: persist the decision but leave the note untouched — the
+	// author chose not to act, and the marker stays for a later pass.
+	async dismissAuthorQuery(id: string): Promise<void> {
+		await this.applyAuthorQueryDecision(id, "dismissed");
+	}
+
+	private async applyAuthorQueryDecision(id: string, status: "resolved" | "dismissed"): Promise<void> {
+		const session = this.getReviewSession();
+		const memo = session?.memos.find((entry) => entry.id === id && entry.kind === "query");
+		if (!session || !memo || !memo.question) {
+			return;
+		}
+
+		if (status === "resolved") {
+			await this.stripAuthorQueryMarker(session.notePath, memo.question);
+		}
+
+		await this.registry.persistAuthorQueryDecision(session.notePath, memo.question, status);
+		this.store.updateMemoStatus(id, status);
+	}
+
+	private async stripAuthorQueryMarker(notePath: string, question: string): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(notePath);
+		if (!(file instanceof TFile)) {
+			return;
+		}
+		const pattern = buildAuthorQueryMarkerPattern(question);
+		await this.app.vault.process(file, (text) => text.replace(pattern, ""));
 	}
 
 	private resolveCutBackupSource(preferDisplayedSuggestion: boolean): CutBackupSource | null {

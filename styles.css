@@ -1746,6 +1746,32 @@
 	resize: vertical;
 }
 
+.editorialist-panel__comment-entry--query-resolved,
+.editorialist-panel__comment-entry--query-dismissed {
+	opacity: 0.6;
+}
+
+.editorialist-panel__comment-entry--query-resolved {
+	border-left-color: color-mix(in srgb, var(--color-green) 50%, transparent);
+}
+
+.editorialist-panel__comment-entry--query-dismissed {
+	border-left-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+}
+
+.editorialist-panel__comment-entry-actions {
+	display: flex;
+	gap: 0.4rem;
+	margin-top: 0.4rem;
+}
+
+.editorialist-panel__comment-entry-status {
+	margin-top: 0.4rem;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+}
+
 .editorialist-panel__comment-entry-block-text {
 	font-family: var(--font-text);
 	font-size: var(--font-ui-small);

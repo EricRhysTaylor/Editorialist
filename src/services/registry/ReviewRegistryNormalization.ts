@@ -12,6 +12,7 @@
 // blobs, load->build->load round-trip) plus direct tests here.
 
 import type {
+	AuthorQueryDecisionRecord,
 	PersistedReviewDecisionRecord,
 	ReviewerSignalRecord,
 	SceneReviewRecord,
@@ -53,6 +54,30 @@ export function normalizeReviewDecisionIndex(
 			];
 		}),
 	);
+}
+
+// Author-query decisions: only "resolved" / "dismissed" are ever stored, so any
+// unrecognized status is dropped (the record is skipped → query stays open).
+export function normalizeAuthorQueryDecisions(
+	index: Partial<Record<string, Partial<AuthorQueryDecisionRecord>>> | undefined,
+): Record<string, AuthorQueryDecisionRecord> {
+	if (!index || typeof index !== "object") {
+		return {};
+	}
+
+	const result: Record<string, AuthorQueryDecisionRecord> = {};
+	for (const [key, record] of Object.entries(index)) {
+		const status = record?.status;
+		if (status !== "resolved" && status !== "dismissed") {
+			continue;
+		}
+		result[key] = {
+			key,
+			status,
+			updatedAt: record?.updatedAt ?? Date.now(),
+		};
+	}
+	return result;
 }
 
 // Reviewer signals carry no legacy enum; the original load() kept the saved

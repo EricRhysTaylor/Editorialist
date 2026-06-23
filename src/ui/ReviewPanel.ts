@@ -558,10 +558,13 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 		});
 
 		// Author queries pin above passive memos: they carry an answer the author
-		// asked for, so they lead the card.
+		// asked for, so they lead the card. Open queries lead; resolved/dismissed
+		// ones sink below them but stay above plain memos as an audit trail.
 		const queries = memos.filter((memo) => memo.kind === "query");
+		const openQueries = queries.filter((memo) => (memo.status ?? "open") === "open");
+		const closedQueries = queries.filter((memo) => (memo.status ?? "open") !== "open");
 		const plainMemos = memos.filter((memo) => memo.kind !== "query");
-		const ordered = [...queries, ...plainMemos];
+		const ordered = [...openQueries, ...closedQueries, ...plainMemos];
 
 		const header = card.createDiv({ cls: "editorialist-panel__comments-header" });
 		const titleIcon = header.createSpan({ cls: "editorialist-panel__comments-title-icon" });
@@ -617,8 +620,9 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 	}
 
 	private renderQueryEntry(parent: HTMLElement, memo: SceneMemo): void {
+		const status = memo.status ?? "open";
 		const entry = parent.createDiv({
-			cls: "editorialist-panel__comment-entry editorialist-panel__comment-entry--query",
+			cls: `editorialist-panel__comment-entry editorialist-panel__comment-entry--query${status === "open" ? "" : ` editorialist-panel__comment-entry--query-${status}`}`,
 		});
 
 		const header = entry.createDiv({ cls: "editorialist-panel__comment-entry-header" });
@@ -656,6 +660,25 @@ export class ReviewPanel extends ItemView implements IdleSectionsHost {
 				text: "Recommendation",
 			});
 			block.createDiv({ cls: "editorialist-panel__comment-entry-block-text", text: memo.recommendation });
+		}
+
+		if (status === "open") {
+			const actions = entry.createDiv({ cls: "editorialist-panel__comment-entry-actions" });
+			const resolve = new ButtonComponent(actions).setButtonText("Resolve").setCta();
+			resolve.buttonEl.setAttribute("aria-label", "Resolve — removes the %%ai:…%% marker from the scene");
+			this.bindImmediateAction(resolve.buttonEl, () => {
+				void this.plugin.resolveAuthorQuery(memo.id);
+			});
+			const dismiss = new ButtonComponent(actions).setButtonText("Dismiss");
+			dismiss.buttonEl.setAttribute("aria-label", "Dismiss — keeps the marker, no change to the scene");
+			this.bindImmediateAction(dismiss.buttonEl, () => {
+				void this.plugin.dismissAuthorQuery(memo.id);
+			});
+		} else {
+			entry.createDiv({
+				cls: "editorialist-panel__comment-entry-status",
+				text: status === "resolved" ? "Resolved · marker removed" : "Dismissed",
+			});
 		}
 	}
 

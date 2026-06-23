@@ -8,11 +8,36 @@
 
 import { describe, it, expect } from "vitest";
 import {
+	normalizeAuthorQueryDecisions,
 	normalizeReviewDecisionIndex,
 	normalizeReviewerSignalIndex,
 	normalizeSceneReviewIndex,
 	normalizeSweepRegistry,
 } from "./ReviewRegistryNormalization";
+
+describe("normalizeAuthorQueryDecisions", () => {
+	it("keeps resolved/dismissed records and stamps the key", () => {
+		const out = normalizeAuthorQueryDecisions({
+			"a.md::Q1": { status: "resolved", updatedAt: 5 },
+			"a.md::Q2": { status: "dismissed", updatedAt: 9 },
+		});
+		expect(out["a.md::Q1"]).toEqual({ key: "a.md::Q1", status: "resolved", updatedAt: 5 });
+		expect(out["a.md::Q2"]?.status).toBe("dismissed");
+	});
+
+	it("drops records with an unrecognized or open status", () => {
+		const out = normalizeAuthorQueryDecisions({
+			open: { status: "open" as unknown as "resolved" },
+			junk: { status: "whatever" as unknown as "resolved" },
+		});
+		expect(Object.keys(out)).toHaveLength(0);
+	});
+
+	it("returns {} for null/garbage input", () => {
+		expect(normalizeAuthorQueryDecisions(undefined)).toEqual({});
+		expect(normalizeAuthorQueryDecisions(null as unknown as undefined)).toEqual({});
+	});
+});
 
 describe("normalizeReviewDecisionIndex", () => {
 	it("coerces legacy 'later' -> 'deferred' and stamps the key", () => {
