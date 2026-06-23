@@ -148,7 +148,10 @@ describe("SceneInventoryBuilder.buildFullInventory", () => {
 		};
 		const b = new SceneInventoryBuilder(
 			makeDeps({
-				getMarkdownFiles: () => [],
+				// gone.md IS scanned this round but carries no block any more, so it
+				// is genuinely retired (the move-between-scenes case).
+				getMarkdownFiles: () => [file("gone.md")],
+				resolveNoteText: async () => "",
 				getSceneReviewIndex: () => ({ "gone.md": prior }),
 			}),
 		);
@@ -160,6 +163,38 @@ describe("SceneInventoryBuilder.buildFullInventory", () => {
 			cleanedAt: FIXED_NOW,
 			lastUpdated: FIXED_NOW,
 		});
+	});
+
+	it("preserves a record whose scene fell outside the scan scope (not retired)", async () => {
+		// Regression: a scope-limited scan must NOT retire scenes it didn't look
+		// at. Retiring out-of-scope scenes wiped tracking on book switches and
+		// orphaned live review blocks so the clean button could never detect them.
+		const prior: SceneReviewRecord = {
+			sceneId: "S1",
+			notePath: "other-book/scene.md",
+			noteTitle: "scene",
+			batchIds: ["b1"],
+			batchCount: 1,
+			pendingCount: 0,
+			unresolvedCount: 0,
+			deferredCount: 0,
+			acceptedCount: 3,
+			rejectedCount: 0,
+			rewrittenCount: 0,
+			status: "completed",
+			lastUpdated: 1,
+		};
+		const b = new SceneInventoryBuilder(
+			makeDeps({
+				// Active scope only includes a different note — the prior scene is
+				// out of scope and never scanned.
+				getMarkdownFiles: () => [file("in-scope.md")],
+				resolveNoteText: async () => "",
+				getSceneReviewIndex: () => ({ "other-book/scene.md": prior }),
+			}),
+		);
+		const { nextIndex } = await b.buildFullInventory();
+		expect(nextIndex["other-book/scene.md"]).toEqual(prior);
 	});
 
 	it("preserves an already-cleaned record's original cleanedAt", async () => {

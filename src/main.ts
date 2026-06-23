@@ -556,6 +556,26 @@ export default class EditorialistPlugin extends Plugin {
 		await this.app.workspace.revealLeaf(leaf);
 		this.refreshReviewPanel();
 		void this.pendingEdits.refreshPendingEditsSummary({ force: true });
+		// Reconcile the sweep registry against the review blocks actually on disk
+		// before the user reaches for the clean button. This heals stale/orphaned
+		// tracking — e.g. a batch whose scenes fell out of scope during a book
+		// switch, which retires the registry record while the block stays in the
+		// note — so a physically-present block becomes cleanable again.
+		void this.registry.syncSceneInventory().then(() => this.refreshReviewPanel());
+	}
+
+	// Manual recovery lever: re-derive cleanup state from the review blocks on
+	// disk. Surfaces batches whose blocks are present but whose registry tracking
+	// went stale (so the clean button can act on them) and reports the result.
+	async rescanReviewBlocks(): Promise<void> {
+		await this.registry.syncSceneInventory();
+		this.refreshReviewPanel();
+		const count = this.getCleanableBatchIds().length;
+		new Notice(
+			count > 0
+				? `Rescanned review blocks — ${count} batch${count === 1 ? "" : "es"} ready to clean.`
+				: "Rescanned review blocks — nothing ready to clean.",
+		);
 	}
 
 	isReviewPanelOpen(): boolean {

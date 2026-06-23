@@ -95,8 +95,15 @@ export class SceneInventoryBuilder {
 		const nextIndex: Record<string, SceneReviewRecord> = {};
 		const batchPresence = new Map<string, Set<string>>();
 		const now = this.now();
+		// Every path actually visited this round (the scan is scope-limited). A
+		// record is only retired when its scene was scanned and found block-free —
+		// not when the scene simply fell outside the current scope. Retiring
+		// out-of-scope scenes wiped tracking on book switches and orphaned live
+		// review blocks (present in the note, invisible to cleanup).
+		const scannedPaths = new Set<string>();
 
 		for (const file of this.deps.getMarkdownFiles()) {
+			scannedPaths.add(file.path);
 			const noteText = await this.deps.resolveNoteText(file);
 			const importedBlocks = findImportedReviewBlocks(noteText);
 			if (importedBlocks.length === 0) {
@@ -126,6 +133,13 @@ export class SceneInventoryBuilder {
 			// scene, then yanked into the right one) and would leave the review panel
 			// permanently stuck on the abandoned scene.
 			if (nextIndex[existing.notePath]) {
+				continue;
+			}
+
+			// Scene outside this scan's scope — preserve its record untouched. Its
+			// block may still be on disk; we just didn't look at it this round.
+			if (!scannedPaths.has(existing.notePath)) {
+				nextIndex[existing.notePath] = existing;
 				continue;
 			}
 
