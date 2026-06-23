@@ -62,7 +62,8 @@ export class EditorialismPanel extends ItemView {
 	}
 
 	getIcon(): string {
-		return "list-checks";
+		// The Ed logo, same as the review view — one panel, one identity.
+		return EDITORIALIST_ICON_ID;
 	}
 
 	async onOpen(): Promise<void> {

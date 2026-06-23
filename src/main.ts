@@ -384,11 +384,11 @@ export default class EditorialistPlugin extends Plugin {
 		this.registerView(REVIEW_PANEL_VIEW_TYPE, (leaf) => new ReviewPanel(leaf, this));
 		this.registerView(EDITORIALISM_PANEL_VIEW_TYPE, (leaf) => new EditorialismPanel(leaf, this));
 		this.addSettingTab(new EditorialistSettingTab(this.app, this));
-		this.addRibbonIcon(EDITORIALIST_ICON_ID, "Open review panel", () => {
+		// One ribbon for the single Ed panel. Editorialism mode is reached by the
+		// in-panel swatch toggle or the "Toggle editorialism mode" command — no
+		// second icon, no second tab.
+		this.addRibbonIcon(EDITORIALIST_ICON_ID, "Open panel", () => {
 			void this.openReviewPanel();
-		});
-		this.addRibbonIcon("list-checks", "Open Editorialism panel", () => {
-			void this.openEditorialismPanel();
 		});
 		registerCommands(this);
 		this.registerDomEvent(window, "resize", () => {
@@ -544,23 +544,36 @@ export default class EditorialistPlugin extends Plugin {
 		}).open();
 	}
 
-	async openReviewPanel(): Promise<void> {
-		const existingLeaves = this.app.workspace.getLeavesOfType(REVIEW_PANEL_VIEW_TYPE);
-		const [primaryLeaf, ...duplicateLeaves] = existingLeaves;
-		for (const duplicateLeaf of duplicateLeaves) {
-			duplicateLeaf.detach();
+	// The Ed panel is a single leaf that holds EITHER the review or the
+	// editorialism view. Open/reveal reuses any existing Ed leaf (either type)
+	// and detaches stray duplicates, so opening or toggling never spawns a
+	// second tab. Returns the leaf, or null when no sidebar slot is available.
+	private async openEditorialistPanel(viewType: string): Promise<WorkspaceLeaf | null> {
+		const existing = [
+			...this.app.workspace.getLeavesOfType(REVIEW_PANEL_VIEW_TYPE),
+			...this.app.workspace.getLeavesOfType(EDITORIALISM_PANEL_VIEW_TYPE),
+		];
+		const [primary, ...duplicates] = existing;
+		for (const duplicate of duplicates) {
+			duplicate.detach();
 		}
 
-		const leaf = primaryLeaf ?? this.app.workspace.getRightLeaf(false);
+		const leaf = primary ?? this.app.workspace.getRightLeaf(false);
+		if (!leaf) {
+			return null;
+		}
+		if (leaf.view.getViewType() !== viewType) {
+			await leaf.setViewState({ type: viewType, active: false });
+		}
+		await this.app.workspace.revealLeaf(leaf);
+		return leaf;
+	}
+
+	async openReviewPanel(): Promise<void> {
+		const leaf = await this.openEditorialistPanel(REVIEW_PANEL_VIEW_TYPE);
 		if (!leaf) {
 			return;
 		}
-
-		await leaf.setViewState({
-			type: REVIEW_PANEL_VIEW_TYPE,
-			active: false,
-		});
-		await this.app.workspace.revealLeaf(leaf);
 		this.refreshReviewPanel();
 		void this.pendingEdits.refreshPendingEditsSummary({ force: true });
 		// Reconcile the sweep registry against the review blocks actually on disk
@@ -590,20 +603,7 @@ export default class EditorialistPlugin extends Plugin {
 	}
 
 	async openEditorialismPanel(): Promise<void> {
-		const existing = this.app.workspace.getLeavesOfType(EDITORIALISM_PANEL_VIEW_TYPE);
-		const [primary, ...duplicates] = existing;
-		for (const duplicate of duplicates) {
-			duplicate.detach();
-		}
-		const leaf = primary ?? this.app.workspace.getRightLeaf(false);
-		if (!leaf) {
-			return;
-		}
-		await leaf.setViewState({
-			type: EDITORIALISM_PANEL_VIEW_TYPE,
-			active: true,
-		});
-		await this.app.workspace.revealLeaf(leaf);
+		await this.openEditorialistPanel(EDITORIALISM_PANEL_VIEW_TYPE);
 	}
 
 	getEditorialismFolder(): string {
