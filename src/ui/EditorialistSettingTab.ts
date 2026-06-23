@@ -401,7 +401,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		const body = this.createSection(
 			parent,
 			"Revision effort estimate",
-			"Tune how editorialism mode estimates revision time. Drafting rate is creative words per hour, not typing speed — fiction first drafts run far slower than transcription.",
+			"Tune how editorialism mode estimates revision time. Drafting rate is words per hour of original drafting — composing new prose, which runs slower than editing or revising existing content.",
 			"clock",
 		);
 
@@ -414,10 +414,11 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		];
 
 		for (const field of fields) {
-			const row = body.createDiv({ cls: "editorialist-settings__cut-row" });
-			row.createDiv({ cls: "editorialist-settings__cut-label", text: field.label });
+			const row = body.createDiv({ cls: "editorialist-settings__effort-row" });
+			row.createSpan({ cls: "editorialist-settings__effort-label", text: field.label });
+			row.createSpan({ cls: "editorialist-settings__effort-leader" });
 			const input = row.createEl("input", {
-				cls: "editorialist-settings__cut-input",
+				cls: "editorialist-settings__effort-input",
 				attr: { type: "number", min: "1", step: "1", inputmode: "numeric" },
 			});
 			input.value = String(effort[field.key]);
