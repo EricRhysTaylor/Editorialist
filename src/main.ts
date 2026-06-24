@@ -616,7 +616,7 @@ export default class EditorialistPlugin extends Plugin {
 
 	// Context for highlighting editorialism items that relate to the scene the
 	// author is working on now: the scene number (from the file name) plus
-	// character/subplot/action-description tokens (for arc matching). Falls back
+	// character/subplot/action-description tokens (for subplot matching). Falls back
 	// to the last scene the author had open when focus is on a side panel. Null
 	// when no scene is in view.
 	getSceneRelevanceContext(): SceneRelevanceContext | null {

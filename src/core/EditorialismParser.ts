@@ -51,9 +51,11 @@ export function parseScope(raw: string): EditorialismItemScope {
 	if (lower === "manuscript" || lower === "mss" || lower === "book") {
 		return { kind: "manuscript", raw: trimmed };
 	}
-	if (lower.startsWith("arc:")) {
-		const arcName = trimmed.slice(4).trim();
-		return { kind: "arc", arcName, raw: trimmed };
+	// `subplot:` is the term (matches Radial Timeline). `arc:` is kept as a
+	// legacy alias so editorialisms written before the rename still parse.
+	if (lower.startsWith("subplot:") || lower.startsWith("arc:")) {
+		const subplotName = trimmed.slice(trimmed.indexOf(":") + 1).trim();
+		return { kind: "subplot", subplotName, raw: trimmed };
 	}
 	const rangeMatch = trimmed.match(SCOPE_RANGE_PATTERN);
 	if (rangeMatch) {

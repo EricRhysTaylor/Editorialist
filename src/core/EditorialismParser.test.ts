@@ -44,11 +44,19 @@ describe("parseScope", () => {
 		}
 	});
 
-	it("parses arc scope and trims the arc name", () => {
-		expect(parseScope("arc:  Redemption ")).toEqual({
-			kind: "arc",
-			arcName: "Redemption",
-			raw: "arc:  Redemption",
+	it("parses subplot scope and trims the subplot name", () => {
+		expect(parseScope("subplot:  Redemption ")).toEqual({
+			kind: "subplot",
+			subplotName: "Redemption",
+			raw: "subplot:  Redemption",
+		});
+	});
+
+	it("parses the legacy arc: prefix as a subplot scope", () => {
+		expect(parseScope("arc: Cesena thread")).toEqual({
+			kind: "subplot",
+			subplotName: "Cesena thread",
+			raw: "arc: Cesena thread",
 		});
 	});
 

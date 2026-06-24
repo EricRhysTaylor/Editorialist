@@ -1,4 +1,4 @@
-// Editorialism — a manuscript-level / arc-level editorial agenda.
+// Editorialism — a manuscript-level / subplot-level editorial agenda.
 // Lives as a markdown file under `Editorialist/<Book>/<Title>.md`.
 // The author's source of truth is the markdown; Editorialist parses + renders.
 
@@ -9,14 +9,14 @@ export type EditorialismItemStatus =
 	| "deferred"
 	| "question";
 
-export type EditorialismScopeKind = "manuscript" | "scene" | "range" | "arc" | "unknown";
+export type EditorialismScopeKind = "manuscript" | "scene" | "range" | "subplot" | "unknown";
 
 export interface EditorialismItemScope {
 	kind: EditorialismScopeKind;
 	scene?: string;
 	start?: string;
 	end?: string;
-	arcName?: string;
+	subplotName?: string;
 	raw: string;
 }
 

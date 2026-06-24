@@ -1,8 +1,8 @@
 // Decides whether an editorialism directive "relates to" the scene the author
 // is currently working on, so the panel can mark those items — a geolocation
-// hint for a long agenda. Scene/range matches are exact (numeric); arc matches
-// are a heuristic token overlap between the arc name and the current scene's
-// character names + subplot/action-description tokens. Manuscript/unknown
+// hint for a long agenda. Scene/range matches are exact (numeric); subplot
+// matches are a heuristic token overlap between the subplot name and the current
+// scene's character names + subplot/action-description tokens. Manuscript/unknown
 // scopes never match (they apply everywhere, so they don't help locate).
 
 import type { EditorialismItemScope } from "../models/Editorialism";
@@ -13,7 +13,7 @@ export interface SceneRelevanceContext {
 	// the active file isn't number-prefixed.
 	sceneNumber: number | null;
 	// Lowercased word tokens (length ≥ 3) from the scene's Character + Subplot
-	// + action-description frontmatter, for arc matching.
+	// + action-description frontmatter, for subplot matching.
 	tokens: ReadonlySet<string>;
 }
 
@@ -69,11 +69,11 @@ export function scopeRelatesToScene(
 			}
 			return context.sceneNumber >= Math.min(start, end) && context.sceneNumber <= Math.max(start, end);
 		}
-		case "arc": {
-			if (!scope.arcName) {
+		case "subplot": {
+			if (!scope.subplotName) {
 				return false;
 			}
-			for (const token of buildSceneTokens([scope.arcName])) {
+			for (const token of buildSceneTokens([scope.subplotName])) {
 				if (context.tokens.has(token)) {
 					return true;
 				}

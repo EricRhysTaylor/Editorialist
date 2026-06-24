@@ -47,9 +47,9 @@ describe("scopeRelatesToScene", () => {
 		expect(scopeRelatesToScene(scope({ kind: "range", start: "10", end: "20" }), ctx())).toBe(false);
 	});
 
-	it("matches an arc whose name overlaps the scene's character/subplot tokens", () => {
-		expect(scopeRelatesToScene(scope({ kind: "arc", arcName: "Cesena thread" }), ctx())).toBe(true);
-		expect(scopeRelatesToScene(scope({ kind: "arc", arcName: "Wala margin" }), ctx())).toBe(false);
+	it("matches a subplot whose name overlaps the scene's character/subplot tokens", () => {
+		expect(scopeRelatesToScene(scope({ kind: "subplot", subplotName: "Cesena thread" }), ctx())).toBe(true);
+		expect(scopeRelatesToScene(scope({ kind: "subplot", subplotName: "Wala margin" }), ctx())).toBe(false);
 	});
 
 	it("never matches manuscript or unknown scopes", () => {

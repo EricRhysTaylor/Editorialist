@@ -174,7 +174,7 @@ export const EDITORIALISM_FILE_TEMPLATE = [
 	"- [ ] Single-scene directive [scope:: 22]",
 	"- [ ] Scene-range directive [scope:: 13–22]",
 	"- [ ] Manuscript-wide design directive [scope:: manuscript]",
-	"- [ ] Arc-level work [scope:: arc:Shail IT subplot]",
+	"- [ ] Subplot-level work [scope:: subplot:Shail IT subplot]",
 ].join("\n");
 
 const EDITORIALISM_TEMPLATE_GUIDANCE = [
@@ -204,7 +204,7 @@ const EDITORIALISM_TEMPLATE_GUIDANCE = [
 	"    `manuscript`         — applies to the whole book",
 	"    `<scene-num>`        — single scene (e.g. `22`)",
 	"    `<start>–<end>`      — scene range (en-dash or hyphen, e.g. `13–22` or `13-22`)",
-	"    `arc:<name>`         — named arc spanning multiple scenes",
+	"    `subplot:<name>`     — named subplot spanning multiple scenes",
 	"- `[tags:: tag1, tag2]` (optional) — comma- or space-separated.",
 	"- `[scenes:: <n>]` / `[words:: <n>]` (optional) — when a directive implies NEW",
 	"    prose, declare how many new scenes or roughly how many words. Editorialist's",

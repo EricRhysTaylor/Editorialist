@@ -44,7 +44,7 @@ export const DEFAULT_EFFORT_PARAMS: EffortParams = {
 	// Realistic first-draft fiction rate, not transcription. Configurable.
 	draftRateWordsPerHour: 750,
 	minutesPerDirective: 12,
-	scopeWeight: { scene: 1, range: 1, arc: 3, manuscript: 4, unknown: 1 },
+	scopeWeight: { scene: 1, range: 1, subplot: 3, manuscript: 4, unknown: 1 },
 	tierWeight: { light: 0.5, medium: 1, heavy: 2.5 },
 	dailyWritingHours: 2,
 };

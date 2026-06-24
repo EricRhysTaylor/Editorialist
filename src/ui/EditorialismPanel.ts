@@ -400,8 +400,8 @@ export class EditorialismPanel extends ItemView {
 				return `Scene ${scope.scene}`;
 			case "range":
 				return `Scenes ${scope.start}–${scope.end}`;
-			case "arc":
-				return scope.arcName ? `Arc: ${scope.arcName}` : "Arc";
+			case "subplot":
+				return scope.subplotName ? `Subplot: ${scope.subplotName}` : "Subplot";
 			default:
 				return scope.raw;
 		}
