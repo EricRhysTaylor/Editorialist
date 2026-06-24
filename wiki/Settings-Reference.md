@@ -10,7 +10,7 @@ Editorialist's settings are organized into three tabs: **Core**, **Contributors*
 
 ### Radial Timeline card
 
-If the [Radial Timeline](Radial-Timeline-Integration.md) plugin is not installed, a card explains what it adds and links to install it. With it installed, Editorialist scopes everything below to the active book.
+If the [Radial Timeline](Radial-Timeline-Integration) plugin is not installed, a card explains what it adds and links to install it. With it installed, Editorialist scopes everything below to the active book.
 
 ### Revision progress
 
@@ -32,7 +32,7 @@ Scenes with pending edits show a badge. When an active book or manuscript folder
 
 ### Pending edits
 
-When Radial Timeline is installed and has an active book, this section summarizes free-form revision notes collected from scene frontmatter: scene count, item count, human notes, and inquiry count. The **Start review** button launches the [pending-edits flow](Review-Panel.md#pending-edits-review) and is disabled when there is nothing to review.
+When Radial Timeline is installed and has an active book, this section summarizes free-form revision notes collected from scene frontmatter: scene count, item count, human notes, and inquiry count. The **Start review** button launches the [pending-edits flow](Review-Panel#pending-edits-review) and is disabled when there is nothing to review.
 
 ### Revision history
 
@@ -54,7 +54,7 @@ A card grid, one per contributor:
 - **Stats** — total suggestions, accepted, rewritten, and acceptance percentage.
 - **Trusted badge** — earned at ≥5 suggestions with ≥80% acceptance.
 - **Aliases** — alternate names that have been merged into this contributor.
-- **Star** — mark a contributor to enable the starred-only filter in the [Review Panel](Review-Panel.md).
+- **Star** — mark a contributor to enable the starred-only filter in the [Review Panel](Review-Panel).
 - **Manage (…)** — opens contributor actions:
   - *Edit* — display label, how you use the contributor (Developmental editor, Line editor, Copy editor, Beta reader, Generalist, AI assistant), and optional strengths (Clarity, Tone, Pacing, Dialogue, Structure, Character, Worldbuilding, Tightening).
   - *Reassign* — move all revision notes from this contributor into another contributor or a new contributor.

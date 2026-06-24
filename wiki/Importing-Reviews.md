@@ -16,7 +16,7 @@ The launcher's template includes two output formats. They are different objects 
 | **Review block** | The scene-local copy of the imported suggestions | Created by Editorialist when you import a review batch | Appended to the bottom of each targeted scene note |
 | **Editorialism file** | Structural or manuscript-level guidance that should be worked as a checklist | When feedback is broader than scene-targeted line edits | Saved as a separate file under `Editorialist/<Book>/<Title>.md` |
 
-Most revision passes use a **review batch**. Use an **Editorialism file** when the output is a durable checklist: arc work, design rules, multi-scene directives, or manuscript-level guidance.
+Most revision passes use a **review batch**. Use an **Editorialism file** when the output is a durable checklist: subplot work, design rules, multi-scene directives, or manuscript-level guidance.
 
 ---
 
@@ -64,7 +64,7 @@ The lines before the first `=== SECTION ===` marker identify the batch and the c
 |---|---|
 | `Reviewer:` | Display name of the contributor (person or model) |
 | `ReviewerType:` | Role — e.g. `human-editor`, `beta-reader`, `ai-editor` |
-| `Provider:` / `Model:` | For AI contributors — drives the provider brand icon in the [contributor directory](Settings-Reference.md#contributors-tab) |
+| `Provider:` / `Model:` | For AI contributors — drives the provider brand icon in the [contributor directory](Settings-Reference#contributors-tab) |
 | `Template:` / `TemplateYear:` / `SupportedOperations:` | Emitted by the template; identifies which format version produced the batch |
 
 ### Operations
@@ -75,7 +75,7 @@ The lines before the first `=== SECTION ===` marker identify the batch and the c
 |---|---|---|
 | `=== MEMO ===` | freeform, optional `Strengths:` / `Issues:`, optional `SceneId:` | Commentary that doesn't belong inline as a line edit. A MEMO **with** a `SceneId` attaches to that scene only; a MEMO **without** one is duplicated to every scene that received edits in the batch. Use as many as needed. |
 | `=== EDIT ===` | `SceneId:`, `Original:`, `Revised:`, `Why:` | Replace `Original` text with `Revised` text. |
-| `=== CUT ===` | `SceneId:`, `Target:`, `Why:` | Remove the target passage. Accepted cuts can be [backed up to a cut file](Settings-Reference.md#configuration-tab) first. |
+| `=== CUT ===` | `SceneId:`, `Target:`, `Why:` | Remove the target passage. Accepted cuts can be [backed up to a cut file](Settings-Reference#configuration-tab) first. |
 | `=== CONDENSE ===` | `SceneId:`, `Target:`, `Suggestion:`, `Why:` | Tighten the passage between two anchors into the suggested replacement. |
 | `=== EXPAND ===` | `SceneId:`, `Target:`, optional `Suggestion:`, `Why:` | The inverse of condense — develop, slow down, or decompress a beat. |
 | `=== MOVE ===` | `SceneId:`, `Target:`, `Before:` (or `After:`), `Why:` | Relocate the target passage relative to an anchor. |
@@ -100,7 +100,7 @@ Every operation entry targets one scene via `SceneId:`. Items in the same block 
 
 - IDs must be **real values** from the manuscript or the scene-ID list the template includes. Invented or placeholder IDs (`scn_xxxxxxxx`) route a batch to the wrong scene silently.
 - If a reviewer can't identify the scene for a passage, the right move is to **omit the SceneId entirely** — Editorialist routes those entries to the scene you're currently viewing and flags them for manual verification, which is recoverable. A confidently wrong ID is not.
-- If a Radial Timeline manuscript export was the reviewer's input, scene IDs appear inline in that export and match the template's list. See [Radial Timeline Integration](Radial-Timeline-Integration.md).
+- If a Radial Timeline manuscript export was the reviewer's input, scene IDs appear inline in that export and match the template's list. See [Radial Timeline Integration](Radial-Timeline-Integration).
 
 ### Matching against the manuscript
 
@@ -131,17 +131,17 @@ created: 2026-06-10
 - [ ] Single-scene directive [scope:: 22]
 - [ ] Scene-range directive [scope:: 13–22]
 - [ ] Manuscript-wide design directive [scope:: manuscript]
-- [ ] Arc-level work [scope:: arc:Shail IT subplot]
+- [ ] Subplot-level work [scope:: subplot:Shail IT subplot]
 ```
 
-Paste the reply into the review launcher: when it contains an editorialism file, the launcher shows a **Save editorialism file** action that writes it to `Editorialist/<Book>/<Title>.md` (creating the folder), then opens the [Editorialisms Panel](Editorialisms-Panel.md). Re-saving the same `title:` overwrites the prior version in place. You can still create the file by hand if you prefer — the panel picks up any `type: editorialism` file under `Editorialist/`.
+Paste the reply into the review launcher: when it contains an editorialism file, the launcher shows a **Save editorialism file** action that writes it to `Editorialist/<Book>/<Title>.md` (creating the folder), then opens the [Editorialisms Panel](Editorialisms-Panel). Re-saving the same `title:` overwrites the prior version in place. You can still create the file by hand if you prefer — the panel picks up any `type: editorialism` file under `Editorialist/`.
 
 **Required:**
 - Frontmatter `type: editorialism` — files without this are ignored.
 - `book:` must match the active book label exactly.
 
 **Inline metadata per item:**
-- `[scope:: <value>]` (recommended): `manuscript` (whole book), a scene number (`22`), a range (`13–22`, en-dash or hyphen), or `arc:<name>`.
+- `[scope:: <value>]` (recommended): `manuscript` (whole book), a scene number (`22`), a range (`13–22`, en-dash or hyphen), or `subplot:<name>`.
 - `[tags:: tag1, tag2]` (optional).
 
 **Status markers** (the character inside the task brackets):
@@ -167,4 +167,4 @@ Run **Open review launcher** (command palette). The launcher modal:
 3. **Route assignment** — entries that need routing decisions (e.g. missing SceneIds) get an assignment step before anything is written.
 4. **Template copy** — the launcher's template button copies the full format guidance, both templates, and your book's actual scene-ID list to the clipboard.
 
-Import appends review blocks to the targeted scene notes. Nothing else in the note is touched, and no suggestion is applied until you act on it in the [Review Panel](Review-Panel.md).
+Import appends review blocks to the targeted scene notes. Nothing else in the note is touched, and no suggestion is applied until you act on it in the [Review Panel](Review-Panel).

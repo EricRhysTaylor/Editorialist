@@ -28,7 +28,7 @@ The plugin does not rewrite your prose on import. Line edits, memos, author ques
 |---|---|
 | **Review** | Traditional Editorialist review batches: scene-level edits such as expand, condense, cut, move, and line edits, plus `%%ai question%%` responses and scene memos. Each scene can carry multiple batches from different manuscript shares or review passes. |
 | **Pending edits** | Author pending-edit notes and Radial Timeline Inquiry follow-ups gathered across the active book, then walked scene by scene. |
-| **Editorialisms** | Manuscript-wide commentary: structural guidance, theme/arc notes, and general feedback with no line edits. |
+| **Editorialisms** | Manuscript-wide commentary: structural guidance, theme/subplot notes, and general feedback with no line edits. |
 
 ## What You Work With
 
@@ -41,23 +41,23 @@ The plugin does not rewrite your prose on import. Line edits, memos, author ques
 
 ## Core Workflow
 
-1. **Copy the formatting instructions** from the review launcher — they include the [format specification](Importing-Reviews.md) and your book's scene IDs.
+1. **Copy the formatting instructions** from the review launcher — they include the [format specification](Importing-Reviews) and your book's scene IDs.
 2. **Get suggestions.** Paste the instructions into your AI conversation along with the prose. For human feedback, collect your reviewer's notes in any form — a photo of a marked-up page, a document, an email — and have an AI shape them into a batch using the same instructions.
 3. **Import the batch** through the launcher; Editorialist appends review blocks to the bottom of the targeted scene notes.
-4. **Walk the [guided review sweep](Review-Panel.md)** — accept, reject, rewrite, or defer each suggestion.
+4. **Walk the [guided review sweep](Review-Panel)** — accept, reject, rewrite, or defer each suggestion.
 5. **Finish.** Per-scene progress, contributor stats, and revision history update as each sweep completes.
 
 ## Pages
 
 | Page | What's there |
 |---|---|
-| [Getting Started](Getting-Started.md) | Commands and your first review sweep |
-| [Review Panel](Review-Panel.md) | The main working surface — sessions, the suggestion toolbar, statuses |
-| [Pending Edits](Pending-Edits.md) | The active-book queue for author notes and Inquiry follow-ups |
-| [Editorialisms Panel](Editorialisms-Panel.md) | Structural guidance documents and the checklist workflow |
-| [Importing Reviews](Importing-Reviews.md) | Review batches, review blocks, and Editorialism files |
-| [Settings Reference](Settings-Reference.md) | All three settings tabs: Core, Contributors, Configuration |
-| [Radial Timeline Integration](Radial-Timeline-Integration.md) | What the companion plugin adds |
+| [Getting Started](Getting-Started) | Commands and your first review sweep |
+| [Review Panel](Review-Panel) | The main working surface — sessions, the suggestion toolbar, statuses |
+| [Pending Edits](Pending-Edits) | The active-book queue for author notes and Inquiry follow-ups |
+| [Editorialisms Panel](Editorialisms-Panel) | Structural guidance documents and the checklist workflow |
+| [Importing Reviews](Importing-Reviews) | Review batches, review blocks, and Editorialism files |
+| [Settings Reference](Settings-Reference) | All three settings tabs: Core, Contributors, Configuration |
+| [Radial Timeline Integration](Radial-Timeline-Integration) | What the companion plugin adds |
 
 ## License
 

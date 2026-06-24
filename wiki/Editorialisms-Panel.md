@@ -1,4 +1,4 @@
-Editorialisms is the manuscript-wide commentary mode. Where [Review](Review-Panel.md) handles scene-level batches with line edits and [Pending Edits](Pending-Edits.md) handles author / Inquiry follow-ups, Editorialisms manages **Editorialism documents** — separate structural guidance files that span scenes, arcs, or the whole manuscript. It is for general feedback, not line edits.
+Editorialisms is the manuscript-wide commentary mode. Where [Review](Review-Panel) handles scene-level batches with line edits and [Pending Edits](Pending-Edits) handles author / Inquiry follow-ups, Editorialisms manages **Editorialism documents** — separate structural guidance files that span scenes, subplots, or the whole manuscript. It is for general feedback, not line edits.
 
 <!-- Screenshot still needed: Editorialisms panel with a document open (images/panel-editorialisms.png) -->
 
@@ -9,7 +9,7 @@ An Editorialism is a plain markdown file in your vault — a themed checklist of
 - A development edit's structural agenda ("compress the middle act", "thread the antagonist earlier")
 - Design intent and doctrine the manuscript should conform to
 - Multi-session checklists you work through over weeks
-- Arc-level concerns that touch many scenes
+- Subplot-level concerns that touch many scenes
 
 Editorialism files live under `Editorialist/<Book>/<Title>.md` and are recognized by their frontmatter:
 
@@ -23,9 +23,9 @@ created: 2026-06-10
 ---
 ```
 
-Files without `type: editorialism` are ignored. The full file format — section headings, task items, `[scope:: …]` and `[tags:: …]` metadata — is documented in [Importing Reviews § Format B](Importing-Reviews.md#format-b--the-editorialism-file). Reviewers (human or AI) can produce these files directly; the launcher's template includes the format.
+Files without `type: editorialism` are ignored. The full file format — section headings, task items, `[scope:: …]` and `[tags:: …]` metadata — is documented in [Importing Reviews § Format B](Importing-Reviews#format-b--the-editorialism-file). Reviewers (human or AI) can produce these files directly; the launcher's template includes the format.
 
-**Getting a file into the panel.** The fastest path is the [review launcher](Importing-Reviews.md): paste an AI reply that contains an editorialism file (a ```` ```editorialism ```` fenced block, or just the `type: editorialism` frontmatter) and click **Save editorialism file**. Editorialist writes it to `Editorialist/<Book>/<Title>.md`, creating the folder, and opens this panel. Re-saving the same `title:` overwrites in place. Creating the file by hand works too.
+**Getting a file into the panel.** The fastest path is the [review launcher](Importing-Reviews): paste an AI reply that contains an editorialism file (a ```` ```editorialism ```` fenced block, or just the `type: editorialism` frontmatter) and click **Save editorialism file**. Editorialist writes it to `Editorialist/<Book>/<Title>.md`, creating the folder, and opens this panel. Re-saving the same `title:` overwrites in place. Creating the file by hand works too.
 
 > Only files whose `book:` matches the active book label appear while that book is active. If a saved file doesn't show up, check that its `book:` value matches exactly.
 
@@ -43,7 +43,7 @@ Each item is a task line with a five-state status. Clicking an item's status cyc
 [ ] open → [/] in progress → [x] done → [-] deferred → [?] question
 ```
 
-Because Editorialisms are plain markdown task lists, they stay fully readable and editable outside the panel — edit the file directly and the panel reflects it. The `[scope:: …]` metadata records which scene, range (`13–22`), arc (`arc:<name>`), or `manuscript` each directive applies to.
+Because Editorialisms are plain markdown task lists, they stay fully readable and editable outside the panel — edit the file directly and the panel reflects it. The `[scope:: …]` metadata records which scene, range (`13–22`), subplot (`subplot:<name>`), or `manuscript` each directive applies to.
 
 ### Current-scene highlights
 
@@ -55,14 +55,14 @@ Rows light up when their `[scope:: …]` matches the current scene:
 
 - A scene scope matches that scene number.
 - A range scope matches when the current scene falls inside the range.
-- An arc scope matches when the arc name overlaps the scene's character, subplot, or action / description frontmatter. For example, an item scoped to `[scope:: arc:Cesena thread]` lights up while you are in a scene whose metadata mentions `Cesena`.
+- A subplot scope matches when the subplot name overlaps the scene's character, subplot, or action / description frontmatter. For example, an item scoped to `[scope:: subplot:Cesena thread]` lights up while you are in a scene whose metadata mentions `Cesena`.
 
 ## When to use which
 
 | Situation | Use |
 |---|---|
-| Concrete prose change to a specific passage | [Review batch](Importing-Reviews.md#format-a--the-review-batch) → imported review blocks → Review Panel |
+| Concrete prose change to a specific passage | [Review batch](Importing-Reviews#format-a--the-review-batch) → imported review blocks → Review Panel |
 | Commentary on a scene or the batch | `=== MEMO ===` in a review block |
-| Directive spanning scenes, arcs, or the whole book | Editorialism file → this panel |
-| Author note or Radial Timeline Inquiry follow-up | [Pending Edits](Pending-Edits.md) |
+| Directive spanning scenes, subplots, or the whole book | Editorialism file → this panel |
+| Author note or Radial Timeline Inquiry follow-up | [Pending Edits](Pending-Edits) |
 | A reviewer sends both line edits and structural notes | Both formats in one reply — each goes to its own surface |

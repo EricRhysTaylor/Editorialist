@@ -6,7 +6,7 @@ The Review mode is traditional Editorialist: scene-level review batches with lin
 
 Between sessions the panel shows:
 
-- **Active book** — which book Editorialist is currently scoped to (via [Radial Timeline](Radial-Timeline-Integration.md) when installed).
+- **Active book** — which book Editorialist is currently scoped to (via [Radial Timeline](Radial-Timeline-Integration) when installed).
 - **Pending workflow cards** — imported batches and pending edits waiting for review, each with a start button.
 - **Recent activity** — the latest decisions and completed sweeps.
 - **Contributors** — a compact view of who has been suggesting what.
@@ -20,7 +20,7 @@ The header controls keep the most common actions close to the review panel:
 
 | Control | What it does |
 |---|---|
-| **Toggle modes** | Switch between Review, [Pending edits](Pending-Edits.md), and [Editorialisms](Editorialisms-Panel.md). |
+| **Toggle modes** | Switch between Review, [Pending edits](Pending-Edits), and [Editorialisms](Editorialisms-Panel). |
 | **Erase batches** | Remove imported review batches after you are done with them. |
 | **Import Batch** | Paste in a formatted review batch and route it into matching scenes. |
 | **Insert AI directed inline comments** | Add a hidden inline question for the next review pass. |
@@ -37,7 +37,7 @@ Starting a workflow card (or importing a review batch) begins a **guided review 
 
 - **Previous / next** moves through suggestions; the sweep hands off to the next scene when the current one is resolved.
 - **Jump to** — each suggestion card has a jump menu: jump to the suggested text in the editor, to its source review block, or (for a move) to the destination anchor.
-- **Contributor filter** — appears only when a session contains suggestions from **more than one contributor**. A dropdown limits the view to one contributor, and a star button shows only [starred contributors](Settings-Reference.md#contributors-tab). With a single-reviewer batch the row stays hidden.
+- **Contributor filter** — appears only when a session contains suggestions from **more than one contributor**. A dropdown limits the view to one contributor, and a star button shows only [starred contributors](Settings-Reference#contributors-tab). With a single-reviewer batch the row stays hidden.
 - **Collapse controls** — fold away processed suggestions, pending edits, and comments to reduce noise.
 
 ### The suggestion toolbar
@@ -53,7 +53,7 @@ Each highlighted suggestion gets an inline toolbar in the editor:
 | **Apply to all** | Shift + Cmd + click | Apply every applicable suggestion of this kind |
 | **Defer** | Click | Skip for now; the sweep can finish later |
 | **Rewrite myself** | Click | Take the suggestion as a prompt and write your own version |
-| **Backup to cut file** | Click | Archive the target text to the [cut file](Settings-Reference.md#configuration-tab) before deciding |
+| **Backup to cut file** | Click | Archive the target text to the [cut file](Settings-Reference#configuration-tab) before deciding |
 | **Open cut file** | Shift + click Backup to cut file | Open the scene's cut file |
 | **Reject** | Click | Decline the suggestion |
 | **Hide toolbar** | Click | Dismiss the overlay without deciding |
@@ -84,4 +84,4 @@ A sweep finishes only when every suggestion in the batch has a resolved status (
 
 ## Pending-edits review
 
-Pending edits now have their own [Pending Edits](Pending-Edits.md) mode. The Review panel still points to that queue when the active book or current scene has pending author notes or Radial Timeline Inquiry follow-ups.
+Pending edits now have their own [Pending Edits](Pending-Edits) mode. The Review panel still points to that queue when the active book or current scene has pending author notes or Radial Timeline Inquiry follow-ups.
