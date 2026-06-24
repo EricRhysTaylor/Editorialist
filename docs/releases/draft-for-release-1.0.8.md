@@ -44,7 +44,7 @@ Example: save a selected paragraph to the scene's cut file before rewriting it, 
 
 **Side-panel controls**
 
-<img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/ui-side-panel-buttons.png" alt="Editorialist side-panel controls for mode switching, cleanup, import, author queries, cut-file backup, and settings">
+<img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/ui-side-panel-buttons-rounded.png" alt="Editorialist side-panel controls for mode switching, cleanup, import, author queries, cut-file backup, and settings">
 
 **Editorialisms mode**
 

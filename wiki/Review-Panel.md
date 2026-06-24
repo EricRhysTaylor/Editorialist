@@ -14,7 +14,7 @@ Between sessions the panel shows:
 
 ### Panel controls
 
-<p align="center"><img src="images/ui-side-panel-buttons.png" alt="Editorialist side-panel controls: toggle modes, clean imported review notes, import batch, insert author query, back up selected text to a cut file, and settings" width="720"></p>
+<p align="center"><img src="images/ui-side-panel-buttons-rounded.png" alt="Editorialist side-panel controls: toggle modes, clean imported review notes, import batch, insert author query, back up selected text to a cut file, and settings" width="720"></p>
 
 The header controls keep the most common actions close to the review panel:
 
