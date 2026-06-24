@@ -116,6 +116,162 @@ describe("ReviewBatchProcessor.importReviewBatch", () => {
 	});
 });
 
+describe("ReviewBatchProcessor.formalizeAuthoredReviewBlockInActiveNote", () => {
+	const rawNote = [
+		"Scene prose.",
+		"",
+		"```editorialist-review",
+		"Template: Editorialist advanced",
+		"Reviewer: GPT-5.4",
+		"",
+		"=== EDIT ===",
+		"SceneId: scn_x",
+		"Original: a",
+		"Revised: b",
+		"```",
+		"",
+	].join("\n");
+
+	function formalizeBatch(groups: unknown[] = []) {
+		return {
+			batchId: "fb1",
+			createdAt: 777,
+			summary: {
+				totalSuggestions: 1,
+				totalExactMatches: 1,
+				totalDeclaredRoutes: 1,
+				totalInferredRoutes: 0,
+				totalAdvisoryOnly: 0,
+				totalUnresolvedMatches: 0,
+				totalMismatches: 0,
+			},
+			results: [{ routeStrategy: "declared", verificationStatus: "exact" }],
+			groups,
+		} as unknown as ReviewImportBatch;
+	}
+
+	function activeNoteHost(note: string, capture: { written: string | null }, overrides = {}) {
+		return makeHost({
+			getActiveNoteContext: () =>
+				({
+					filePath: "n.md",
+					text: note,
+					view: {
+						file: { basename: "n" },
+						editor: {
+							getValue: () => note,
+							setValue: (value: string) => {
+								capture.written = value;
+							},
+						},
+					},
+				}) as never,
+			...overrides,
+		});
+	}
+
+	it("stamps the existing block in place — no duplicate append — then records and starts review", async () => {
+		const capture = { written: null as string | null };
+		const { host, calls, importEngine } = activeNoteHost(rawNote, capture);
+		importEngine.inspectBatch.mockResolvedValue(formalizeBatch());
+		await new ReviewBatchProcessor(host).formalizeAuthoredReviewBlockInActiveNote(true);
+
+		expect(capture.written).not.toBeNull();
+		// Stamped in place: the batch metadata now lives on the existing block.
+		expect(capture.written).toContain("BatchId: fb1");
+		expect(capture.written).toContain("ImportedBy: Editorialist");
+		// The original body survives, and the block is NOT duplicated.
+		expect(capture.written).toContain("=== EDIT ===");
+		expect(capture.written!.match(/```editorialist-review/g)).toHaveLength(1);
+		// inspectReviewBatch persists contributor profiles before the record/sweep.
+		expect(calls).toEqual(["persistProfiles", "recordImportedBatch", "startGuidedSweep"]);
+	});
+
+	it("records but does not start a sweep when startReview is false", async () => {
+		const capture = { written: null as string | null };
+		const { host, calls, importEngine } = activeNoteHost(rawNote, capture);
+		importEngine.inspectBatch.mockResolvedValue(formalizeBatch());
+		await new ReviewBatchProcessor(host).formalizeAuthoredReviewBlockInActiveNote(false);
+
+		expect(capture.written).toContain("BatchId: fb1");
+		expect(calls).toContain("recordImportedBatch");
+		expect(calls).not.toContain("startGuidedSweep");
+	});
+
+	it("refuses to write when every resolved route targets a different note", async () => {
+		const capture = { written: null as string | null };
+		const { host, calls, importEngine } = activeNoteHost(rawNote, capture);
+		importEngine.inspectBatch.mockResolvedValue(
+			formalizeBatch([{ isReady: true, filePath: "other.md" }]),
+		);
+		await new ReviewBatchProcessor(host).formalizeAuthoredReviewBlockInActiveNote(true);
+
+		// Guard: the active note is never mutated and nothing is recorded.
+		expect(capture.written).toBeNull();
+		expect(calls).not.toContain("recordImportedBatch");
+		expect(calls).not.toContain("startGuidedSweep");
+	});
+
+	it("refuses a mixed block — one route to the active note, one elsewhere", async () => {
+		const capture = { written: null as string | null };
+		const { host, calls, importEngine } = activeNoteHost(rawNote, capture);
+		// buildActiveNoteGroup would collapse BOTH results onto n.md, mis-filing
+		// the off-note edit — so any off-note route must disqualify the block.
+		importEngine.inspectBatch.mockResolvedValue(
+			formalizeBatch([
+				{ isReady: true, filePath: "n.md" },
+				{ isReady: true, filePath: "other.md" },
+			]),
+		);
+		await new ReviewBatchProcessor(host).formalizeAuthoredReviewBlockInActiveNote(true);
+
+		expect(capture.written).toBeNull();
+		expect(calls).not.toContain("recordImportedBatch");
+		expect(calls).not.toContain("startGuidedSweep");
+	});
+
+	it("canonicalizes a generic ``` fence to an editorialist-review block when stamping", async () => {
+		const genericNote = [
+			"Scene prose.",
+			"",
+			"```",
+			"Template: Editorialist advanced",
+			"Reviewer: GPT-5.4",
+			"",
+			"=== EDIT ===",
+			"SceneId: scn_x",
+			"Original: a",
+			"Revised: b",
+			"```",
+			"",
+		].join("\n");
+		const capture = { written: null as string | null };
+		const { host, importEngine } = activeNoteHost(genericNote, capture);
+		importEngine.inspectBatch.mockResolvedValue(formalizeBatch());
+		await new ReviewBatchProcessor(host).formalizeAuthoredReviewBlockInActiveNote(true);
+
+		expect(capture.written).not.toBeNull();
+		// The generic fence is rewritten to the canonical token and stamped, so
+		// cleanup (which matches by the editorialist-review fence) can find it.
+		expect(capture.written!.match(/```editorialist-review/g)).toHaveLength(1);
+		expect(capture.written).toContain("BatchId: fb1");
+		expect(capture.written).toContain("ImportedBy: Editorialist");
+		expect(capture.written).toContain("=== EDIT ===");
+	});
+
+	it("no-ops when the note holds no unimported block", async () => {
+		const capture = { written: null as string | null };
+		const registeredNote =
+			"```editorialist-review\nBatchId: x\nImportedBy: Editorialist\n=== EDIT ===\nOriginal: a\nRevised: b\n```";
+		const { host, calls, importEngine } = activeNoteHost(registeredNote, capture);
+		await new ReviewBatchProcessor(host).formalizeAuthoredReviewBlockInActiveNote(true);
+
+		expect(importEngine.inspectBatch).not.toHaveBeenCalled();
+		expect(capture.written).toBeNull();
+		expect(calls).not.toContain("recordImportedBatch");
+	});
+});
+
 describe("ReviewBatchProcessor.cleanupReviewBatch", () => {
 	it("returns early without touching the registry when the entry is missing", async () => {
 		const { host, calls } = makeHost({ getSweepRegistryEntry: () => null });

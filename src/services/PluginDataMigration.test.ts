@@ -193,6 +193,7 @@ describe("migratePluginData", () => {
 		expect(out.settings).toEqual({
 			cutFolderOverride: "",
 			bookFolderOverride: "",
+			detectFileWrittenReviewBlocks: false,
 			effort: {
 				wordsPerNewScene: 1500,
 				draftRateWordsPerHour: 750,
@@ -236,6 +237,7 @@ describe("migratePluginData", () => {
 		const defaults = {
 			cutFolderOverride: "",
 			bookFolderOverride: "",
+			detectFileWrittenReviewBlocks: false,
 			effort: {
 				wordsPerNewScene: 1500,
 				draftRateWordsPerHour: 750,
@@ -251,6 +253,39 @@ describe("migratePluginData", () => {
 				makeRecorder(),
 			).settings,
 		).toEqual(defaults);
+	});
+
+	it("defaults detectFileWrittenReviewBlocks to false when absent", () => {
+		expect(migratePluginData({}, makeRecorder()).settings.detectFileWrittenReviewBlocks).toBe(false);
+		expect(
+			migratePluginData({ settings: { cutFolderOverride: "x" } }, makeRecorder()).settings
+				.detectFileWrittenReviewBlocks,
+		).toBe(false);
+	});
+
+	it("coerces a malformed detectFileWrittenReviewBlocks to false", () => {
+		expect(
+			migratePluginData(
+				{ settings: { detectFileWrittenReviewBlocks: "yes" } },
+				makeRecorder(),
+			).settings.detectFileWrittenReviewBlocks,
+		).toBe(false);
+		expect(
+			migratePluginData(
+				{ settings: { detectFileWrittenReviewBlocks: 1 } },
+				makeRecorder(),
+			).settings.detectFileWrittenReviewBlocks,
+		).toBe(false);
+	});
+
+	it("preserves an enabled detectFileWrittenReviewBlocks across a round-trip", () => {
+		const out = migratePluginData(
+			{ settings: { detectFileWrittenReviewBlocks: true } },
+			makeRecorder(),
+		);
+		expect(out.settings.detectFileWrittenReviewBlocks).toBe(true);
+		const round = migratePluginData(out, makeRecorder());
+		expect(round.settings.detectFileWrittenReviewBlocks).toBe(true);
 	});
 });
 

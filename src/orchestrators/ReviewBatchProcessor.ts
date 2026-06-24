@@ -13,6 +13,8 @@
 import { Notice, TFile, type App, type MarkdownView } from "obsidian";
 import {
 	REVIEW_BLOCK_FENCE,
+	createReviewBlock,
+	findUnimportedReviewBlock,
 	getReviewBlockFenceLabel,
 	normalizeImportedReviewText,
 	removeImportedReviewBlocks,
@@ -194,25 +196,7 @@ export class ReviewBatchProcessor {
 		context.view.editor.setValue(nextText);
 		await this.host.recordImportedBatch(
 			batch,
-			[
-				{
-					filePath: context.filePath,
-					fileName: context.view.file?.basename ?? context.filePath,
-					sceneId: undefined,
-					suggestions: batch.results,
-					memos: [],
-					exactCount: batch.summary.totalExactMatches,
-					declaredCount: batch.summary.totalDeclaredRoutes,
-					inferredCount: batch.summary.totalInferredRoutes,
-					exactInferredCount: batch.results.filter(
-						(result) => result.routeStrategy === "inferred_exact" && result.verificationStatus === "exact",
-					).length,
-					advisoryCount: batch.summary.totalAdvisoryOnly,
-					unresolvedCount: batch.summary.totalUnresolvedMatches,
-					mismatchCount: batch.summary.totalMismatches,
-					isReady: true,
-				},
-			],
+			[this.buildActiveNoteGroup(batch, context)],
 			"in_progress",
 			context.filePath,
 		);
@@ -223,6 +207,127 @@ export class ReviewBatchProcessor {
 		}
 
 		new Notice("Imported review block into the active note.");
+	}
+
+	// Formalize a raw review block an AI wrote directly into the active note
+	// (no clipboard round-trip). Unlike importReviewBatchToActiveNote, which
+	// appends a fresh block, this stamps the EXISTING block in place: same
+	// inspect → dedup → record → guided-sweep pipeline, but the only note ever
+	// mutated is the active one (the block's own range). Gated by the
+	// detectFileWrittenReviewBlocks setting at the call site.
+	async formalizeAuthoredReviewBlockInActiveNote(startReview: boolean): Promise<void> {
+		const context = this.host.getActiveNoteContext();
+		if (!context) {
+			new Notice("No active Markdown note to import from.");
+			return;
+		}
+
+		const currentText = context.view.editor.getValue();
+		const targetBlock = findUnimportedReviewBlock(currentText);
+		if (!targetBlock) {
+			new Notice(`No unimported ${getReviewBlockFenceLabel()} found in this note.`);
+			return;
+		}
+
+		const rawBlockText = currentText.slice(targetBlock.startOffset, targetBlock.endOffset);
+		const normalizedText = normalizeImportedReviewText(rawBlockText);
+		if (!normalizedText) {
+			new Notice(`No ${getReviewBlockFenceLabel()} found in this note.`);
+			return;
+		}
+
+		const batch = await this.inspectReviewBatch(rawBlockText, { activeNotePath: context.filePath });
+		if (batch.summary.totalSuggestions === 0) {
+			new Notice("Review block found, but no valid review entries were parsed.");
+			return;
+		}
+
+		// Guard: this in-place path records the WHOLE block against the active note
+		// (buildActiveNoteGroup collapses every result onto context.filePath). So
+		// if ANY resolved suggestion routes to a different note, that collapse
+		// would mis-file it — refuse, and let the author use clipboard import,
+		// which appends a routed block per scene.
+		if (this.batchRoutesToOtherNotes(batch, context.filePath)) {
+			new Notice(
+				"This review block targets other notes. Use clipboard import so each edit routes to its own scene.",
+			);
+			return;
+		}
+
+		const duplicateSweep = this.host.findDuplicateSweep(batch);
+		if (duplicateSweep) {
+			const choice = await openEditorialistChoiceModal(this.host.app, {
+				title: "Possible existing review batch detected",
+				description: "This review batch appears to match an existing imported sweep. Open it, import again, or cancel.",
+				choices: [
+					{ label: "Open existing sweep", value: "open" },
+					{ label: "Import anyway", value: "import" },
+					{ label: "Cancel", value: "cancel" },
+				],
+			});
+			if (choice === "open") {
+				await this.host.openExistingSweep(duplicateSweep);
+			}
+			if (choice !== "import") {
+				return;
+			}
+		}
+
+		// Canonicalize as we stamp: rebuild the block from its body with an
+		// `editorialist-review` fence regardless of how the author/AI fenced it
+		// (a generic ``` fence would otherwise survive normalization and never get
+		// the BatchId/ImportedBy stamp, orphaning the block from cleanup). The
+		// classifier guarantees this body carries no prior stamp.
+		const stampedBlock = createReviewBlock(
+			[`BatchId: ${batch.batchId}`, "ImportedBy: Editorialist", targetBlock.bodyText.trim()].join("\n"),
+		);
+		const nextText =
+			currentText.slice(0, targetBlock.startOffset) + stampedBlock + currentText.slice(targetBlock.endOffset);
+		context.view.editor.setValue(nextText);
+
+		await this.host.recordImportedBatch(
+			batch,
+			[this.buildActiveNoteGroup(batch, context)],
+			"in_progress",
+			context.filePath,
+		);
+
+		if (startReview) {
+			await this.host.startGuidedSweep(batch.batchId, batch.createdAt, [context.filePath]);
+			return;
+		}
+
+		new Notice("Formalized the review block in the active note.");
+	}
+
+	// True when the batch resolves ANY ready destination outside the active note.
+	// The in-place path can only honestly track edits that belong to the note the
+	// block sits in, so even a single off-note route disqualifies it (the author
+	// is steered to clipboard import, which routes per scene). An all-advisory /
+	// unresolved batch (no ready group) routes nowhere and stays a valid
+	// active-note import, matching the paste-into-active-note semantics.
+	private batchRoutesToOtherNotes(batch: ReviewImportBatch, activeNotePath: string): boolean {
+		return batch.groups.some((group) => group.isReady && group.filePath !== activeNotePath);
+	}
+
+	private buildActiveNoteGroup(batch: ReviewImportBatch, context: BatchNoteContext): ReviewImportNoteGroup {
+		return {
+			filePath: context.filePath,
+			fileName: context.view.file?.basename ?? context.filePath,
+			sceneId: undefined,
+			suggestions: batch.results,
+			memos: [],
+			exactCount: batch.summary.totalExactMatches,
+			declaredCount: batch.summary.totalDeclaredRoutes,
+			inferredCount: batch.summary.totalInferredRoutes,
+			exactInferredCount: batch.results.filter(
+				(result) => result.routeStrategy === "inferred_exact" && result.verificationStatus === "exact",
+			).length,
+			advisoryCount: batch.summary.totalAdvisoryOnly,
+			unresolvedCount: batch.summary.totalUnresolvedMatches,
+			mismatchCount: batch.summary.totalMismatches,
+			isReady: true,
+		};
 	}
 
 	private addImportedBlockMetadata(blockText: string, batchId: string): string {

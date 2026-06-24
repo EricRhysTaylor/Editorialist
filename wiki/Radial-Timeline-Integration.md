@@ -1,4 +1,6 @@
-[Radial Timeline](https://github.com/EricRhysTaylor/Radial-Timeline) is a companion plugin for manuscript structure. When it is installed and an active book is set, Editorialist uses that book context for scene inventory, pending-edits review, and scene ID guidance.
+[Radial Timeline](https://community.obsidian.md/plugins/radial-timeline) is a companion plugin for manuscript structure. When it is installed and an active book is set, Editorialist uses that book context for scene inventory, pending-edits review, and scene ID guidance.
+
+<p align="center"><img src="images/settings-radial-timeline-rounded.png" alt="Radial Timeline based tracking placard in Editorialist settings" width="720"></p>
 
 The integration is optional. Editorialist works without Radial Timeline by using a configured manuscript folder, its own note IDs, or path-based tracking when needed.
 

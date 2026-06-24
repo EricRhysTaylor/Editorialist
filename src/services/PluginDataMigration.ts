@@ -48,6 +48,7 @@ export function defaultEditorialistSettings(): EditorialistSettings {
 	return {
 		cutFolderOverride: "",
 		bookFolderOverride: "",
+		detectFileWrittenReviewBlocks: false,
 		effort: {
 			wordsPerNewScene: 1500,
 			draftRateWordsPerHour: 750,
@@ -77,6 +78,10 @@ export function normalizeEditorialistSettings(raw: unknown): EditorialistSetting
 		typeof candidate.cutFolderOverride === "string" ? candidate.cutFolderOverride : defaults.cutFolderOverride;
 	const bookFolderOverride =
 		typeof candidate.bookFolderOverride === "string" ? candidate.bookFolderOverride : defaults.bookFolderOverride;
+	const detectFileWrittenReviewBlocks =
+		typeof candidate.detectFileWrittenReviewBlocks === "boolean"
+			? candidate.detectFileWrittenReviewBlocks
+			: defaults.detectFileWrittenReviewBlocks;
 
 	const rawEffort =
 		typeof candidate.effort === "object" && candidate.effort !== null
@@ -92,6 +97,7 @@ export function normalizeEditorialistSettings(raw: unknown): EditorialistSetting
 	return {
 		cutFolderOverride,
 		bookFolderOverride,
+		detectFileWrittenReviewBlocks,
 		effort,
 	};
 }

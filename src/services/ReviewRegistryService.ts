@@ -157,6 +157,19 @@ export class ReviewRegistryService {
 		};
 	}
 
+	getDetectFileWrittenReviewBlocks(): boolean {
+		return this.settings.detectFileWrittenReviewBlocks;
+	}
+
+	// Toggles whether the launcher offers to formalize a raw review block written
+	// straight into a note. Caller persists via savePluginData().
+	setDetectFileWrittenReviewBlocks(value: boolean): void {
+		this.settings = {
+			...this.settings,
+			detectFileWrittenReviewBlocks: value,
+		};
+	}
+
 	// Merge a partial effort-settings patch. Caller persists via savePluginData().
 	setEffortSettings(patch: Partial<EditorialistEffortSettings>): void {
 		this.settings = {

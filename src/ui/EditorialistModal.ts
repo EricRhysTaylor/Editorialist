@@ -1,6 +1,6 @@
 import { ButtonComponent, Modal, Notice, TextAreaComponent, setIcon, type App } from "obsidian";
 import { buildModalFooter, type ModalFooterButtonSpec } from "./primitives/ModalFooter";
-import { getReviewBlockFenceLabel } from "../core/ReviewBlockFormat";
+import { getReviewBlockFenceLabel, type NoteReviewBlockState } from "../core/ReviewBlockFormat";
 import {
 	ADVANCED_REVIEW_TEMPLATE_TITLE,
 	REVIEW_TEMPLATE_BLOCK,
@@ -17,6 +17,13 @@ export interface EditorialistModalOptions {
 	activeBookLabel?: string | null;
 	activeNoteLabel?: string;
 	currentNoteHasReviewBlock: boolean;
+	// Stamp-based classification of the active note's review block(s). Only used
+	// when detectFileWrittenReviewBlocks is on, to offer an in-place formalize of
+	// a raw (unimported) block.
+	currentNoteReviewBlockState?: NoteReviewBlockState;
+	// Mirror of the detectFileWrittenReviewBlocks setting. When false the launcher
+	// behaves exactly as before — a raw block surfaces no import affordance.
+	detectFileWrittenReviewBlocks: boolean;
 	currentNoteStatus?: "ready" | "completed";
 	isReviewPanelOpen: boolean;
 	nextNoteLabel?: string;
@@ -28,6 +35,9 @@ export interface EditorialistModalOptions {
 	onSaveEditorialism: (rawText: string) => Promise<boolean>;
 	onImportBatch: (batch: ReviewImportBatch, startReview: boolean) => Promise<void>;
 	onImportRawToActiveNote: (rawText: string, startReview: boolean) => Promise<void>;
+	// Formalize the raw review block already present in the active note (stamp +
+	// register + start review), without a clipboard round-trip.
+	onFormalizeAuthoredBlock: (startReview: boolean) => Promise<void>;
 	onInspectBatch: (
 		rawText: string,
 		correctedTargets?: ReadonlyMap<string, string>,
@@ -46,7 +56,7 @@ interface ManualImportError {
 
 type ClipboardState = "checking" | "ready" | "empty";
 type DetectionTone = "danger" | "muted" | "success";
-type ModalState = "checking" | "clipboard" | "current-note" | "empty";
+type ModalState = "checking" | "clipboard" | "unimported-current-note" | "current-note" | "empty";
 
 interface DetectionItem {
 	actionLabel?: string;
@@ -159,6 +169,11 @@ export class EditorialistModal extends Modal {
 			return;
 		}
 
+		if (this.shouldOfferAuthoredImport()) {
+			this.renderUnimportedNoteState(parent);
+			return;
+		}
+
 		if (this.options.currentNoteHasReviewBlock) {
 			this.renderCurrentNoteState(parent);
 			return;
@@ -205,6 +220,44 @@ export class EditorialistModal extends Modal {
 				},
 			]);
 		}
+	}
+
+	private renderUnimportedNoteState(parent: HTMLElement): void {
+		const unitLabel = this.options.noteUnitLabel ?? "note";
+		const card = parent.createDiv({ cls: "editorialist-control-modal__card" });
+		card.createDiv({
+			cls: "editorialist-control-modal__card-title",
+			text: `AI-written review block detected in this ${unitLabel}`,
+		});
+		card.createDiv({
+			cls: "editorialist-control-modal__card-copy",
+			text: `A ${getReviewBlockFenceLabel()} was written directly into this ${unitLabel}. Import it to stamp the block, register the sweep, and review it with the normal workflow.`,
+		});
+
+		card.createEl("hr", { cls: "editorialist-control-modal__divider" });
+		buildModalFooter(card, {
+			className: "editorialist-control-modal__secondary-actions",
+			buttons: [
+				this.makeActionButtonSpec({
+					text: "Import & start review",
+					cta: true,
+					icon: "download",
+					onClick: async () => {
+						await this.options.onFormalizeAuthoredBlock(true);
+						this.close();
+					},
+				}),
+				this.makeActionButtonSpec({
+					text: "Import without reviewing",
+					subtle: true,
+					icon: "inbox",
+					onClick: async () => {
+						await this.options.onFormalizeAuthoredBlock(false);
+						this.close();
+					},
+				}),
+			],
+		});
 	}
 
 	private renderEmptyState(parent: HTMLElement): void {
@@ -884,11 +937,22 @@ export class EditorialistModal extends Modal {
 			return "clipboard";
 		}
 
+		if (this.shouldOfferAuthoredImport()) {
+			return "unimported-current-note";
+		}
+
 		if (this.options.currentNoteHasReviewBlock) {
 			return "current-note";
 		}
 
 		return "empty";
+	}
+
+	// The launcher offers in-place formalizing only when the author has opted in
+	// and the active note holds exactly one raw, unstamped block. A registered or
+	// ambiguous note falls through to the normal resume/empty handling.
+	private shouldOfferAuthoredImport(): boolean {
+		return this.options.detectFileWrittenReviewBlocks && this.options.currentNoteReviewBlockState === "unimported";
 	}
 
 	private getClipboardTone(): DetectionTone {

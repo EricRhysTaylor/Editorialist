@@ -27,8 +27,10 @@ import { runEditorUndo } from "./core/review/EditorUndo";
 import type { ReviewStateMachineHost } from "./core/review/ReviewStateMachineHost";
 import { computeNoteTextFingerprint } from "./core/review/SessionAxis";
 import {
+	classifyNoteReviewBlocks,
 	noteContainsReviewBlock,
 	removeImportedReviewBlocks,
+	type NoteReviewBlockState,
 } from "./core/ReviewBlockFormat";
 import { ReviewEngine } from "./core/ReviewEngine";
 import { buildReviewTemplate, type ReviewTemplateContext } from "./core/ReviewTemplate";
@@ -118,6 +120,11 @@ interface GuidedSweepHandoffState {
 
 interface EditorialistLaunchState {
 	currentNoteHasReviewBlock: boolean;
+	// Stamp-based classification of the review block(s) in the active note. Drives
+	// the launcher's AI-direct-write affordance: only `unimported` offers an
+	// in-place formalize. Independent of currentNoteHasReviewBlock, which a
+	// registered (already-imported) block also sets.
+	currentNoteReviewBlockState: NoteReviewBlockState;
 	currentNoteStatus?: "ready" | "completed";
 	nextNoteLabel?: string;
 	nextNotePath?: string;
@@ -514,6 +521,8 @@ export default class EditorialistPlugin extends Plugin {
 			activeBookLabel: this.registry.getActiveBookScopeInfo().label,
 			activeNoteLabel: context?.view.file?.basename,
 			currentNoteHasReviewBlock: launchState.currentNoteHasReviewBlock,
+			currentNoteReviewBlockState: launchState.currentNoteReviewBlockState,
+			detectFileWrittenReviewBlocks: this.registry.getSettings().detectFileWrittenReviewBlocks,
 			currentNoteStatus: launchState.currentNoteStatus,
 			isReviewPanelOpen: this.isReviewPanelOpen(),
 			nextNoteLabel: launchState.nextNoteLabel,
@@ -528,6 +537,9 @@ export default class EditorialistPlugin extends Plugin {
 			},
 			onImportRawToActiveNote: async (rawText, startReview) => {
 				await this.batchProcessor.importReviewBatchToActiveNote(rawText, startReview);
+			},
+			onFormalizeAuthoredBlock: async (startReview) => {
+				await this.batchProcessor.formalizeAuthoredReviewBlockInActiveNote(startReview);
 			},
 			onInspectBatch: async (rawText, correctedTargets) =>
 				this.batchProcessor.inspectReviewBatch(rawText, {
@@ -1001,6 +1013,15 @@ export default class EditorialistPlugin extends Plugin {
 
 	async setCutFolderOverride(value: string): Promise<void> {
 		this.registry.setCutFolderOverride(value);
+		await this.savePluginData();
+	}
+
+	getDetectFileWrittenReviewBlocks(): boolean {
+		return this.registry.getDetectFileWrittenReviewBlocks();
+	}
+
+	async setDetectFileWrittenReviewBlocks(value: boolean): Promise<void> {
+		this.registry.setDetectFileWrittenReviewBlocks(value);
 		await this.savePluginData();
 	}
 
@@ -2412,9 +2433,12 @@ export default class EditorialistPlugin extends Plugin {
 		if (!context) {
 			return {
 				currentNoteHasReviewBlock: false,
+				currentNoteReviewBlockState: "none",
 				noteUnitLabel,
 			};
 		}
+
+		const reviewBlockState = classifyNoteReviewBlocks(context.text);
 
 		const previousSession = this.store.getSession();
 		const session = this.registry.applyPersistedReviewState(
@@ -2427,6 +2451,7 @@ export default class EditorialistPlugin extends Plugin {
 		if (!session.hasReviewBlock) {
 			return {
 				currentNoteHasReviewBlock: false,
+				currentNoteReviewBlockState: "none",
 				noteUnitLabel,
 			};
 		}
@@ -2442,6 +2467,7 @@ export default class EditorialistPlugin extends Plugin {
 
 		return {
 			currentNoteHasReviewBlock: true,
+			currentNoteReviewBlockState: reviewBlockState,
 			currentNoteStatus: this.hasLiveActionableSuggestions(session.suggestions) ? "ready" : "completed",
 			nextNoteLabel: nextNotePath ? this.getNoteDisplayLabel(nextNotePath) : undefined,
 			nextNotePath,

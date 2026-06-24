@@ -131,6 +131,13 @@ export interface EditorialistSettings {
 	// frontmatter) can still keep review tracking bounded to their manuscript.
 	// Ignored while Radial Timeline supplies a scope. Normalized at use time.
 	bookFolderOverride: string;
+	// When true, the import flow also treats an Editorialist review block that an
+	// AI wrote directly into a scene note (no clipboard round-trip) as an
+	// importable batch: opening the launcher on such a note offers to formalize
+	// the block in place — stamp it, register the sweep, and start review — using
+	// the identical workflow the clipboard path uses. Default false so the
+	// clipboard import remains the only ingestion path unless the author opts in.
+	detectFileWrittenReviewBlocks: boolean;
 	// Inputs to the editorialism revision-effort estimate.
 	effort: EditorialistEffortSettings;
 }

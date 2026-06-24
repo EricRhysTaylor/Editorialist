@@ -144,6 +144,64 @@ export function findImportedReviewBlocks(noteText: string, batchId?: string): Im
 		});
 }
 
+// The standing of a single review block found inside a note, judged purely from
+// its metadata stamp:
+//   registered  — carries `ImportedBy: Editorialist` AND a `BatchId`. A block
+//                  Editorialist itself wrote on import; resume, never re-import.
+//   unimported  — carries neither stamp. A raw block an AI (or the author) wrote
+//                  straight into the note; a candidate for in-place formalizing.
+//   suspicious  — carries exactly one half of the stamp (a `BatchId` with no
+//                  `ImportedBy`, or vice versa). Neither a clean raw block nor a
+//                  trustworthy registered one, so it is never auto-handled.
+type ReviewBlockRegistration = "registered" | "unimported" | "suspicious";
+
+function classifyReviewBlock(block: ExtractedReviewBlock): ReviewBlockRegistration {
+	const metadata = getReviewBlockMetadata(block.bodyText);
+	const hasBatchId = Boolean(metadata.batchid);
+	const isEditorialist = metadata.importedby === "Editorialist";
+	if (hasBatchId && isEditorialist) {
+		return "registered";
+	}
+	if (hasBatchId || isEditorialist) {
+		return "suspicious";
+	}
+	return "unimported";
+}
+
+// The note-level summary the launcher uses to decide which import affordance to
+// surface. `ambiguous` deliberately collapses every case where acting would be a
+// guess: a half-stamped block, or more than one raw block (we cannot know which
+// one the author meant to formalize).
+export type NoteReviewBlockState = "none" | "registered" | "unimported" | "ambiguous";
+
+export function classifyNoteReviewBlocks(noteText: string): NoteReviewBlockState {
+	const kinds = extractReviewBlocks(noteText).map(classifyReviewBlock);
+	if (kinds.length === 0) {
+		return "none";
+	}
+	if (kinds.includes("suspicious")) {
+		return "ambiguous";
+	}
+	const unimported = kinds.filter((kind) => kind === "unimported");
+	if (unimported.length === 0) {
+		return "registered";
+	}
+	if (unimported.length > 1) {
+		return "ambiguous";
+	}
+	return "unimported";
+}
+
+// The single raw block eligible for in-place formalizing. Returns null unless the
+// note classifies exactly as `unimported` (one raw block, no suspicious stamps),
+// so the formalize path never has to choose between candidates.
+export function findUnimportedReviewBlock(noteText: string): ExtractedReviewBlock | null {
+	if (classifyNoteReviewBlocks(noteText) !== "unimported") {
+		return null;
+	}
+	return extractReviewBlocks(noteText).find((block) => classifyReviewBlock(block) === "unimported") ?? null;
+}
+
 export function removeImportedReviewBlocks(noteText: string, batchId?: string): RemoveImportedReviewBlocksResult {
 	const blocks = findImportedReviewBlocks(noteText, batchId).sort((left, right) => right.startOffset - left.startOffset);
 	if (blocks.length === 0) {

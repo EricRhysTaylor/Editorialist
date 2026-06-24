@@ -1,4 +1,4 @@
-import { ButtonComponent, Notice, PluginSettingTab, setIcon, TFile, type App } from "obsidian";
+import { ButtonComponent, Notice, PluginSettingTab, setIcon, TFile, ToggleComponent, type App } from "obsidian";
 import { formatReviewerTypeLabel } from "../core/ContributorIdentity";
 import {
 	renderContributorBrandMark,
@@ -107,6 +107,7 @@ export class EditorialistSettingTab extends PluginSettingTab {
 		this.renderBookFolderSection(configurationContent, activeBook);
 		this.renderTrackingSection(configurationContent, activeBook);
 		this.renderCutLocationSection(configurationContent, activeBook);
+		this.renderFileWriteDetectionSection(configurationContent);
 		this.renderEffortSection(configurationContent);
 		this.renderMaintenanceSection(configurationContent, activeBook.label);
 	}
@@ -394,6 +395,43 @@ export class EditorialistSettingTab extends PluginSettingTab {
 			text: this.plugin.getCutFolderOverride()
 				? `Override active: cut files write under ${this.plugin.getCutFolderOverride()}/.`
 				: `No override set. Cut files default to ${defaultFolder}/ — falling back to the scene’s own folder when it sits outside the active book.`,
+		});
+	}
+
+	private renderFileWriteDetectionSection(parent: HTMLElement): void {
+		const body = this.createSection(
+			parent,
+			"AI-directed file writes",
+			"When an AI has direct access to your vault, it can write a review block straight into a scene note instead of routing it through the clipboard. Turn this on to let the launcher detect such a block and import it in place — the same review workflow, no paste step. Supplements the default clipboard import; it never edits scene prose on its own.",
+			"file-input",
+		);
+		body.parentElement?.addClass("editorialist-settings__section--utility");
+
+		const fieldRow = body.createDiv({ cls: "editorialist-settings__cut-row" });
+		fieldRow.createDiv({
+			cls: "editorialist-settings__cut-label",
+			text: "Detect file-written review blocks",
+		});
+
+		const control = fieldRow.createDiv({ cls: "editorialist-settings__cut-actions" });
+		new ToggleComponent(control)
+			.setValue(this.plugin.getDetectFileWrittenReviewBlocks())
+			.onChange(async (value) => {
+				await this.plugin.setDetectFileWrittenReviewBlocks(value);
+				new Notice(
+					value
+						? "On — the launcher will offer to import review blocks written directly into notes."
+						: "Off — review blocks written into notes are ignored; clipboard import only.",
+				);
+				void this.displayAsync(false);
+			});
+
+		const note = body.createDiv({ cls: "editorialist-settings__cut-note" });
+		note.createDiv({
+			cls: "editorialist-settings__maintenance-note",
+			text: this.plugin.getDetectFileWrittenReviewBlocks()
+				? "On: opening the launcher on a note that holds an unimported review block offers to formalize it in place — stamp, register, and review."
+				: "Off (default): the clipboard is the only way to import a review batch.",
 		});
 	}
 

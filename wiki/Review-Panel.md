@@ -53,7 +53,7 @@ Starting a workflow card (or importing a review batch) begins a **guided review 
 
 ### The suggestion toolbar
 
-<p align="center"><img src="images/toolbar.png" alt="Inline suggestion toolbar over highlighted manuscript text, with the matching review card selected in the side panel" width="720"></p>
+<p align="center"><img src="images/ui-toolbar-closeup-rounded.png" alt="Closeup of the inline suggestion toolbar with operation status and action buttons" width="720"></p>
 
 Each highlighted suggestion gets an inline toolbar in the editor:
 
