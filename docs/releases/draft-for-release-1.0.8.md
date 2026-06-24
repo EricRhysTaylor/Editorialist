@@ -8,7 +8,11 @@ This release turns the Ed side panel into a three-mode revision workspace: Revie
 
 Mark an uncertainty exactly where it appears, then include it in the next review handoff.
 
-Example: highlight a paragraph and add `Should this flashback move earlier?` before sending the scene out for feedback. Later, Resolve or Dismiss the question when the issue is handled.
+Example: insert the syntax anywhere in a scene by typing it, using the side-panel insert button, or running Command-P -> **Insert author query**. The button and command open a dialog and place the marker in the scene, or copy it to the clipboard when you need to paste it:
+
+`%%ai: we have to reveal more about why she buys these presents for the refugees. Either here or somewhere else. Here possibly confuses with the IT subplot.%%`
+
+Later, Resolve or Dismiss the question when the issue is handled.
 
 ### Three modes in one Ed panel
 
