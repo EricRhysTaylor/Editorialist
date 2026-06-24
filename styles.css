@@ -5724,6 +5724,13 @@
 	background: color-mix(in srgb, var(--background-secondary) 70%, var(--background-primary) 30%);
 }
 
+/* Relates to the scene the author is working on now — green accept-style left
+   edge (inset shadow keeps the row's rounded corners) plus a whisper of tint. */
+.editorialist-editorialism-panel__item--relevant {
+	background: color-mix(in srgb, var(--color-green) 8%, color-mix(in srgb, var(--background-secondary) 70%, var(--background-primary) 30%));
+	box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-green) 75%, transparent);
+}
+
 .editorialist-editorialism-panel__item--done {
 	opacity: 0.65;
 }

@@ -32,7 +32,8 @@ import {
 } from "./core/ReviewBlockFormat";
 import { ReviewEngine } from "./core/ReviewEngine";
 import { buildReviewTemplate, type ReviewTemplateContext } from "./core/ReviewTemplate";
-import { getSceneIdForFile, isPathInFolderScope, isSceneClassFile } from "./core/VaultScope";
+import { getFrontmatterStringValues, getSceneIdForFile, isPathInFolderScope, isSceneClassFile } from "./core/VaultScope";
+import { buildSceneTokens, sceneNumberFromName, type SceneRelevanceContext } from "./core/SceneRelevance";
 import { SuggestionParser } from "./core/SuggestionParser";
 import type {
 	EditorialistMetadataExport,
@@ -611,6 +612,33 @@ export default class EditorialistPlugin extends Plugin {
 
 	getEditorialismFolder(): string {
 		return this.editorialismService.getRootFolderName();
+	}
+
+	// Context for highlighting editorialism items that relate to the scene the
+	// author is working on now: the scene number (from the file name) plus
+	// character/subplot tokens (for arc matching). Falls back to the last scene
+	// the author had open when focus is on a side panel. Null when no scene is in
+	// view.
+	getSceneRelevanceContext(): SceneRelevanceContext | null {
+		const active = this.app.workspace.getActiveFile();
+		let file = active instanceof TFile && active.extension === "md" ? active : null;
+		if (!file && this.lastSceneFilePathForCut) {
+			const remembered = this.app.vault.getAbstractFileByPath(this.lastSceneFilePathForCut);
+			file = remembered instanceof TFile ? remembered : null;
+		}
+		if (!file) {
+			return null;
+		}
+
+		const sceneNumber = sceneNumberFromName(file.basename);
+		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+		const characters = getFrontmatterStringValues(frontmatter, ["Character", "Characters", "character", "characters"]);
+		const subplots = getFrontmatterStringValues(frontmatter, ["Subplot", "Subplots", "subplot", "subplots"]);
+		const tokens = buildSceneTokens([...characters, ...subplots]);
+		if (sceneNumber === null && tokens.size === 0) {
+			return null;
+		}
+		return { sceneNumber, tokens };
 	}
 
 	// Estimate the authoring effort for one editorialism's open directives, using

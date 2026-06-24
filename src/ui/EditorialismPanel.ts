@@ -2,6 +2,7 @@ import { ItemView, TFile, setIcon, type WorkspaceLeaf } from "obsidian";
 import type EditorialistPlugin from "../main";
 import { EDITORIALIST_ICON_ID } from "./EditorialistLogoIcon";
 import { formatEffortDuration } from "../core/EffortEstimate";
+import { scopeRelatesToScene, type SceneRelevanceContext } from "../core/SceneRelevance";
 import type {
 	Editorialism,
 	EditorialismItem,
@@ -48,6 +49,9 @@ export class EditorialismPanel extends ItemView {
 	private activeFilePath: string | null = null;
 	private activeEditorialism: Editorialism | null = null;
 	private isLoading = false;
+	// Last scene number the relevance highlights were rendered against; lets us
+	// re-render only when the author actually moves to a different scene.
+	private lastRelevanceSceneNumber: number | null | undefined = undefined;
 
 	constructor(leaf: WorkspaceLeaf, private readonly plugin: EditorialistPlugin) {
 		super(leaf);
@@ -85,6 +89,18 @@ export class EditorialismPanel extends ItemView {
 			}
 			if (file instanceof TFile && file.path.startsWith(this.plugin.getEditorialismFolder() + "/")) {
 				void this.refresh();
+			}
+		}));
+		// Re-evaluate scene-relevance highlights when the author moves to a
+		// different scene. Guarded on the scene number so focusing the panel
+		// itself (or unrelated leaf changes) does not churn the detail view.
+		this.registerEvent(this.app.workspace.on("active-leaf-change", () => {
+			if (!this.activeEditorialism) {
+				return;
+			}
+			const next = this.plugin.getSceneRelevanceContext()?.sceneNumber ?? null;
+			if (next !== this.lastRelevanceSceneNumber) {
+				this.render();
 			}
 		}));
 		await this.refresh();
@@ -257,6 +273,9 @@ export class EditorialismPanel extends ItemView {
 
 		this.renderEstimateCard(detail, editorialism);
 
+		const sceneContext = this.plugin.getSceneRelevanceContext();
+		this.lastRelevanceSceneNumber = sceneContext?.sceneNumber ?? null;
+
 		for (const section of editorialism.sections) {
 			const sectionEl = detail.createDiv({ cls: "editorialist-editorialism-panel__section" });
 			sectionEl.createDiv({
@@ -264,7 +283,7 @@ export class EditorialismPanel extends ItemView {
 				text: section.heading,
 			});
 			for (const item of section.items) {
-				this.renderItem(sectionEl, editorialism, item);
+				this.renderItem(sectionEl, editorialism, item, sceneContext);
 			}
 		}
 	}
@@ -312,9 +331,17 @@ export class EditorialismPanel extends ItemView {
 		});
 	}
 
-	private renderItem(parent: HTMLElement, editorialism: Editorialism, item: EditorialismItem): void {
+	private renderItem(
+		parent: HTMLElement,
+		editorialism: Editorialism,
+		item: EditorialismItem,
+		sceneContext: SceneRelevanceContext | null,
+	): void {
+		// Mark items that relate to the scene the author is working on now — a
+		// green left edge to geolocate the long agenda.
+		const relevant = sceneContext !== null && scopeRelatesToScene(item.scope, sceneContext);
 		const row = parent.createDiv({
-			cls: `editorialist-editorialism-panel__item editorialist-editorialism-panel__item--${item.status}`,
+			cls: `editorialist-editorialism-panel__item editorialist-editorialism-panel__item--${item.status}${relevant ? " editorialist-editorialism-panel__item--relevant" : ""}`,
 		});
 		const checkbox = row.createEl("button", {
 			cls: "editorialist-editorialism-panel__item-status",
