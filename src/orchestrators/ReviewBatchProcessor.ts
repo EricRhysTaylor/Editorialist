@@ -424,10 +424,12 @@ export class ReviewBatchProcessor {
 		// suggestion prose only lives inside those fences (the persisted
 		// decision index stores status only). Warn the user before destroying
 		// that affordance.
+		const details = await this.describeBatchReviewBlocks(completedSweep.batchId);
 		const choice = await openEditorialistChoiceModal(this.host.app, {
 			title: "Clean review blocks?",
 			description:
 				"This removes the imported review blocks from your notes. After cleanup you will no longer be able to walk through this pass with \"Review changes\" — the audit data only lives inside those blocks.",
+			details,
 			choices: [
 				{ label: "Clean review blocks", value: "confirm" },
 				{ label: "Cancel", value: "cancel" },
@@ -457,6 +459,44 @@ export class ReviewBatchProcessor {
 		await this.host.syncSceneInventory();
 		this.host.resyncSessionForActiveNote();
 		new Notice(`Removed ${removed.removedCount} imported review block${removed.removedCount === 1 ? "" : "s"} from this note.`);
+	}
+
+	// Builds the per-scene list shown in the "Clean review blocks?" modal so the
+	// user can see exactly which scenes lose their imported blocks. Each row is
+	// the scene basename plus how many imported blocks for this batch it holds.
+	// Notes with an open editor are read from the live buffer (catching unsaved
+	// edits); the rest fall back to the vault's cached read. Scenes with zero
+	// remaining blocks are omitted so the list reflects what cleanup will touch.
+	private async describeBatchReviewBlocks(batchId: string): Promise<string[]> {
+		const entry = this.host.getSweepRegistryEntry(batchId);
+		if (!entry) {
+			return [];
+		}
+
+		const rows: string[] = [];
+		for (const notePath of entry.importedNotePaths) {
+			const sceneName = notePath.split("/").pop()?.replace(/\.md$/i, "")?.trim() || notePath;
+
+			const context = this.host.getNoteContextByPath(notePath);
+			let text: string | null = null;
+			if (context) {
+				text = context.view.editor.getValue();
+			} else {
+				const file = this.host.app.vault.getAbstractFileByPath(notePath);
+				if (file instanceof TFile) {
+					text = await this.host.app.vault.cachedRead(file);
+				}
+			}
+			if (text === null) {
+				continue;
+			}
+
+			const count = removeImportedReviewBlocks(text, batchId).removedCount;
+			if (count > 0) {
+				rows.push(`${sceneName} · ${count} block${count === 1 ? "" : "s"}`);
+			}
+		}
+		return rows;
 	}
 
 	async cleanupReviewBatch(batchId: string, options?: { notify?: boolean }): Promise<number> {
