@@ -45,6 +45,16 @@ Each item is a task line with a five-state status. Clicking an item's status cyc
 
 Because Editorialisms are plain markdown task lists, they stay fully readable and editable outside the panel — edit the file directly and the panel reflects it. The `[scope:: …]` metadata records which scene, range (`13–22`), arc (`arc:<name>`), or `manuscript` each directive applies to.
 
+### Current-scene highlights
+
+When you are working in a scene, Editorialist marks related Editorialism items with a green left accent. This helps you spot broad guidance that matters to the scene in front of you, without rereading the whole agenda.
+
+Rows light up when their `[scope:: …]` matches the current scene:
+
+- A scene scope matches that scene number.
+- A range scope matches when the current scene falls inside the range.
+- An arc scope matches when the arc name overlaps the scene's character, subplot, or action / description frontmatter. For example, an item scoped to `[scope:: arc:Cesena thread]` lights up while you are in a scene whose metadata mentions `Cesena`.
+
 ## When to use which
 
 | Situation | Use |

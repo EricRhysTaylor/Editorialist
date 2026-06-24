@@ -26,6 +26,12 @@ Editorialisms now show a rough time estimate based on configurable drafting and 
 
 Example: a structural note that adds two scenes and twenty directives can show whether it is an evening of work or a multi-session revision.
 
+### Scene-aware Editorialism highlights
+
+Editorialism items now light up with a green row accent when they relate to the scene you are working in. Scene and range scopes match by scene number; arc scopes match character, subplot, and action / description metadata.
+
+Example: while working in a scene whose metadata mentions `Cesena`, an item scoped to `[scope:: arc:Cesena thread]` stands out so you can keep that broader arc guidance in view.
+
 ### More reliable review progress
 
 Editorialist is better at recognizing review notes it has already added to the manuscript.

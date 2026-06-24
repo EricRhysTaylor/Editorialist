@@ -616,9 +616,9 @@ export default class EditorialistPlugin extends Plugin {
 
 	// Context for highlighting editorialism items that relate to the scene the
 	// author is working on now: the scene number (from the file name) plus
-	// character/subplot tokens (for arc matching). Falls back to the last scene
-	// the author had open when focus is on a side panel. Null when no scene is in
-	// view.
+	// character/subplot/action-description tokens (for arc matching). Falls back
+	// to the last scene the author had open when focus is on a side panel. Null
+	// when no scene is in view.
 	getSceneRelevanceContext(): SceneRelevanceContext | null {
 		const active = this.app.workspace.getActiveFile();
 		let file = active instanceof TFile && active.extension === "md" ? active : null;
@@ -634,7 +634,25 @@ export default class EditorialistPlugin extends Plugin {
 		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
 		const characters = getFrontmatterStringValues(frontmatter, ["Character", "Characters", "character", "characters"]);
 		const subplots = getFrontmatterStringValues(frontmatter, ["Subplot", "Subplots", "subplot", "subplots"]);
-		const tokens = buildSceneTokens([...characters, ...subplots]);
+		const actions = getFrontmatterStringValues(frontmatter, [
+			"Action",
+			"Actions",
+			"action",
+			"actions",
+			"Description",
+			"Descriptions",
+			"description",
+			"descriptions",
+			"Action Description",
+			"Action Descriptions",
+			"action description",
+			"action descriptions",
+			"ActionDescription",
+			"ActionDescriptions",
+			"actionDescription",
+			"actionDescriptions",
+		]);
+		const tokens = buildSceneTokens([...characters, ...subplots, ...actions]);
 		if (sceneNumber === null && tokens.size === 0) {
 			return null;
 		}

@@ -25,10 +25,11 @@ describe("sceneNumberFromName", () => {
 
 describe("buildSceneTokens", () => {
 	it("unwraps wikilinks and keeps words ≥ 3 chars", () => {
-		const tokens = buildSceneTokens(["[[Cesena Didio Trax Fairchild]]", "Intercontinental Tourney"]);
+		const tokens = buildSceneTokens(["[[Cesena Didio Trax Fairchild]]", "Intercontinental Tourney", "Action: Cesena returns"]);
 		expect(tokens.has("cesena")).toBe(true);
 		expect(tokens.has("fairchild")).toBe(true);
 		expect(tokens.has("tourney")).toBe(true);
+		expect(tokens.has("returns")).toBe(true);
 	});
 });
 
