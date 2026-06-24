@@ -28,9 +28,9 @@ Example: a structural note that adds two scenes and twenty directives can show w
 
 ### Scene-aware Editorialism highlights
 
-Editorialism items now light up with a green row accent when they relate to the scene you are working in. Scene and range scopes match by scene number; arc scopes match character, subplot, and action / description metadata.
+Editorialism items now light up with a green row accent when they relate to the scene you are working in. Scene and range scopes match by scene number; subplot scopes match character, subplot, and action / description metadata.
 
-Example: while working in a scene whose metadata mentions `Cesena`, an item scoped to `[scope:: arc:Cesena thread]` stands out so you can keep that broader arc guidance in view.
+Example: while working in a scene whose metadata mentions `Cesena`, an item scoped to `[scope:: subplot:Cesena thread]` stands out so you can keep that broader subplot guidance in view.
 
 ### More reliable review progress
 
