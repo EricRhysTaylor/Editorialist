@@ -57,7 +57,7 @@ function makeHost() {
 		} as never,
 		refreshReviewPanel: () => calls.push("refreshPanel"),
 		syncActiveEditorDecorations: () => calls.push("syncDecorations"),
-		openReviewPanel: async () => { calls.push("openReviewPanel"); },
+		ensureEditorialistPanelOpen: async () => { calls.push("ensureEditorialistPanelOpen"); },
 		closeSettingsModal: () => calls.push("closeSettingsModal"),
 	};
 	return { host, calls };
@@ -95,7 +95,7 @@ describe("PendingEditsCoordinator — session lifecycle", () => {
 		await c.startPendingEditsReview();
 		expect(c.getPendingEditsSession()).not.toBeNull();
 		expect(calls).toContain("closeSettingsModal");
-		expect(calls).toContain("openReviewPanel");
+		expect(calls).toContain("ensureEditorialistPanelOpen");
 	});
 
 	it("closePendingEditsReview clears the session and syncs decorations", async () => {
@@ -313,7 +313,7 @@ describe("PendingEditsCoordinator — scene-scoped review", () => {
 		expect(active?.scenes).toHaveLength(1);
 		expect(active?.scenes[0]?.scenePath).toBe("Book/s2.md");
 		expect(active?.selectedSegmentId).toBe("s2-a");
-		expect(calls).toContain("openReviewPanel");
+		expect(calls).toContain("ensureEditorialistPanelOpen");
 	});
 
 	it("does not open a session when the scene has no pending edits", async () => {
@@ -325,7 +325,7 @@ describe("PendingEditsCoordinator — scene-scoped review", () => {
 		await c.startPendingEditsReviewForScene("Book/nonexistent.md");
 
 		expect(c.getPendingEditsSession()).toBeNull();
-		expect(calls).not.toContain("openReviewPanel");
+		expect(calls).not.toContain("ensureEditorialistPanelOpen");
 	});
 });
 

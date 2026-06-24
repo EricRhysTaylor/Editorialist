@@ -293,7 +293,7 @@ export default class EditorialistPlugin extends Plugin {
 		app: this.app,
 		refreshReviewPanel: () => this.refreshReviewPanel(),
 		syncActiveEditorDecorations: () => this.syncActiveEditorDecorations(),
-		openReviewPanel: () => this.openReviewPanel(),
+		ensureEditorialistPanelOpen: () => this.ensureEditorialistPanelOpen(),
 		closeSettingsModal: () => this.closeSettingsModal(),
 	});
 
@@ -637,6 +637,22 @@ export default class EditorialistPlugin extends Plugin {
 
 	async openPendingEditsPanel(): Promise<void> {
 		await this.openEditorialistPanel(PENDING_EDITS_PANEL_VIEW_TYPE);
+	}
+
+	// Make an Ed panel visible WITHOUT changing its current mode. Launching a
+	// pending-edits sweep uses this so it doesn't yank the Pending (or
+	// Editorialism) panel back to Review — the toolbar drives the sweep, so the
+	// side-panel mode is the author's to keep.
+	async ensureEditorialistPanelOpen(): Promise<void> {
+		const existing =
+			this.app.workspace.getLeavesOfType(REVIEW_PANEL_VIEW_TYPE)[0] ??
+			this.app.workspace.getLeavesOfType(PENDING_EDITS_PANEL_VIEW_TYPE)[0] ??
+			this.app.workspace.getLeavesOfType(EDITORIALISM_PANEL_VIEW_TYPE)[0];
+		if (existing) {
+			await this.app.workspace.revealLeaf(existing);
+			return;
+		}
+		await this.openReviewPanel();
 	}
 
 	// The swatch mode switcher: a small menu of the three panel modes, the

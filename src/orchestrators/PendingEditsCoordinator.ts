@@ -79,7 +79,9 @@ export interface PendingEditsCoordinatorHost {
 	readonly app: App;
 	refreshReviewPanel(): void;
 	syncActiveEditorDecorations(): void;
-	openReviewPanel(): Promise<void>;
+	// Make an Ed panel visible without changing its mode (so launching a sweep
+	// from the Pending panel does not switch the side-panel back to Review).
+	ensureEditorialistPanelOpen(): Promise<void>;
 	closeSettingsModal(): void;
 }
 
@@ -211,7 +213,7 @@ export class PendingEditsCoordinator {
 		);
 
 		this.host.closeSettingsModal();
-		await this.host.openReviewPanel();
+		await this.host.ensureEditorialistPanelOpen();
 
 		const firstSegment = result.session.scenes[0]?.segments[0] ?? null;
 		if (firstSegment) {
@@ -250,7 +252,7 @@ export class PendingEditsCoordinator {
 		new Notice(`Pending edits: ${count} item${count === 1 ? "" : "s"} in ${scene.sceneTitle}.`);
 
 		this.host.closeSettingsModal();
-		await this.host.openReviewPanel();
+		await this.host.ensureEditorialistPanelOpen();
 
 		const firstSegment = scene.segments[0] ?? null;
 		if (firstSegment) {
