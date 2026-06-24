@@ -4,10 +4,9 @@ It is for writers who get notes from human editors, beta readers, or AI and want
 
 The plugin does not rewrite your prose on import. Line edits, memos, author questions, and pending-edit notes stay reviewable until you decide what to do with them. Accepted cuts can be backed up to per-scene cut files, and completed sweeps update revision history, contributor stats, and per-scene progress.
 
-<div style="border: 1px dashed var(--color-border-default); border-radius: 8px; padding: 12px 14px; margin: 16px 0;">
-<strong>Radial Timeline + Editorialist</strong><br>
-Editorialist is designed to tightly integrate with <a href="Radial-Timeline-Integration.md">Radial Timeline</a>, creating a synergistic relationship: use RT for manuscript design, planning, project management, and analysis; use Ed for systematic editorial sweeps.
-</div>
+> [!IMPORTANT]
+> **Radial Timeline + Editorialist**  
+> Editorialist is designed to tightly integrate with [Radial Timeline](Radial-Timeline-Integration.md), creating a synergistic relationship: use RT for manuscript design, planning, project management, and analysis; use Ed for systematic editorial sweeps.
 
 Editorialist can use [Radial Timeline](Radial-Timeline-Integration.md) for active-book scope and scene IDs, but it also works on its own.
 
