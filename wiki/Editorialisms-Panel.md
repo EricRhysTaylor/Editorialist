@@ -1,4 +1,4 @@
-The second sidebar view. Where the [Review Panel](Review-Panel.md) handles imported review batches inside scene notes, the Editorialisms panel manages **Editorialism documents** — separate structural guidance files that span scenes, arcs, or the whole manuscript.
+Editorialisms is the manuscript-wide commentary mode. Where [Review](Review-Panel.md) handles scene-level batches with line edits and [Pending Edits](Pending-Edits.md) handles author / Inquiry follow-ups, Editorialisms manages **Editorialism documents** — separate structural guidance files that span scenes, arcs, or the whole manuscript. It is for general feedback, not line edits.
 
 <!-- Screenshot still needed: Editorialisms panel with a document open (images/panel-editorialisms.png) -->
 
@@ -52,4 +52,5 @@ Because Editorialisms are plain markdown task lists, they stay fully readable an
 | Concrete prose change to a specific passage | [Review batch](Importing-Reviews.md#format-a--the-review-batch) → imported review blocks → Review Panel |
 | Commentary on a scene or the batch | `=== MEMO ===` in a review block |
 | Directive spanning scenes, arcs, or the whole book | Editorialism file → this panel |
+| Author note or Radial Timeline Inquiry follow-up | [Pending Edits](Pending-Edits.md) |
 | A reviewer sends both line edits and structural notes | Both formats in one reply — each goes to its own surface |

@@ -4,6 +4,7 @@
 
 - [Getting Started](Getting-Started)
 - [Review Panel](Review-Panel)
+- [Pending Edits](Pending-Edits)
 - [Editorialisms Panel](Editorialisms-Panel)
 - [Importing Reviews](Importing-Reviews)
 

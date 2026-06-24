@@ -1,6 +1,6 @@
 ## Editorialist 1.0.8
 
-This release makes Editorialist easier to use during an actual revision pass: questions can live beside the prose, structural Editorialisms sit in the main Ed panel, and review progress stays more reliable as you move through scenes.
+This release turns the Ed side panel into a three-mode revision workspace: Review for scene-level batches, Pending edits for author / Inquiry follow-ups, and Editorialisms for manuscript-wide commentary.
 
 ## What's new
 
@@ -10,11 +10,11 @@ Mark an uncertainty exactly where it appears, then include it in the next review
 
 Example: highlight a paragraph and add `Should this flashback move earlier?` before sending the scene out for feedback. Later, Resolve or Dismiss the question when the issue is handled.
 
-### One Ed panel for edits and Editorialisms
+### Three modes in one Ed panel
 
-The side panel now switches between review work and Editorialisms without opening a second tool surface. The top controls also keep import, cleanup, author queries, cut-file backup, and settings close at hand.
+The side panel now switches between Review, Pending edits, and Editorialisms without opening a separate tool surface. The top controls keep Toggle modes, Erase batches, Import Batch, Insert AI directed inline comments, Select text and backup to cut file, and Settings close at hand.
 
-Example: work through line edits, switch to the Editorialisms mode, then check whether the same scene also serves a larger structural note.
+Example: work through a batch of line edits, switch to Pending edits to handle author / Inquiry follow-ups, then switch to Editorialisms to check the broader manuscript guidance.
 
 ### Revision-effort estimates
 
@@ -42,9 +42,13 @@ Example: save a selected paragraph to the scene's cut file before rewriting it, 
 
 ## Screenshots
 
+**Three-mode menu**
+
+<img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/release-1-0-8-mode-menu-preview.png" alt="Editorialist mode menu with Review, Pending edits, and Editorialisms">
+
 **Side-panel controls**
 
-<img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/ui-side-panel-buttons-rounded.png" alt="Editorialist side-panel controls for mode switching, cleanup, import, author queries, cut-file backup, and settings">
+<img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/release-1-0-8-side-panel-buttons-preview.png" alt="Editorialist side-panel controls for Toggle modes, Erase batches, Import Batch, Insert AI directed inline comments, Select text and backup to cut file, and Settings">
 
 **Editorialisms mode**
 

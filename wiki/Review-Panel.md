@@ -1,4 +1,4 @@
-The Review Panel is Editorialist's main working surface — a sidebar view that drives review sessions and shows the state of the active book between them. Open it with the **Open review panel** command.
+The Review mode is traditional Editorialist: scene-level review batches with line edits, cut / move / condense / expand suggestions, `%%ai question%%` responses, and memos for a scene. Open it with the **Open review panel** command or choose **Review** from the mode menu.
 
 ## Idle state
 
@@ -14,22 +14,22 @@ Between sessions the panel shows:
 
 ### Panel controls
 
-<p align="center"><img src="images/ui-side-panel-buttons-rounded.png" alt="Editorialist side-panel controls: toggle modes, clean imported review notes, import batch, insert author query, back up selected text to a cut file, and settings" width="720"></p>
+<p align="center"><img src="images/ui-side-panel-buttons-rounded.png" alt="Editorialist side-panel controls: toggle modes, erase batches, import batch, insert AI directed inline comments, select text and back up to a cut file, and settings" width="653"></p>
 
 The header controls keep the most common actions close to the review panel:
 
 | Control | What it does |
 |---|---|
-| **Toggle modes** | Switch between the review panel and [Editorialisms](Editorialisms-Panel.md). |
-| **Clean imported notes** | Remove review notes after you are done with them. |
-| **Import batch** | Paste in a formatted review batch and route it into matching scenes. |
-| **Insert author query** | Add a hidden inline question for the next review pass. |
-| **Back up selection** | Copy selected manuscript text into the scene's cut file. |
+| **Toggle modes** | Switch between Review, [Pending edits](Pending-Edits.md), and [Editorialisms](Editorialisms-Panel.md). |
+| **Erase batches** | Remove imported review batches after you are done with them. |
+| **Import Batch** | Paste in a formatted review batch and route it into matching scenes. |
+| **Insert AI directed inline comments** | Add a hidden inline question for the next review pass. |
+| **Select text and backup to cut file** | Copy selected manuscript text into the scene's cut file. |
 | **Settings** | Open Editorialist settings. |
 
 ## Review sessions
 
-Starting a workflow card (or importing a review batch) begins a **guided review sweep**. The imported batch has already been split into review blocks at the bottom of the targeted scene notes; the panel reads those blocks and walks their suggestions scene by scene.
+Starting a workflow card (or importing a review batch) begins a **guided review sweep**. The imported batch has already been split into review blocks at the bottom of the targeted scene notes; the panel reads those blocks and walks their suggestions scene by scene. A scene can hold multiple batches from different manuscript shares or review passes.
 
 <p align="center"><img src="images/panel-side-progressing.png" alt="Review panel during a sweep: next-in-sweep card with unresolved and resolved counts, start scene button, recent reviews" width="340"></p>
 
@@ -84,6 +84,4 @@ A sweep finishes only when every suggestion in the batch has a resolved status (
 
 ## Pending-edits review
 
-Separate from imported batches, Editorialist can collect **free-form revision notes** sitting in your scene frontmatter — your own notes-to-self plus Inquiry View insertions — and walk them the same way. Start it from the **Review pending edits in active book** command, the launcher, or the **Start review** button on the [Core settings tab](Settings-Reference.md#core-tab).
-
-With [Radial Timeline](Radial-Timeline-Integration.md) installed, Editorialist uses the active book's scenes and gathers every scene with pending edits. Each note is presented one at a time with context jumping into the scene, and you record an accept/reject decision per segment.
+Pending edits now have their own [Pending Edits](Pending-Edits.md) mode. The Review panel still points to that queue when the active book or current scene has pending author notes or Radial Timeline Inquiry follow-ups.
