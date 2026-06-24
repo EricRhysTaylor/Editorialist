@@ -49,6 +49,8 @@ Because Editorialisms are plain markdown task lists, they stay fully readable an
 
 When you are working in a scene, Editorialist marks related Editorialism items with a green left accent. This helps you spot broad guidance that matters to the scene in front of you, without rereading the whole agenda.
 
+<p align="center"><img src="images/panel-side-editorialism-active-rounded.png" alt="Editorialism item with a green current-scene accent for the Cesena thread" width="655"></p>
+
 Rows light up when their `[scope:: …]` matches the current scene:
 
 - A scene scope matches that scene number.
