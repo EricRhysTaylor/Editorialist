@@ -20,6 +20,19 @@ The plugin does not rewrite your prose on import. Line edits, memos, author ques
 - Tracking reviewer contributions, accepted suggestions, and revision progress.
 - Keeping structural guidance separate from line-level edits through Editorialisms.
 
+## Standard Review Operations
+
+The standard Review workflow supports a full set of scene-level editorial moves:
+
+| Operation | What it lets you do |
+|---|---|
+| **Edit** | Review a specific suggested change against the original passage. |
+| **Move** | Relocate a passage before or after a named destination anchor. |
+| **Cut** | Remove a passage, with optional backup to the scene's cut file first. |
+| **Condense** | Tighten a passage between two anchors into a shorter version. |
+| **Expand** | Develop, slow down, or decompress a beat with finished prose or advisory guidance. |
+| **Memo** | Keep general thoughts, strengths, issues, or scene notes beside the sweep without changing prose. |
+
 ## Three Panel Modes
 
 <p align="center"><img src="images/ui-side-panel-dropdown-rounded.png" alt="Editorialist mode menu with Review, Pending edits, and Editorialisms" width="653"></p>

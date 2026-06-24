@@ -20,6 +20,12 @@ The side panel now switches between Review, Pending edits, and Editorialisms wit
 
 Example: work through a batch of line edits, switch to Pending edits to handle author / Inquiry follow-ups, then switch to Editorialisms to check the broader manuscript guidance.
 
+### Full standard review operations
+
+Review batches can carry Edit, Move, Cut, Condense, Expand, and Memo entries in one sweep. Cuts can be backed up to a scene cut file before you remove or rewrite anything.
+
+Example: accept a proposed line edit, move a misplaced paragraph, back up a cut passage, condense an overlong beat, expand a rushed moment, and keep scene-level memo notes in the same review pass.
+
 ### Revision-effort estimates
 
 Editorialisms now show a rough time estimate based on configurable drafting and editing assumptions.
@@ -71,5 +77,9 @@ Example: save a selected paragraph to the scene's cut file before rewriting it, 
 **Right-click cut backup**
 
 <img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/release-1-0-8-cut-menu-preview-570.png" alt="Right-click menu showing backup selection to cut file">
+
+**Cut file result**
+
+<img src="https://raw.githubusercontent.com/wiki/EricRhysTaylor/editorialist/images/release-1-0-8-cut-file-closeup-preview.png" alt="Scene cut file with Class Cut frontmatter and Editorialist backup metadata">
 
 The wiki has also been refreshed for Radial Timeline integration, manuscript folder scope, import matching, cut-file controls, and settings behavior.

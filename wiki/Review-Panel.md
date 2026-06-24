@@ -33,6 +33,17 @@ Starting a workflow card (or importing a review batch) begins a **guided review 
 
 <p align="center"><img src="images/panel-side-progressing.png" alt="Review panel during a sweep: next-in-sweep card with unresolved and resolved counts, start scene button, recent reviews" width="340"></p>
 
+### What a batch can ask you to do
+
+| Type | How it helps during a sweep |
+|---|---|
+| **Edit** | Compare the original passage with a proposed replacement. |
+| **Move** | Send a passage to a specific before / after destination. |
+| **Cut** | Remove a passage, optionally backing it up to the scene's cut file first. |
+| **Condense** | Tighten an overlong beat into a shorter version. |
+| **Expand** | Add development, pacing, interiority, or connective tissue. |
+| **Memo** | Capture general scene thoughts, strengths, issues, or reviewer context without applying a line edit. |
+
 ### Navigation and filters
 
 - **Previous / next** moves through suggestions; the sweep hands off to the next scene when the current one is resolved.
@@ -60,7 +71,7 @@ Each highlighted suggestion gets an inline toolbar in the editor:
 
 ### Cut-file preview
 
-<p align="center"><img src="images/panel-side-cut.png" alt="Cut file opened in the side pane after backing up selected manuscript text" width="720"></p>
+<p align="center"><img src="images/panel-side-cut-closeup-rounded.png" alt="Closeup of a scene cut file with Class: Cut frontmatter and Editorialist backup metadata" width="520"></p>
 
 When you use **Backup to cut file**, Editorialist writes the selected passage to the scene's cut file before you decide what to do with the suggestion. The cut file keeps the archived text with source metadata, while the review suggestion stays active until you accept, reject, rewrite, or defer it.
 

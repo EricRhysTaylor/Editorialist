@@ -95,6 +95,8 @@ When path-based tracking is active, **Inject stable note IDs** adds an `editoria
 
 When you accept a **Cut** suggestion (or use **Backup to cut file** from the suggestion toolbar), the removed text is archived to a per-scene cut file — one cut file per scene, named after the scene and tagged with its own `Class: Cut` frontmatter. Each archived block stores source, scene, and backup timestamp, plus operation, suggestion ID, contributor, and reason when they are available. Cut files are separate from review status and acceptance decisions.
 
+<p align="center"><img src="images/panel-side-cut-closeup-rounded.png" alt="Closeup of a scene cut file with Class: Cut frontmatter and Editorialist backup metadata" width="520"></p>
+
 - **Cut folder override** — a path field. Leave empty to use the default: `<book-source-folder>/Cut` when a book context exists, otherwise `<scene-folder>/Cut`.
 - **Save** / **Use default** buttons apply or clear the override.
 - If a scene sits outside the active book folder, cut files fall back to that scene's own folder.

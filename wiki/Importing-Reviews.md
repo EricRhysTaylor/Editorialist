@@ -74,11 +74,11 @@ The lines before the first `=== SECTION ===` marker identify the batch and the c
 | Section | Fields | What it does |
 |---|---|---|
 | `=== MEMO ===` | freeform, optional `Strengths:` / `Issues:`, optional `SceneId:` | Commentary that doesn't belong inline as a line edit. A MEMO **with** a `SceneId` attaches to that scene only; a MEMO **without** one is duplicated to every scene that received edits in the batch. Use as many as needed. |
-| `=== EDIT ===` | `SceneId:`, `Original:`, `Revised:`, `Why:` | Replace `Original` text with `Revised` text. |
+| `=== EDIT ===` | `SceneId:`, `Original:`, `Revised:`, `Why:` | Replace `Original` text with a specific suggested change. |
+| `=== MOVE ===` | `SceneId:`, `Target:`, `Before:` (or `After:`), `Why:` | Relocate the target passage relative to a destination anchor. |
 | `=== CUT ===` | `SceneId:`, `Target:`, `Why:` | Remove the target passage. Accepted cuts can be [backed up to a cut file](Settings-Reference#configuration-tab) first. |
 | `=== CONDENSE ===` | `SceneId:`, `Target:`, `Suggestion:`, `Why:` | Tighten the passage between two anchors into the suggested replacement. |
-| `=== EXPAND ===` | `SceneId:`, `Target:`, optional `Suggestion:`, `Why:` | The inverse of condense — develop, slow down, or decompress a beat. |
-| `=== MOVE ===` | `SceneId:`, `Target:`, `Before:` (or `After:`), `Why:` | Relocate the target passage relative to an anchor. |
+| `=== EXPAND ===` | `SceneId:`, `Target:`, optional `Suggestion:`, `Why:` | Develop, slow down, or decompress a beat with finished prose or advisory guidance. |
 
 ### CONDENSE anchor pairs
 
