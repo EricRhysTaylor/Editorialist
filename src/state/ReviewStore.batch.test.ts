@@ -140,6 +140,42 @@ describe("ReviewStore.batch", () => {
 		expect(listener).not.toHaveBeenCalled();
 	});
 
+	it("does not re-notify when a rebuilt session changes only parsedAt or offsets", () => {
+		const store = new ReviewStore();
+		store.setSession(makeSession());
+		const listener = vi.fn();
+		store.subscribe(listener);
+		listener.mockClear();
+
+		// Mirrors the per-keystroke resync: same suggestions/statuses, but a
+		// fresh parse timestamp and shifted target offsets. The panel renders
+		// identically, so no notification should fire (no flicker).
+		const rebuilt = makeSession();
+		rebuilt.parsedAt = 12345;
+		(rebuilt.suggestions[0] as unknown as { startOffset: number }).startOffset = 99;
+		(rebuilt.suggestions[0] as unknown as { endOffset: number }).endOffset = 142;
+		store.setSession(rebuilt);
+
+		expect(listener).not.toHaveBeenCalled();
+		// State still advanced so later reveals use current offsets.
+		expect(store.getState().session?.parsedAt).toBe(12345);
+	});
+
+	it("re-notifies when a rebuilt session changes a suggestion status", () => {
+		const store = new ReviewStore();
+		store.setSession(makeSession());
+		const listener = vi.fn();
+		store.subscribe(listener);
+		listener.mockClear();
+
+		const rebuilt = makeSession();
+		rebuilt.parsedAt = 999;
+		(rebuilt.suggestions[0] as unknown as { status: string }).status = "accepted";
+		store.setSession(rebuilt);
+
+		expect(listener).toHaveBeenCalledTimes(1);
+	});
+
 	it("exits safely when the batched function throws", () => {
 		const store = new ReviewStore();
 		store.setSession(makeSession());

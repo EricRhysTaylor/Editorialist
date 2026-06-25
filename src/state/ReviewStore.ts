@@ -39,6 +39,29 @@ export interface ReviewStoreState {
 
 type Listener = (state: ReviewStoreState) => void;
 
+// Keys that change on every session rebuild but never alter what a listener
+// renders: `parsedAt` is a fresh parse timestamp, and `startOffset`/`endOffset`
+// are target positions that shift as the author types around a review block.
+// The panel draws suggestion text/status/reviewers, not positions, and editor
+// highlights map their own positions through document changes (see
+// Decorations.ts — the StateField calls mapPos on every transaction). Excluding
+// these lets setSession refresh the stored session silently when only they
+// changed, so typing in a reviewed scene no longer re-renders (and visibly
+// flickers) the panel on every pause between keystrokes.
+const VOLATILE_RENDER_SIGNATURE_KEYS = new Set(["parsedAt", "startOffset", "endOffset"]);
+
+// A string fingerprint of the listener-visible portion of store state. Two
+// states with the same signature produce an identical panel render, so the
+// notification can be skipped. The volatile positional/timestamp keys above are
+// dropped; everything else (statuses, text, reviewers, selection, sweep state)
+// is compared. Insertion order is stable because every state object is built by
+// the same code paths, so structurally-equal states stringify identically.
+function renderSignature(state: ReviewStoreState): string {
+	return JSON.stringify(state, (key, value) =>
+		VOLATILE_RENDER_SIGNATURE_KEYS.has(key) ? undefined : value,
+	);
+}
+
 export class ReviewStore {
 	private readonly listeners = new Set<Listener>();
 
@@ -138,6 +161,7 @@ export class ReviewStore {
 				? preferredSelectionId
 				: firstOpenSuggestion?.id ?? session.suggestions[0]?.id ?? null;
 
+		const previousSignature = renderSignature(this.state);
 		this.state = {
 			acknowledgedCompletedSweepBatchId: firstOpenSuggestion ? null : this.state.acknowledgedCompletedSweepBatchId,
 			appliedReview: this.state.appliedReview,
@@ -151,6 +175,14 @@ export class ReviewStore {
 			session,
 			selectedSuggestionId,
 		};
+		// The per-keystroke resync rebuilds the session and lands here even when
+		// the author is only editing prose: the new session carries a fresh
+		// parsedAt and shifted offsets but renders identically. State is updated
+		// (so any later reveal uses current offsets); the notification is skipped
+		// when nothing listener-visible changed, eliminating the panel flicker.
+		if (renderSignature(this.state) === previousSignature) {
+			return;
+		}
 		this.emit();
 	}
 
