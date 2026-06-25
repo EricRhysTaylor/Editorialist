@@ -3,7 +3,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const WIKI_REPO = 'git@github.com:EricRhysTaylor/Editorialist.wiki.git';
+const WIKI_REPO = 'https://github.com/EricRhysTaylor/editorialist.wiki.git';
 const TEMP_DIR = '.wiki_temp_publish';
 const SOURCE_DIR = 'wiki';
 
@@ -32,8 +32,9 @@ function publish() {
         execSync(`git clone ${WIKI_REPO} ${TEMP_DIR}`, { stdio: 'inherit' });
     } catch (e) {
         console.error('Could not clone the wiki repo.');
-        console.error('GitHub wikis must be initialized once before they are pushable:');
-        console.error('  open https://github.com/EricRhysTaylor/Editorialist/wiki and click "Create the first page",');
+        console.error('This publisher uses the HTTPS wiki remote, so it does not require a GitHub SSH key.');
+        console.error('If GitHub reports "Repository not found", initialize the wiki once before publishing:');
+        console.error('  open https://github.com/EricRhysTaylor/editorialist/wiki and click "Create the first page",');
         console.error('  save the placeholder, then re-run npm run publish-wiki (it will overwrite the placeholder).');
         process.exit(1);
     }
