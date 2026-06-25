@@ -753,11 +753,44 @@ export function formatRecentReviewSceneTitle(
 	if (titles.length === 1) {
 		return titles[0] ?? "Review pass";
 	}
-	if (titles.length <= 3) {
-		return titles.join(", ");
+	// Multi-scene batches: order ascending by leading scene number, shorten each
+	// name to "<number> + 2 words…", and name up to MAX_NAMED before a count
+	// suffix. Short names let the title wrap to a second line (see styles.css)
+	// instead of ellipsis-truncating mid-word.
+	const MAX_NAMED = 4;
+	const ordered = titles
+		.map((title, index) => ({ title, index, key: sceneNumberKey(title) }))
+		.sort((left, right) => left.key - right.key || left.index - right.index)
+		.map((item) => shortenSceneTitle(item.title));
+	if (ordered.length <= MAX_NAMED) {
+		return ordered.join(", ");
 	}
-	const head = titles.slice(0, 2).join(", ");
-	return `${head}, +${titles.length - 2} more`;
+	const head = ordered.slice(0, MAX_NAMED).join(", ");
+	return `${head}, +${ordered.length - MAX_NAMED} more`;
+}
+
+// Trims a scene name to its leading number plus two words (e.g. "51 Long Road
+// Up, Part 2" -> "51 Long Road…"). Names without a numeric prefix keep their
+// first two words. Anything already at or below the limit is returned as-is.
+export function shortenSceneTitle(title: string): string {
+	const tokens = title.split(/\s+/).filter(Boolean);
+	if (tokens.length === 0) {
+		return title;
+	}
+	const hasNumberPrefix = /^\d+(?:\.\d+)?$/.test(tokens[0] ?? "");
+	const keep = hasNumberPrefix ? 3 : 2;
+	if (tokens.length <= keep) {
+		return tokens.join(" ");
+	}
+	return `${tokens.slice(0, keep).join(" ")}…`;
+}
+
+// Leading scene number used to order scenes within a batch title. Names without
+// a number sort to the end (kept in their original relative order via the index
+// tie-breaker at the call site).
+function sceneNumberKey(title: string): number {
+	const match = title.match(/^\s*(\d+(?:\.\d+)?)/);
+	return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
 }
 
 export function formatRelativeTime(timestamp: number, now: number = Date.now()): string {

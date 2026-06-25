@@ -89,13 +89,31 @@ describe("formatRecentReviewSceneTitle", () => {
 		).toBe("A, B, C");
 	});
 
-	it("truncates 4+ scenes to the first two plus a count suffix", () => {
+	it("names up to four scenes, then adds a count suffix", () => {
 		expect(
 			formatRecentReviewSceneTitle({
 				...base,
 				sceneOrder: ["A.md", "B.md", "C.md", "D.md", "E.md"],
 			}),
-		).toBe("A, B, +3 more");
+		).toBe("A, B, C, D, +1 more");
+	});
+
+	it("orders multi-scene titles ascending by leading scene number", () => {
+		expect(
+			formatRecentReviewSceneTitle({
+				...base,
+				sceneOrder: ["51 Long Road Up.md", "13 Shail Begins Race.md", "52 Crest.md"],
+			}),
+		).toBe("13 Shail Begins…, 51 Long Road…, 52 Crest");
+	});
+
+	it("shortens each scene to its number plus two words", () => {
+		expect(
+			formatRecentReviewSceneTitle({
+				...base,
+				sceneOrder: ["38 Stage 4 Underwater.md", "36 Stage 2 Part 2.md"],
+			}),
+		).toBe("36 Stage 2…, 38 Stage 4…");
 	});
 
 	it("uses importedNotePaths only when sceneOrder is empty", () => {
@@ -134,7 +152,7 @@ describe("formatRecentReviewSceneTitle", () => {
 				...base,
 				sceneOrder: ["Books/One/37 Volcano.md", "Logs/Inquiry Content Log.md"],
 			}),
-		).toBe("37 Volcano, Inquiry Content Log");
+		).toBe("37 Volcano, Inquiry Content…");
 	});
 
 	it("falls back to unfiltered paths when the scope filter would empty the list", () => {
